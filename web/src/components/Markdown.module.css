@@ -1,0 +1,33 @@
+.markdown {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.markdown h2 {
+  font-size: 20px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #d8dee4;
+  margin: 24px 0 12px;
+}
+.markdown h2:first-child {
+  margin-top: 0;
+}
+.markdown h3 {
+  font-size: 16px;
+  margin: 20px 0 8px;
+}
+.markdown code {
+  font-size: 13px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #eff1f3;
+}
+.markdown pre {
+  padding: 12px;
+  border-radius: 6px;
+  background: #f6f8fa;
+  overflow-x: auto;
+}
+.markdown pre code {
+  padding: 0;
+  background: none;
+}

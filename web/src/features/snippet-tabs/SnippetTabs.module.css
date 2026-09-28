@@ -1,0 +1,14 @@
+.command {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: #24292f;
+  color: #f6f8fa;
+  font-size: 14px;
+  overflow-x: auto;
+}
+.filename {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #57606a;
+}

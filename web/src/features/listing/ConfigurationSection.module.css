@@ -1,0 +1,21 @@
+.intro,
+.none {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #57606a;
+}
+.list {
+  margin: 0;
+}
+.item {
+  padding: 8px 0;
+  border-top: 1px solid #eaeef2;
+}
+.item dt code {
+  font-size: 13px;
+  font-weight: 600;
+}
+.item dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+}

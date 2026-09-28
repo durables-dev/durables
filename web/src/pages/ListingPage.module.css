@@ -1,0 +1,12 @@
+.snippets {
+  margin-bottom: 20px;
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+}
+.error {
+  color: #cf222e;
+}

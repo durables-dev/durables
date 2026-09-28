@@ -2,8 +2,8 @@
 #
 #   docker compose -f infrastructure/compose.yaml up
 #
-# POC-4 starts web and api only. postgres, and testing's temporal and
-# mock-payments (pulled in with include:), are added by the epics that need them.
+# POC-5 adds postgres and the documents volume. testing's temporal and
+# mock-payments (pulled in with include:) are added by the epics that need them.
 name: durables
 
 # Hosting is faked: everything runs on localhost, in dev mode, on published ports.
@@ -14,11 +14,18 @@ services:
       context: ../api
       dockerfile: ../infrastructure/docker/api.Dockerfile
     command: ["npx", "tsx", "watch", "src/server.ts"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://durables:durables@postgres:5432/durables}
+      DOCUMENTS_DIR: ${DOCUMENTS_DIR:-/data/documents}
     ports:
       - "3000:3000"
     volumes:
       - ../api:/app
       - /app/node_modules
+      - durables-documents:/data/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   web:
     build:
@@ -34,3 +41,26 @@ services:
       - /app/node_modules
     depends_on:
       - api
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-durables}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-durables}
+      POSTGRES_DB: ${POSTGRES_DB:-durables}
+    ports:
+      - "5432:5432"
+    volumes:
+      - durables-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  # Document storage is faked: version documents are JSON files on this local
+  # volume, standing in for S3, DynamoDB or Cassandra.
+  # POC-SHORTCUT: SC-007
+  durables-documents:
+  durables-postgres:

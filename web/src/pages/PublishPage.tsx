@@ -1,19 +1,24 @@
 import { useState } from "react";
-import type { Check, Detection } from "../api/types";
+import { useNavigate } from "react-router";
+import type { Check, Declarations, Detection } from "../api/types";
 import { Panel } from "../components/Panel";
 import { DeclarationForm } from "../features/declaration-form/DeclarationForm";
 import { DetectionPanel } from "../features/detection-panel/DetectionPanel";
 import { CheckResults } from "../features/evaluation-report/CheckResults";
 import { PasteEditor } from "../features/paste-editor/PasteEditor";
+import { ReadmeEditor } from "../features/readme-editor/ReadmeEditor";
+import { listingPath } from "../lib/address";
 
 // Nothing is stored before publish: the browser holds the pasted code, the
-// detection result and the checks until POC-5's publish step.
+// declarations and the checks until step 4 publishes them. api re-runs
+// detection and the checks itself when it publishes.
 
 type Detected = { code: string; detection: Detection; attempt: number };
 
 export function PublishPage() {
   const [detected, setDetected] = useState<Detected | null>(null);
-  const [checks, setChecks] = useState<Check[] | null>(null);
+  const [checked, setChecked] = useState<{ declarations: Declarations; checks: Check[] } | null>(null);
+  const navigate = useNavigate();
 
   return (
     <>
@@ -22,7 +27,7 @@ export function PublishPage() {
         <PasteEditor
           onDetected={(code, detection) => {
             setDetected((previous) => ({ code, detection, attempt: (previous?.attempt ?? 0) + 1 }));
-            setChecks(null);
+            setChecked(null);
           }}
         />
       </Panel>
@@ -37,13 +42,22 @@ export function PublishPage() {
             key={detected.attempt}
             code={detected.code}
             detection={detected.detection}
-            onChecked={(_declarations, result) => setChecks(result)}
+            onChecked={(declarations, checks) => setChecked({ declarations, checks })}
           />
         </Panel>
       )}
-      {detected && checks && (
+      {detected && checked && (
         <Panel step={3} title="Pattern check">
-          <CheckResults code={detected.code} checks={checks} />
+          <CheckResults code={detected.code} checks={checked.checks} linksInNewTab />
+        </Panel>
+      )}
+      {detected && checked && (
+        <Panel step={4} title="Write the README and publish">
+          <ReadmeEditor
+            code={detected.code}
+            declarations={checked.declarations}
+            onPublished={(result) => navigate(listingPath(result.owner, result.name, result.version))}
+          />
         </Panel>
       )}
     </>
