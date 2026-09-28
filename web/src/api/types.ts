@@ -1,15 +1,18 @@
-// Written from the POC-4, POC-5 and POC-6 API maps. Never imported from api/.
+// Written from the POC-4 to POC-8 API maps. Never imported from api/.
 
 export type Me = { handle: string; displayName: string };
 
-// Boundary 2: POST /activities/detect
+// Boundary 2: POST /activities/detect (POC-8: every SDK)
+
+export type Sdk = "python" | "typescript" | "dotnet";
 
 export type Located<T> = { value: T; line: number };
 
 export type Detection = {
-  sdk: Located<"python">;
+  sdk: Located<Sdk>;
   activityName: Located<string>;
   inputTypes: { name: string; type: string; line: number }[];
+  /** Unwrapped: Promise<T> and Task<T> arrive as T, a bare Task as "void". */
   outputType: Located<string>;
   nonRetryableErrorTypes: Located<string>[];
   envVars: Located<string>[];
@@ -41,11 +44,13 @@ export type Check = {
   errorTypes?: string[];
 };
 
-// Boundary 4: GET /rubric
+// Boundary 4: GET /rubric (POC-8: one idempotency entry per SDK)
 
 export type RubricEntry = {
   tag: "idempotency";
-  sdk: "python";
+  sdk: Sdk;
+  /** The entry's id on /rubric, and the value of Check.rubricTag. */
+  anchor: string;
   description: string;
   patterns: string[];
 };
@@ -73,7 +78,8 @@ export type PublishError = { error: string; missingHeadings?: string[] };
 export type Snippet = {
   tab: "install" | "activity" | "workflow" | "worker" | "starter";
   filename?: string;
-  language: "shell" | "python";
+  /** Monaco language ids. */
+  language: "shell" | "python" | "typescript" | "csharp";
   content: string;
 };
 
@@ -84,8 +90,10 @@ export type Listing = {
   version: string;
   publishedAt: string;
   publisher: { handle: string; displayName: string; verified: boolean };
-  sdk: "python";
+  sdk: Sdk;
   code: string;
+  /** The stored detection, shown in the Detected panel. */
+  detection: Detection;
   snippets: Snippet[];
   configuration: { name: string; purpose: string; line: number }[];
   readme: string;
@@ -93,6 +101,9 @@ export type Listing = {
 };
 
 // POC-6 boundary 1: POST /groups/resolve
+
+/** Groups stay Python-only (POC-8 API map). */
+export type GroupSdk = "python";
 
 export type LineRange = { startLine: number; endLine: number };
 
@@ -113,7 +124,7 @@ export type GroupProblem = {
 };
 
 export type ResolvedGroup = {
-  sdk: "python";
+  sdk: GroupSdk;
   file: string;
   members: GroupMember[];
   /** The imports header and each whole block, markers included. */
@@ -123,7 +134,7 @@ export type ResolvedGroup = {
 
 // POC-6 boundary 2: POST /groups (publish)
 
-export type PublishGroupRequest = { name: string; sdk: "python"; source: string };
+export type PublishGroupRequest = { name: string; sdk: GroupSdk; source: string };
 
 export type PublishGroupResult = { address: string; owner: string; name: string; version: string };
 
@@ -139,7 +150,7 @@ export type GroupListing = {
   version: string;
   publishedAt: string;
   publisher: { handle: string; displayName: string; verified: boolean };
-  sdk: "python";
+  sdk: GroupSdk;
   /** "payments.py" */
   filename: string;
   /** Exactly what the copy button copies. */
@@ -149,7 +160,7 @@ export type GroupListing = {
 
 // POC-7 boundary 1: GET /search/activities
 
-export type SearchSdk = "python" | "typescript" | "dotnet";
+export type SearchSdk = Sdk;
 
 /** Filters combine with AND. An unset filter doesn't constrain. */
 export type ActivitySearchFilters = {
@@ -165,7 +176,7 @@ export type ActivitySummary = {
   name: string;
   version: string;
   publishedAt: string;
-  sdk: "python";
+  sdk: Sdk;
   /** Detected: "charge_card". */
   activityName: string;
   publisher: { handle: string; displayName: string; verified: boolean };

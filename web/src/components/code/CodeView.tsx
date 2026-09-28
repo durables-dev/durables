@@ -8,6 +8,11 @@ import styles from "./CodeView.module.css";
 // so the demo runs offline.
 loader.config({ monaco });
 
+// TypeScript code on the site is shown, never compiled: the browser has no
+// types for its imports (`@temporalio/*`, Node), so semantic checks would mark
+// every snippet with "cannot find module" errors. Syntax checks stay on.
+monaco.typescript.typescriptDefaults.setDiagnosticsOptions({ noSemanticValidation: true });
+
 export type LineHighlight = { line: number; kind: "matched" | "cited" };
 
 /** 1-based, inclusive whole lines. */
@@ -58,8 +63,10 @@ export function CodeView({
   const valueRef = useRef(value);
   const emittedRef = useRef(value);
   const onChangeRef = useRef(onChange);
+  const highlightsRef = useRef(highlights);
   valueRef.current = value;
   onChangeRef.current = onChange;
+  highlightsRef.current = highlights;
 
   const applyHighlights = () => {
     const editor = editorRef.current;
@@ -113,6 +120,13 @@ export function CodeView({
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor;
     applyHighlights();
+    // The editor is created before its container is shown, so the reveal above
+    // centres the line in a 5px viewport. Reveal again once it has its real size.
+    const firstLayout = editor.onDidLayoutChange(() => {
+      firstLayout.dispose();
+      const first = highlightsRef.current[0];
+      if (first) editor.revealLineInCenter(first.line);
+    });
     if (readOnlyRanges) applyGuard(readOnlyRanges);
     applyMarkers();
 

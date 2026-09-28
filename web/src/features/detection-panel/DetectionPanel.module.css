@@ -11,6 +11,29 @@
 .facts dd {
   margin: 0;
 }
+.compact {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+.compact dt {
+  font-size: 13px;
+}
+.compact dt:not(:first-child) {
+  margin-top: 8px;
+}
+.compact dd {
+  font-size: 14px;
+}
+.fact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-right: 12px;
+}
+.compact .fact {
+  display: flex;
+  margin: 0 0 4px;
+}
 .item {
   display: inline-block;
   margin-right: 8px;
@@ -18,4 +41,51 @@
   background: #f6f8fa;
   border: 1px solid #d0d7de;
   border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+.fact .item {
+  margin-right: 0;
+}
+.line {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.dialog {
+  width: min(960px, 90vw);
+  padding: 16px 20px 20px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+}
+.dialog::backdrop {
+  background: rgba(31, 35, 40, 0.5);
+}
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: #57606a;
+}
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: rgba(46, 160, 67, 0.5);
+}
+.close {
+  padding: 4px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #f6f8fa;
+  font: inherit;
+  cursor: pointer;
 }

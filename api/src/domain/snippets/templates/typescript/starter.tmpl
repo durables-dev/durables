@@ -1,0 +1,21 @@
+import { randomUUID } from "node:crypto";
+import { Client, Connection } from "@temporalio/client";
+import { {{workflow_function}} } from "./workflow";
+
+const TASK_QUEUE = "{{task_queue}}";
+
+async function run(): Promise<void> {
+  const connection = await Connection.connect({ address: "localhost:7233" });
+  const client = new Client({ connection, namespace: "default" });
+  const result = await client.workflow.execute({{workflow_function}}, {
+    taskQueue: TASK_QUEUE,
+    workflowId: "{{workflow_id_prefix}}-" + randomUUID(),
+    {{workflow_args}}
+  });
+  console.log(result);
+}
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

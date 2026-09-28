@@ -1,6 +1,7 @@
 // Written from the POC-6 API map, boundaries 1–4.
 
-import type { Sdk } from "./detection.js";
+/** Groups stay Python-only (POC-8 API map): widening `Sdk` doesn't widen groups. */
+export type GroupSdk = "python";
 
 /** One published version of a group: a document in DocumentStore. Immutable once written. */
 export type GroupVersion = {
@@ -8,7 +9,7 @@ export type GroupVersion = {
   name: string;
   version: string;
   publishedAt: string;
-  sdk: Sdk;
+  sdk: GroupSdk;
   /** Pinned activity addresses, in file order. The group file is regenerated from these, never stored. */
   members: string[];
 };
@@ -36,10 +37,10 @@ export type GroupProblem = {
   message: string;
 };
 
-export type ResolveGroupRequest = { sdk: Sdk; source: string };
+export type ResolveGroupRequest = { sdk: GroupSdk; source: string };
 
 export type ResolvedGroup = {
-  sdk: Sdk;
+  sdk: GroupSdk;
   /** What the editor shows next. */
   file: string;
   /** In file order. */
@@ -49,7 +50,7 @@ export type ResolvedGroup = {
   problems: GroupProblem[];
 };
 
-export type PublishGroupRequest = { name: string; sdk: Sdk; source: string };
+export type PublishGroupRequest = { name: string; sdk: GroupSdk; source: string };
 
 export type PublishGroupResult = { address: string; owner: string; name: string; version: string };
 
@@ -60,7 +61,7 @@ export type GroupListing = {
   version: string;
   publishedAt: string;
   publisher: { handle: string; displayName: string; verified: boolean };
-  sdk: Sdk;
+  sdk: GroupSdk;
   /** The group name in snake_case, plus ".py". */
   filename: string;
   /** Exactly what the copy button copies. */

@@ -1,6 +1,6 @@
 import type { Detection, InputType, Located } from "../../model/detection.js";
 import type { Detector } from "./detector.js";
-import { findClosingBracket, LineIndex, skipString, splitTopLevel } from "./source-text.js";
+import { collapseWhitespace as collapse, execFrom, findClosingBracket, LineIndex, skipString, splitTopLevel } from "./source-text.js";
 
 // Regex detection for single-file Python activities written against the
 // Temporal Python SDK (temporalio). Every result carries the 1-based line it
@@ -23,6 +23,9 @@ const SKIPPED_PARAMETERS = new Set(["self", "cls", "*", "/"]);
 
 export const pythonDetector: Detector = {
   sdk: "python",
+  recognises(code: string): boolean {
+    return SDK_IMPORT.test(maskComments(code));
+  },
   detect(code: string): Detection {
     const source = maskComments(code);
     const lines = new LineIndex(source);
@@ -138,14 +141,4 @@ function maskComments(code: string): string {
     }
   }
   return out;
-}
-
-function execFrom(pattern: RegExp, text: string, from: number): RegExpExecArray | null {
-  const sticky = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g");
-  sticky.lastIndex = from;
-  return sticky.exec(text);
-}
-
-function collapse(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
 }

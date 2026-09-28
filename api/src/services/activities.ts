@@ -3,11 +3,13 @@ import { insertOwnership } from "../db/ownership-repository.js";
 import { formatActivityAddress, isActivityAddress, parseActivityAddress } from "../domain/addresses/address.js";
 import { toKebabCase } from "../domain/addresses/names.js";
 import type { Detector } from "../domain/detection/detector.js";
+import { dotnetDetector } from "../domain/detection/dotnet.js";
 import { pythonDetector } from "../domain/detection/python.js";
+import { typescriptDetector } from "../domain/detection/typescript.js";
 import { buildChecks } from "../domain/patterns/checks.js";
-import { PYTHON_IDEMPOTENCY } from "../domain/patterns/rubric.js";
+import { idempotencyRubricFor } from "../domain/patterns/rubric.js";
 import { findMissingHeadings } from "../domain/readme/readme-template.js";
-import { generatePythonSnippets } from "../domain/snippets/python-snippets.js";
+import { generateSnippets } from "../domain/snippets/snippets.js";
 import { FIRST_VERSION, highestVersion } from "../domain/versioning/semver.js";
 import type { ActivityVersion, PublishRequest, PublishResult } from "../model/activity-version.js";
 import type { Check, Declarations } from "../model/check.js";
@@ -18,9 +20,20 @@ import { currentAccount } from "./accounts.js";
 import { documents } from "./documents.js";
 import { BadRequestError, ServiceError } from "./errors.js";
 
+const DETECTORS: Detector[] = [pythonDetector, typescriptDetector, dotnetDetector];
+
+/**
+ * Picks the detector by the SDK's marker in the code: a `temporalio` import for
+ * Python, an `@temporalio/...` import for TypeScript, a `using Temporalio...;`
+ * directive for .NET. Error handling is faked: code with no recognised marker
+ * throws here, and code that doesn't parse throws in the detector, so both
+ * fail as a raw 500.
+ */
 // POC-SHORTCUT: SC-003
-function detectorFor(_code: string): Detector {
-  return pythonDetector;
+function detectorFor(code: string): Detector {
+  const detector = DETECTORS.find((candidate) => candidate.recognises(code));
+  if (!detector) throw new Error("No Temporal SDK import found (Python, TypeScript or .NET)");
+  return detector;
 }
 
 export function detectActivity(code: string): Detection {
@@ -34,7 +47,8 @@ export function checkActivity(code: string, declarations: Declarations): Check[]
   if (declarations.compensation.status === "present" && (!address || !isActivityAddress(address))) {
     throw new BadRequestError("Compensation must be an address like durables.dev/<owner>/<name>, optionally @<version>.");
   }
-  return buildChecks(code, declarations, detectActivity(code), PYTHON_IDEMPOTENCY);
+  const detection = detectActivity(code);
+  return buildChecks(code, declarations, detection, idempotencyRubricFor(detection.sdk.value));
 }
 
 /**
@@ -137,7 +151,8 @@ export async function getListing(owner: string, name: string, version?: string):
       : { handle: doc.owner, displayName: doc.owner, verified: false },
     sdk: doc.sdk,
     code: doc.code,
-    snippets: generatePythonSnippets(doc),
+    detection: doc.detection,
+    snippets: generateSnippets(doc.sdk, doc),
     configuration: doc.declarations.envVars.map(({ name: envName, purpose }) => ({
       name: envName,
       purpose,

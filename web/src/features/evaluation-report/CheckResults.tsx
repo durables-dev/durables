@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import type { Check } from "../../api/types";
 import { Badge } from "../../components/Badge";
 import { CodeView, type LineHighlight } from "../../components/code/CodeView";
+import { LineLink } from "../../components/LineLink";
 import { listingPath, parseAddress } from "../../lib/address";
 import { CHECK_NAMES, ESTABLISHED_NAMES, STATUS_NAMES } from "../../lib/checks";
 import styles from "./CheckResults.module.css";
@@ -10,6 +11,8 @@ import styles from "./CheckResults.module.css";
 type CheckResultsProps = {
   code: string;
   checks: Check[];
+  /** The Monaco language of `code`, from the listing's SDK. */
+  language?: string;
   /** Open the rubric and compensation links in a new tab, so an unfinished publish form survives. */
   linksInNewTab?: boolean;
 };
@@ -19,7 +22,7 @@ type CheckResultsProps = {
  * the evidence behind it. Every cited or detected line is a link that shows the
  * code with that check's lines highlighted. Compensation links to its listing.
  */
-export function CheckResults({ code, checks, linksInNewTab = false }: CheckResultsProps) {
+export function CheckResults({ code, checks, language = "python", linksInNewTab = false }: CheckResultsProps) {
   const withLines = checks.filter((check) => (check.lines ?? []).length > 0);
   const [selectedTag, setSelectedTag] = useState<Check["tag"] | null>(withLines[0]?.tag ?? null);
   const selected = checks.find((check) => check.tag === selectedTag && (check.lines ?? []).length > 0) ?? null;
@@ -65,7 +68,7 @@ export function CheckResults({ code, checks, linksInNewTab = false }: CheckResul
               </>
             )}
           </p>
-          <CodeView value={code} readOnly height={460} highlights={highlights} />
+          <CodeView value={code} readOnly language={language} height={460} highlights={highlights} />
         </>
       )}
     </div>
@@ -87,9 +90,7 @@ function CheckDetail({ check, onShowLines, linkProps }: CheckDetailProps) {
         {lines.map((line, index) => (
           <span key={line}>
             {index > 0 && ", "}
-            <button type="button" className={styles.lineLink} onClick={onShowLines}>
-              line {line}
-            </button>
+            <LineLink line={line} onClick={onShowLines} />
           </span>
         ))}
         .{" "}

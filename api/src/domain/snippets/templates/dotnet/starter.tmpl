@@ -1,0 +1,20 @@
+// Run with: dotnet run -p:StartupObject=StarterProgram
+using System;
+using System.Threading.Tasks;
+using Temporalio.Client;
+{{namespace_using}}
+
+public static class StarterProgram
+{
+    private const string TaskQueue = "{{task_queue}}";
+
+    public static async Task Main()
+    {
+        var client = await TemporalClient.ConnectAsync(new("localhost:7233") { Namespace = "default" });
+
+        {{result_assignment}}await client.ExecuteWorkflowAsync(
+            ({{workflow_class}} wf) => wf.RunAsync({{workflow_args}}),
+            new(id: $"{{workflow_id_prefix}}-{Guid.NewGuid()}", taskQueue: TaskQueue));
+        {{result_output}}
+    }
+}

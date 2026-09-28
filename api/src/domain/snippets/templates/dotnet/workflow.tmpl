@@ -1,0 +1,30 @@
+using System;
+using System.Threading.Tasks;
+using Temporalio.Common;
+using Temporalio.Workflows;
+{{namespace_using}}
+
+[Workflow]
+public class {{workflow_class}}
+{
+    [WorkflowRun]
+    public async {{run_return_type}} RunAsync({{run_params}})
+    {
+        // The recommended timeout and retry policy for every Durables activity.
+        // Errors of the listed types are permanent and are not retried.
+        {{await_keyword}} Workflow.ExecuteActivityAsync(
+            {{activity_call}},
+            new ActivityOptions
+            {
+                StartToCloseTimeout = TimeSpan.FromSeconds(30),
+                RetryPolicy = new RetryPolicy
+                {
+                    InitialInterval = TimeSpan.FromSeconds(1),
+                    BackoffCoefficient = 2,
+                    MaximumInterval = TimeSpan.FromSeconds(30),
+                    MaximumAttempts = 5,
+                    NonRetryableErrorTypes = {{non_retryable_error_types}},
+                },
+            });
+    }
+}

@@ -1,18 +1,21 @@
-.tag {
+.sdk {
   background: #fff;
   border: 1px solid #d0d7de;
   border-radius: 8px;
   padding: 16px 24px;
   margin-bottom: 20px;
 }
-.tag:target {
-  border-color: #0969da;
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.2);
+.entry {
+  margin: 0 -12px;
+  padding: 12px;
+  border-radius: 6px;
+}
+.entry:target {
+  box-shadow: 0 0 0 2px #0969da, 0 0 0 5px rgba(9, 105, 218, 0.2);
 }
 .entry + .entry {
   border-top: 1px solid #eaeef2;
   margin-top: 12px;
-  padding-top: 12px;
 }
 .caption {
   color: #57606a;
