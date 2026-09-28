@@ -4,6 +4,7 @@ import { groupsRoutes } from "./routes/groups.js";
 import { meRoutes } from "./routes/me.js";
 import { readmeTemplateRoutes } from "./routes/readme-template.js";
 import { rubricRoutes } from "./routes/rubric.js";
+import { searchRoutes } from "./routes/search.js";
 import { ServiceError } from "./services/errors.js";
 
 export function buildApp() {
@@ -19,5 +20,6 @@ export function buildApp() {
   app.register(groupsRoutes);
   app.register(readmeTemplateRoutes);
   app.register(rubricRoutes);
+  app.register(searchRoutes);
   return app;
 }

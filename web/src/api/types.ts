@@ -146,3 +146,35 @@ export type GroupListing = {
   file: string;
   members: { address: string; owner: string; name: string; version: string }[];
 };
+
+// POC-7 boundary 1: GET /search/activities
+
+export type SearchSdk = "python" | "typescript" | "dotnet";
+
+/** Filters combine with AND. An unset filter doesn't constrain. */
+export type ActivitySearchFilters = {
+  sdk?: SearchSdk;
+  idempotent?: true;
+  hasCompensation?: true;
+};
+
+export type ActivitySummary = {
+  /** The default version: "durables.dev/kisasa/charge-card@1.0.0". */
+  address: string;
+  owner: string;
+  name: string;
+  version: string;
+  publishedAt: string;
+  sdk: "python";
+  /** Detected: "charge_card". */
+  activityName: string;
+  publisher: { handle: string; displayName: string; verified: boolean };
+  checks: Pick<Check, "tag" | "status" | "established">[];
+};
+
+export type ActivitySearchResponse = {
+  /** As api read them from the query. */
+  filters: ActivitySearchFilters;
+  /** By name, then owner, ascending. */
+  results: ActivitySummary[];
+};

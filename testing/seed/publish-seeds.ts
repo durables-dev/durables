@@ -3,7 +3,9 @@
 //
 //   npm run publish-seeds            (from testing/seed, after compose up)
 //
-// It publishes every folder in catalog/<sdk>/<name>/, then demo/refund-charge/.
+// It publishes demo/refund-charge/ first, then every folder in catalog/<sdk>/<name>/.
+// refund-charge goes first because catalog seeds name it as their compensation,
+// and publishing rejects a compensation address that isn't published yet.
 // catalog/ may be empty or missing. demo/charge-card/ is never published: it is
 // pasted by hand in the demo. An activity that is already published is skipped,
 // so the script can be run again.
@@ -64,7 +66,7 @@ async function publish(folder: string): Promise<void> {
   }
 }
 
-const folders = [...catalogFolders(), join(here, "demo", "refund-charge")];
+const folders = [join(here, "demo", "refund-charge"), ...catalogFolders()];
 for (const folder of folders) {
   await publish(folder);
 }
