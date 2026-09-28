@@ -18,9 +18,9 @@ import {
 } from "../domain/groups/group-file.js";
 import { FIRST_VERSION, highestVersion } from "../domain/versioning/semver.js";
 import type { Account } from "../model/account.js";
-import type { Sdk } from "../model/detection.js";
 import type {
   GroupListing,
+  GroupSdk,
   GroupVersion,
   PublishGroupRequest,
   PublishGroupResult,
@@ -144,18 +144,18 @@ function signedIn(headers: Headers): Account {
   return account;
 }
 
-// Only Python groups exist in this claim. TypeScript and .NET arrive with step 9.
-function checkSdk(sdk: unknown): Sdk {
-  if (sdk !== "python") throw new BadRequestError("Only Python groups can be built so far.");
+// Groups stay Python-only, even though listings now come in three SDKs (POC-8).
+function checkSdk(sdk: unknown): GroupSdk {
+  if (sdk !== "python") throw new BadRequestError("Only Python groups can be built.");
   return sdk;
 }
 
-async function resolveSource(owner: Account, sdk: Sdk, source: string): Promise<RenderedGroup> {
+async function resolveSource(owner: Account, sdk: GroupSdk, source: string): Promise<RenderedGroup> {
   const segments = parseGroupSource(source);
   return renderGroupFile(sdk, segments, await resolveSegments(owner.handle, sdk, segments));
 }
 
-async function resolveSegments(ownerHandle: string, sdk: Sdk, segments: GroupSegment[]): Promise<(Resolution | undefined)[]> {
+async function resolveSegments(ownerHandle: string, sdk: GroupSdk, segments: GroupSegment[]): Promise<(Resolution | undefined)[]> {
   const publishers = new Map<string, Promise<Publisher>>();
   const publisher = (handle: string) => {
     if (!publishers.has(handle)) publishers.set(handle, publisherFor(handle));
@@ -177,7 +177,7 @@ async function resolveSegments(ownerHandle: string, sdk: Sdk, segments: GroupSeg
 async function resolveAddress(
   address: ActivityAddress,
   ownerHandle: string,
-  sdk: Sdk,
+  sdk: GroupSdk,
   publisher: (handle: string) => Promise<Publisher>,
 ): Promise<Resolution> {
   const shown = formatActivityAddress(address.owner, address.name, address.version);

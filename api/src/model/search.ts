@@ -3,7 +3,7 @@
 import type { Check, CheckTag, TagStatus } from "./check.js";
 import type { Sdk } from "./detection.js";
 
-/** The SDK choice offers all three. Until TypeScript and .NET detection arrive (POC-8), only Python has results. */
+/** The SDK choice offers all three, the same values as `Sdk`. */
 export type SearchSdk = "python" | "typescript" | "dotnet";
 
 /** Filters combine with AND. An unset filter doesn't constrain. */

@@ -1,0 +1,26 @@
+import { NativeConnection, Worker } from "@temporalio/worker";
+import * as activities from "./{{activity_module}}";
+
+const TASK_QUEUE = "{{task_queue}}";
+
+async function run(): Promise<void> {
+  const connection = await NativeConnection.connect({ address: "localhost:7233" });
+  try {
+    const worker = await Worker.create({
+      connection,
+      namespace: "default",
+      taskQueue: TASK_QUEUE,
+      workflowsPath: require.resolve("./workflow"),
+      activities,
+    });
+    console.log(`Worker listening on task queue ${TASK_QUEUE}. Press Ctrl+C to stop.`);
+    await worker.run();
+  } finally {
+    await connection.close();
+  }
+}
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

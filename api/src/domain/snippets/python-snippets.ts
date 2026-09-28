@@ -1,21 +1,15 @@
-import type { Detection, InputType } from "../../model/detection.js";
+import type { InputType } from "../../model/detection.js";
 import type { Snippet } from "../../model/listing.js";
 import { toPascalCase, toSnakeCase } from "../addresses/names.js";
 import { toPythonLiteral } from "./python-literal.js";
 import { renderTemplate } from "./render-template.js";
+import type { SnippetSource } from "./snippet-source.js";
 import { snippetTemplate } from "./templates.js";
 
 // The five Python snippet tabs, generated from the templates in
 // templates/python/ and the metadata stored with the listing. The activity tab
 // is the stored code itself. Every file is complete and runs as pasted.
 
-export type SnippetSource = {
-  /** The listing name, used as the task queue and the workflow ID prefix. */
-  name: string;
-  code: string;
-  detection: Detection;
-  exampleInput: Record<string, unknown>;
-};
 
 const TYPING_NAMES = new Set([
   "Any",

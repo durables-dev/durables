@@ -6,8 +6,14 @@
 
 import type { ActivityVersion } from "../../model/activity-version.js";
 import type { Check } from "../../model/check.js";
-import type { GroupMember, GroupProblem, GroupProblemKind, LineRange, ResolvedGroup } from "../../model/group-version.js";
-import type { Sdk } from "../../model/detection.js";
+import type {
+  GroupMember,
+  GroupProblem,
+  GroupProblemKind,
+  GroupSdk,
+  LineRange,
+  ResolvedGroup,
+} from "../../model/group-version.js";
 import { formatActivityAddress, parseActivityAddress, type ActivityAddress } from "../addresses/address.js";
 import { liftImports, mergeImports } from "./python-imports.js";
 
@@ -103,7 +109,7 @@ type BodyLine = {
  * blocks is just the editable text.
  */
 export function renderGroupFile(
-  sdk: Sdk,
+  sdk: GroupSdk,
   segments: GroupSegment[],
   resolutions: (Resolution | undefined)[],
 ): RenderedGroup {
@@ -174,7 +180,7 @@ export function renderGroupFile(
   return finish(sdk, header, [{ text: "" }, { text: "" }, ...body]);
 }
 
-function finish(sdk: Sdk, header: string[], body: BodyLine[]): RenderedGroup {
+function finish(sdk: GroupSdk, header: string[], body: BodyLine[]): RenderedGroup {
   const lines: string[] = [...header];
   const readOnlyRanges: LineRange[] = header.length > 0 ? [{ startLine: 1, endLine: header.length }] : [];
   const members: GroupMember[] = [];
