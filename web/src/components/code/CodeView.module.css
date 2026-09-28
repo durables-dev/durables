@@ -1,0 +1,22 @@
+.frame {
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+.matchedLine {
+  background: rgba(46, 160, 67, 0.22);
+}
+.matchedGutter {
+  background: #2da44e;
+  width: 4px !important;
+  margin-left: 3px;
+}
+.citedLine {
+  background: rgba(212, 167, 44, 0.25);
+}
+.citedGutter {
+  background: #bf8700;
+  width: 4px !important;
+  margin-left: 3px;
+}

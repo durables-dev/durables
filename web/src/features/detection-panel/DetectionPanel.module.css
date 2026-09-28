@@ -1,0 +1,21 @@
+.facts {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 10px 16px;
+  margin: 0;
+}
+.facts dt {
+  font-weight: 600;
+  color: #57606a;
+}
+.facts dd {
+  margin: 0;
+}
+.item {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 6px;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+}

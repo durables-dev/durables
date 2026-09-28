@@ -1,0 +1,36 @@
+# The single entry point for running the PoC locally:
+#
+#   docker compose -f infrastructure/compose.yaml up
+#
+# POC-4 starts web and api only. postgres, and testing's temporal and
+# mock-payments (pulled in with include:), are added by the epics that need them.
+name: durables
+
+# Hosting is faked: everything runs on localhost, in dev mode, on published ports.
+# POC-SHORTCUT: SC-006
+services:
+  api:
+    build:
+      context: ../api
+      dockerfile: ../infrastructure/docker/api.Dockerfile
+    command: ["npx", "tsx", "watch", "src/server.ts"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../api:/app
+      - /app/node_modules
+
+  web:
+    build:
+      context: ../web
+      dockerfile: ../infrastructure/docker/web.Dockerfile
+    command: ["npx", "vite", "--host"]
+    environment:
+      VITE_API_TARGET: ${VITE_API_TARGET:-http://api:3000}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../web:/app
+      - /app/node_modules
+    depends_on:
+      - api
