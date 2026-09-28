@@ -23,9 +23,12 @@ TypeScript, Fastify, ESM, with its own `package.json`.
 `src/store.ts`. Calls go downward only. The store is in memory. No database,
 no files.
 
+Its container is defined here, not in infrastructure: `mock-payments/Dockerfile`
+and `mock-payments/compose.yaml` (service `mock-payments`, host port 4000).
+
 ### temporal/
 
-One `compose.yaml` running the `temporalio/temporal` image with
+One `compose.yaml` (service `temporal`) running the `temporalio/temporal` image with
 `server start-dev`: gRPC on 7233, UI on 8233, the `default` namespace. No
 other Temporal setup lives anywhere.
 
