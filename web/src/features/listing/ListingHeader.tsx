@@ -1,9 +1,8 @@
 import type { Listing } from "../../api/types";
 import { Badge } from "../../components/Badge";
-import { CHECK_NAMES, ESTABLISHED_NAMES, STATUS_NAMES } from "../../lib/checks";
+import { CheckBadge } from "../../components/CheckBadge";
+import { SDK_NAMES } from "../../lib/sdks";
 import styles from "./ListingHeader.module.css";
-
-const SDK_NAMES: Record<Listing["sdk"], string> = { python: "Python" };
 
 /**
  * The top of a listing: name, version and address, then the badge row with the
@@ -33,11 +32,7 @@ export function ListingHeader({ listing }: { listing: Listing }) {
         )}
         <span className={styles.divider} />
         {listing.checks.map((check) => (
-          <span key={check.tag} title={`${STATUS_NAMES[check.status]}, ${ESTABLISHED_NAMES[check.established]}`}>
-            <Badge tone={check.status === "present" ? "success" : "muted"}>
-              {check.status === "present" ? "✓" : check.status === "absent" ? "✗" : "–"} {CHECK_NAMES[check.tag]}
-            </Badge>
-          </span>
+          <CheckBadge key={check.tag} check={check} />
         ))}
       </div>
       <p className={styles.published}>Published {new Date(listing.publishedAt).toLocaleDateString(undefined, { dateStyle: "medium" })}</p>

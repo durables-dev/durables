@@ -10,6 +10,7 @@ export function AppLayout() {
           Durables
         </Link>
         <nav className={styles.nav}>
+          <Link to="/search">Search</Link>
           <Link to="/publish">Publish</Link>
           <Link to="/groups/new">New group</Link>
           <Link to="/rubric">Rubric</Link>
