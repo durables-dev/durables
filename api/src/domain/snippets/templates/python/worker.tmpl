@@ -1,0 +1,27 @@
+import asyncio
+{{executor_import}}
+
+from temporalio.client import Client
+from temporalio.worker import Worker
+
+from {{activity_module}} import {{activity_function}}
+from workflow import {{workflow_class}}
+
+TASK_QUEUE = "{{task_queue}}"
+
+
+async def main() -> None:
+    client = await Client.connect("localhost:7233", namespace="default")
+    worker = Worker(
+        client,
+        task_queue=TASK_QUEUE,
+        workflows=[{{workflow_class}}],
+        activities=[{{activity_function}}],
+        {{activity_executor}}
+    )
+    print(f"Worker listening on task queue {TASK_QUEUE!r}. Press Ctrl+C to stop.")
+    await worker.run()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

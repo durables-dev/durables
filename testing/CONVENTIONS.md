@@ -43,20 +43,27 @@ other Temporal setup lives anywhere.
       demo/charge-card/v2/       pasted by hand in step 13
 
 `<sdk>` is `python`, `typescript` or `dotnet`. Every activity directory holds
-exactly three files:
+exactly four files:
 
 - the activity, as one file named the SDK's way: `charge_card.py`,
   `charge-card.ts`, `ChargeCard.cs`
 - `declaration.json`: the declaration form answers (tags with cited lines,
   compensation address, heartbeat reason, environment variable purposes)
 - `README.md`: written under the headings of api's README template
+- `example-input.json`: a JSON object whose keys are the fields of the
+  activity's input type, as entered on the publish form. The starter snippet
+  renders it as the input it starts the workflow with. For
+  `demo/charge-card/`, the values must make a charge succeed against
+  mock-payments
 
 Seeds have no project files (`pyproject.toml`, `package.json`, `.csproj`).
 Only the two Python demo activities are ever run, in the consumer project.
 
-`publish-seeds.ts` runs with `tsx`. It publishes everything in `catalog/`,
-plus `demo/refund-charge/`, as the publisher user. It does not publish
-`demo/charge-card/`.
+`publish-seeds.ts` runs with `tsx` (`npm run publish-seeds` in `seed/`). It
+publishes everything in `catalog/`, plus `demo/refund-charge/`, as the
+publisher user, through `POST /activities/detect`, `POST /activities/check`
+and `POST /activities`. `catalog/` may be empty or missing. An activity that is
+already published is skipped. It does not publish `demo/charge-card/`.
 
 ### consumer/
 

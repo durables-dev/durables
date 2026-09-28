@@ -1,0 +1,39 @@
+.header {
+  margin-bottom: 16px;
+}
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.name {
+  margin: 0;
+  font-size: 30px;
+}
+.address {
+  margin: 6px 0 10px;
+  color: #57606a;
+}
+.badgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.publisher {
+  font-size: 14px;
+}
+.handle {
+  color: #57606a;
+}
+.divider {
+  width: 1px;
+  height: 18px;
+  background: #d0d7de;
+  margin: 0 4px;
+}
+.published {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #57606a;
+}

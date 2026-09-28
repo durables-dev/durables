@@ -1,0 +1,28 @@
+from datetime import timedelta
+{{typing_import}}
+
+from temporalio import workflow
+from temporalio.common import RetryPolicy
+
+with workflow.unsafe.imports_passed_through():
+    from {{activity_module}} import {{workflow_imports}}
+
+
+@workflow.defn
+class {{workflow_class}}:
+    @workflow.run
+    async def run(self{{run_params}}) -> {{output_type}}:
+        # The recommended timeout and retry policy for every Durables activity.
+        # Errors of the listed types are permanent and are not retried.
+        return await workflow.execute_activity(
+            {{activity_function}},
+            {{activity_args}}
+            start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=1),
+                backoff_coefficient=2.0,
+                maximum_interval=timedelta(seconds=30),
+                maximum_attempts=5,
+                non_retryable_error_types={{non_retryable_error_types}},
+            ),
+        )
