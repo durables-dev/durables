@@ -12,6 +12,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The parsed error body, for callers that need more than the message. */
+    readonly payload: unknown = null,
   ) {
     super(message);
   }
@@ -28,7 +30,7 @@ export async function request<T>(method: "GET" | "POST", path: string, body?: un
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new ApiError(response.status, payload?.message ?? payload?.error ?? `Request failed (${response.status})`);
+    throw new ApiError(response.status, payload?.error ?? payload?.message ?? `Request failed (${response.status})`, payload);
   }
   return payload as T;
 }

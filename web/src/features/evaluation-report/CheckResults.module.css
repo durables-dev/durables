@@ -40,3 +40,15 @@
 .citedSwatch {
   background: rgba(212, 167, 44, 0.6);
 }
+.selected {
+  background: #f6f8fa;
+}
+.lineLink {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #0969da;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
