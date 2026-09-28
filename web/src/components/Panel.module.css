@@ -1,0 +1,25 @@
+.panel {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+.title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+.step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #24292f;
+  color: #fff;
+  font-size: 14px;
+}

@@ -1,0 +1,34 @@
+.tag {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  padding: 16px 24px;
+  margin-bottom: 20px;
+}
+.tag:target {
+  border-color: #0969da;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.2);
+}
+.entry + .entry {
+  border-top: 1px solid #eaeef2;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.caption {
+  color: #57606a;
+  font-size: 14px;
+}
+.patterns code {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.patterns li + li {
+  margin-top: 6px;
+}
+.error {
+  color: #cf222e;
+}

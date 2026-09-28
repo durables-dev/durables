@@ -1,0 +1,10 @@
+.switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #d0d7de;
+}
+.switcher strong {
+  color: #fff;
+}
