@@ -141,3 +141,17 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Python (testing/seed, testing/consumer)
+.venv/
+__pycache__/
+*.pyc
+
+# .NET
+bin/
+obj/
+
+# Demo consumer project: only the reset script and README are tracked
+testing/consumer/*
+!testing/consumer/README.md
+!testing/consumer/reset.sh
