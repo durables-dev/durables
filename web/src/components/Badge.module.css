@@ -1,0 +1,29 @@
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.success {
+  background: #dafbe1;
+  color: #1a7f37;
+  border-color: #aceebb;
+}
+.neutral {
+  background: #ddf4ff;
+  color: #0969da;
+  border-color: #b6e3ff;
+}
+.attention {
+  background: #fff8c5;
+  color: #9a6700;
+  border-color: #f5e0a1;
+}
+.muted {
+  background: #f6f8fa;
+  color: #57606a;
+  border-color: #d0d7de;
+}

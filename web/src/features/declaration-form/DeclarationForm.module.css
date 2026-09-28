@@ -1,0 +1,39 @@
+.form fieldset {
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 12px 16px 16px;
+  margin: 0 0 16px;
+}
+.form legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+.choice > span {
+  min-width: 280px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+.field input {
+  padding: 6px 8px;
+  font: inherit;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.error {
+  color: #cf222e;
+}
