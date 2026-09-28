@@ -59,10 +59,30 @@ export function diskDocumentStore(root: string): DocumentStore {
     }
   }
 
+  /** The subdirectories of `dir` that are valid address segments. Empty if `dir` doesn't exist. */
+  async function segmentsIn(dir: string): Promise<string[]> {
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      return entries.filter((entry) => entry.isDirectory() && isAddressSegment(entry.name)).map((entry) => entry.name);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+  }
+
+  async function listActivities(): Promise<{ owner: string; name: string }[]> {
+    const owners = await segmentsIn(join(root, "activities"));
+    const perOwner = await Promise.all(
+      owners.map(async (owner) => (await segmentsIn(join(root, "activities", owner))).map((name) => ({ owner, name }))),
+    );
+    return perOwner.flat();
+  }
+
   return {
     putActivityVersion: (doc) => put("activities", doc),
     getActivityVersion: (owner, name, version) => get<ActivityVersion>("activities", owner, name, version),
     listActivityVersions: (owner, name) => list("activities", owner, name),
+    listActivities,
     putGroupVersion: (doc) => put("groups", doc),
     getGroupVersion: (owner, name, version) => get<GroupVersion>("groups", owner, name, version),
     listGroupVersions: (owner, name) => list("groups", owner, name),

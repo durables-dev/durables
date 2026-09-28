@@ -14,6 +14,8 @@ export interface DocumentStore {
   getActivityVersion(owner: string, name: string, version: string): Promise<ActivityVersion | null>;
   /** Every stored version of the activity, in no particular order. Empty if none. */
   listActivityVersions(owner: string, name: string): Promise<string[]>;
+  /** Every stored activity's owner and name, in no particular order. Empty if there are none. */
+  listActivities(): Promise<{ owner: string; name: string }[]>;
 
   /** Writes a new group version document. Throws VersionExistsError if that version exists. */
   putGroupVersion(doc: GroupVersion): Promise<void>;
