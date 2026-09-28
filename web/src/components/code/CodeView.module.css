@@ -20,3 +20,6 @@
   width: 4px !important;
   margin-left: 3px;
 }
+.readOnlyLine {
+  background: rgba(175, 184, 193, 0.18);
+}
