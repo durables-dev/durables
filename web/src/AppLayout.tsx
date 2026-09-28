@@ -11,6 +11,7 @@ export function AppLayout() {
         </Link>
         <nav className={styles.nav}>
           <Link to="/publish">Publish</Link>
+          <Link to="/groups/new">New group</Link>
           <Link to="/rubric">Rubric</Link>
         </nav>
         <UserSwitcher />

@@ -13,21 +13,10 @@ import type { ActivityVersion, PublishRequest, PublishResult } from "../model/ac
 import type { Check, Declarations } from "../model/check.js";
 import type { Detection } from "../model/detection.js";
 import type { Listing } from "../model/listing.js";
-import { diskDocumentStore } from "../storage/disk-document-store.js";
-import { VersionExistsError, type DocumentStore } from "../storage/document-store.js";
+import { VersionExistsError } from "../storage/document-store.js";
 import { currentAccount } from "./accounts.js";
+import { documents } from "./documents.js";
 import { BadRequestError, ServiceError } from "./errors.js";
-
-let store: DocumentStore | null = null;
-
-function documents(): DocumentStore {
-  if (!store) {
-    const root = process.env.DOCUMENTS_DIR;
-    if (!root) throw new Error("DOCUMENTS_DIR is not set");
-    store = diskDocumentStore(root);
-  }
-  return store;
-}
 
 // POC-SHORTCUT: SC-003
 function detectorFor(_code: string): Detector {

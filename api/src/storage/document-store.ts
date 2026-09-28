@@ -1,6 +1,7 @@
 import type { ActivityVersion } from "../model/activity-version.js";
+import type { GroupVersion } from "../model/group-version.js";
 
-/** Thrown by putActivityVersion when the version already exists. Versions are immutable. */
+/** Thrown by putActivityVersion and putGroupVersion when the version already exists. Versions are immutable. */
 export class VersionExistsError extends Error {}
 
 /**
@@ -13,4 +14,10 @@ export interface DocumentStore {
   getActivityVersion(owner: string, name: string, version: string): Promise<ActivityVersion | null>;
   /** Every stored version of the activity, in no particular order. Empty if none. */
   listActivityVersions(owner: string, name: string): Promise<string[]>;
+
+  /** Writes a new group version document. Throws VersionExistsError if that version exists. */
+  putGroupVersion(doc: GroupVersion): Promise<void>;
+  getGroupVersion(owner: string, name: string, version: string): Promise<GroupVersion | null>;
+  /** Every stored version of the group, in no particular order. Empty if none. */
+  listGroupVersions(owner: string, name: string): Promise<string[]>;
 }

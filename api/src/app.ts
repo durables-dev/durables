@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { activitiesRoutes } from "./routes/activities.js";
+import { groupsRoutes } from "./routes/groups.js";
 import { meRoutes } from "./routes/me.js";
 import { readmeTemplateRoutes } from "./routes/readme-template.js";
 import { rubricRoutes } from "./routes/rubric.js";
@@ -15,6 +16,7 @@ export function buildApp() {
   });
   app.register(meRoutes);
   app.register(activitiesRoutes);
+  app.register(groupsRoutes);
   app.register(readmeTemplateRoutes);
   app.register(rubricRoutes);
   return app;

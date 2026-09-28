@@ -29,3 +29,8 @@ export function isAddressSegment(text: string): boolean {
 export function isVersion(text: string): boolean {
   return VERSION.test(text);
 }
+
+/** A group address: `durables.dev/<owner>/groups/<name>`, with an optional `@<version>`. */
+export function formatGroupAddress(owner: string, name: string, version?: string): string {
+  return `durables.dev/${owner}/groups/${name}${version ? `@${version}` : ""}`;
+}
