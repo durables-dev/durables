@@ -70,6 +70,19 @@ Nothing here is timed. Run it from the repository root before every demo.
 9. **Switch web to `demo-consumer`**, and keep the `charge-card` listing one
    click away. The clock starts when the listing opens.
 
+10. **Make sure `payments@1.0.0` is published before step 12.** In the full
+    demo it is published live, in steps 6–7. When you rehearse step 12 on its
+    own, publish it by hand first: switch web to `kisasa`, open the group
+    editor (http://localhost:5173/groups/new), choose Python, paste these two
+    lines, and publish the group as `payments`:
+
+        durables.dev/kisasa/charge-card
+        durables.dev/kisasa/refund-charge
+
+    Check that http://localhost:5173/kisasa/groups/payments@1.0.0 opens, then
+    switch web back to `demo-consumer`. The seed script does not publish the
+    group.
+
 ## During the demo (steps 10–11, timed)
 
 Only what the listing provides. No Temporal code is written by hand.
@@ -88,6 +101,41 @@ Only what the listing provides. No Temporal code is written by hand.
    workflow. It shows **Completed**, and its event history has
    `ActivityTaskCompleted` with the same `charge_id` and `status`. Stop the
    clock.
+
+## During the demo (step 12, not timed)
+
+This builds on the step 11 project, with Temporal and the step 11 worker still
+running. The group file is pasted exactly as copied: it is never edited.
+
+1. Open http://localhost:5173/kisasa/groups/payments@1.0.0, the local
+   stand-in for `durables.dev/kisasa/groups/payments@1.0.0`.
+2. Click **Copy file**, and paste it into this directory as a new file,
+   `payments.py` (the name shown next to the button). `charge_card.py` stays.
+3. Change `worker.py` in exactly two lines. Nothing else in the project
+   changes: `workflow.py`, `starter.py` and `charge_card.py` stay as pasted in
+   step 11.
+
+       from charge_card import charge_card
+       activities=[charge_card],
+
+   become
+
+       from payments import charge_card, refund_charge
+       activities=[charge_card, refund_charge],
+
+4. Restart only the worker, not Temporal: in the worker terminal, press
+   Ctrl+C, then `python worker.py`. It starts without errors and prints that
+   it is listening on task queue `'charge-card'`.
+5. In the starter terminal: `python starter.py`. It prints
+   `ChargeCardResult(charge_id='ch_…', status='succeeded')`, with a new
+   `charge_id`.
+6. In the Temporal UI (http://localhost:8233), there are now two
+   `charge-card-…` workflows, both **Completed**. Open the newer one. Its event
+   history has `ActivityTaskCompleted` with the new `charge_id` and `status`.
+
+The activity that ran is `charge_card` from the group file, the one the worker
+now registers. `workflow.py` still imports from `charge_card.py`, but only to
+name the activity type. `refund_charge` is registered but never called.
 
 To run it again from empty, stop the worker and repeat from step 6 of the
 checklist.
