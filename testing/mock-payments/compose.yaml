@@ -1,0 +1,15 @@
+# The mock payments API. infrastructure/compose.yaml includes this file and
+# never redefines the service. It can also run on its own:
+#
+#   docker compose -f testing/mock-payments/compose.yaml up
+services:
+  mock-payments:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # The one key mock-payments accepts. The consumer exports the same value
+      # before the demo (testing/consumer/README.md).
+      MOCK_PAYMENTS_API_KEY: ${MOCK_PAYMENTS_API_KEY:-sk_test_durables}
+    ports:
+      - "4000:4000"
