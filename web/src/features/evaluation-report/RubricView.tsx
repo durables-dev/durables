@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { getRubric } from "../../api/rubric";
-import type { RubricEntry } from "../../api/types";
+import type { RubricEntry, Sdk } from "../../api/types";
 import { Badge } from "../../components/Badge";
+import { SDK_NAMES } from "../../lib/sdks";
 import styles from "./RubricView.module.css";
 
-const SDK_NAMES: Record<RubricEntry["sdk"], string> = { python: "Python" };
-
-/** The published rubric: the exact patterns each tag is checked against. Each tag is anchored by its name. */
+/**
+ * The published rubric: the exact patterns each tag is checked against, grouped
+ * under its SDK. Each entry is anchored by its `anchor`, which is what a check's
+ * "See the rubric" link points at.
+ */
 export function RubricView() {
   const [entries, setEntries] = useState<RubricEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,17 +28,17 @@ export function RubricView() {
   if (error) return <p className={styles.error}>{error}</p>;
   if (!entries) return <p>Loading…</p>;
 
-  const tags = [...new Set(entries.map((entry) => entry.tag))];
+  const sdks = [...new Set(entries.map((entry) => entry.sdk))] as Sdk[];
   return (
     <div>
-      {tags.map((tag) => (
-        <section key={tag} id={tag} className={styles.tag}>
-          <h2>{tag}</h2>
+      {sdks.map((sdk) => (
+        <section key={sdk} className={styles.sdk}>
+          <h2>{SDK_NAMES[sdk]}</h2>
           {entries
-            .filter((entry) => entry.tag === tag)
+            .filter((entry) => entry.sdk === sdk)
             .map((entry) => (
-              <div key={entry.sdk} className={styles.entry}>
-                <Badge>{SDK_NAMES[entry.sdk]}</Badge>
+              <div key={entry.anchor} id={entry.anchor} className={styles.entry}>
+                <Badge>{entry.tag}</Badge>
                 <p>{entry.description}</p>
                 <p className={styles.caption}>A cited line is pattern-matched if it matches any of these regular expressions:</p>
                 <ul className={styles.patterns}>

@@ -1,8 +1,7 @@
 import type { GroupListing } from "../../api/types";
 import { Badge } from "../../components/Badge";
+import { SDK_NAMES } from "../../lib/sdks";
 import styles from "./ListingHeader.module.css";
-
-const SDK_NAMES: Record<GroupListing["sdk"], string> = { python: "Python" };
 
 /** The top of a group listing: name, version and address, then the publisher and the Verified Publisher badge. */
 export function GroupListingHeader({ listing }: { listing: GroupListing }) {

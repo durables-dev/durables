@@ -1,0 +1,25 @@
+{
+  "idempotency": {
+    "status": "present",
+    "lines": [
+      25
+    ]
+  },
+  "compensation": {
+    "status": "absent"
+  },
+  "heartbeat": {
+    "status": "not-applicable",
+    "reason": "One short HTTP call with a 10-second timeout, so there is no long-running work to report progress on."
+  },
+  "envVars": [
+    {
+      "name": "MOCK_PAYMENTS_URL",
+      "purpose": "Base URL of the payments API, for example http://localhost:4000."
+    },
+    {
+      "name": "MOCK_PAYMENTS_API_KEY",
+      "purpose": "API key for the payments API, sent as a Bearer token."
+    }
+  ]
+}

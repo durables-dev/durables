@@ -26,7 +26,7 @@ export function buildChecks(
       established: matchedLines.length > 0 ? "pattern-matched" : "declared",
       lines: idempotency.lines,
       matchedLines,
-      rubricTag: idempotencyRubric.tag,
+      rubricTag: idempotencyRubric.anchor,
     },
     {
       tag: "compensation",

@@ -8,6 +8,7 @@ import { CheckResults } from "../features/evaluation-report/CheckResults";
 import { PasteEditor } from "../features/paste-editor/PasteEditor";
 import { ReadmeEditor } from "../features/readme-editor/ReadmeEditor";
 import { listingPath } from "../lib/address";
+import { SDK_LANGUAGES } from "../lib/sdks";
 
 // Nothing is stored before publish: the browser holds the pasted code, the
 // declarations and the checks until step 4 publishes them. api re-runs
@@ -48,7 +49,12 @@ export function PublishPage() {
       )}
       {detected && checked && (
         <Panel step={3} title="Pattern check">
-          <CheckResults code={detected.code} checks={checked.checks} linksInNewTab />
+          <CheckResults
+            code={detected.code}
+            checks={checked.checks}
+            language={SDK_LANGUAGES[detected.detection.sdk.value]}
+            linksInNewTab
+          />
         </Panel>
       )}
       {detected && checked && (
