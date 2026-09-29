@@ -1,8 +1,13 @@
 import { request } from "./client";
-import type { Check, Declarations, Detection, Listing, PublishRequest, PublishResult } from "./types";
+import type { Check, Declarations, Detection, Listing, PublishRequest, PublishResult, VersionSuggestion } from "./types";
 
 export function detectActivity(code: string): Promise<Detection> {
   return request<Detection>("POST", "/activities/detect", { code });
+}
+
+/** The version to publish the pasted code as, with the reasons, compared with the signed-in user's highest published version. */
+export function suggestVersion(code: string): Promise<VersionSuggestion> {
+  return request<VersionSuggestion>("POST", "/activities/version-suggestion", { code });
 }
 
 export async function checkActivity(code: string, declarations: Declarations): Promise<Check[]> {

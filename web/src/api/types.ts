@@ -1,4 +1,4 @@
-// Written from the POC-4 to POC-8 API maps. Never imported from api/.
+// Written from the POC-4 to POC-8 and POC-11 API maps. Never imported from api/.
 
 export type Me = { handle: string; displayName: string };
 
@@ -8,12 +8,18 @@ export type Sdk = "python" | "typescript" | "dotnet";
 
 export type Located<T> = { value: T; line: number };
 
+/** POC-11 boundary 2: one top-level `name: type` line of a same-file Python dataclass. */
+export type Field = { name: string; type: string; line: number };
+
+/** Present only when the type names a same-file Python `@dataclass`. `typeLine` is its `class` line. */
+export type TypeFields = { fields?: Field[]; typeLine?: number };
+
 export type Detection = {
   sdk: Located<Sdk>;
   activityName: Located<string>;
-  inputTypes: { name: string; type: string; line: number }[];
+  inputTypes: ({ name: string; type: string; line: number } & TypeFields)[];
   /** Unwrapped: Promise<T> and Task<T> arrive as T, a bare Task as "void". */
-  outputType: Located<string>;
+  outputType: Located<string> & TypeFields;
   nonRetryableErrorTypes: Located<string>[];
   envVars: Located<string>[];
 };
@@ -66,6 +72,33 @@ export type PublishRequest = {
   declarations: Declarations;
   readme: string;
   exampleInput: Record<string, unknown>;
+  /** POC-11 boundary 3: required when the name is already published; ignored on a first publish (always 1.0.0). */
+  version?: string;
+};
+
+// POC-11 boundary 1: POST /activities/version-suggestion
+
+export type VersionBump = "major" | "minor" | "patch";
+
+export type VersionReason = {
+  bump: VersionBump;
+  kind: "activity-name" | "parameters" | "input-fields" | "output-type" | "non-retryable-errors" | "env-vars" | "unchanged";
+  /** Shown as-is. */
+  message: string;
+  /** In the pasted code, where the changed thing is declared. */
+  line?: number;
+};
+
+export type VersionSuggestion = {
+  /** The derived listing name: "charge-card". */
+  name: string;
+  /** The highest published version of that name, owned by the signed-in user. Null on a first publish. */
+  previousVersion: string | null;
+  /** "2.0.0". "1.0.0" when previousVersion is null. */
+  suggestedVersion: string;
+  bump: "first" | VersionBump;
+  /** Empty when bump is "first". */
+  reasons: VersionReason[];
 };
 
 export type PublishResult = { address: string; owner: string; name: string; version: string };
@@ -98,6 +131,10 @@ export type Listing = {
   configuration: { name: string; purpose: string; line: number }[];
   readme: string;
   checks: Check[];
+  /** POC-11 boundary 4: the highest version, which is the default. */
+  latestVersion: string;
+  /** Every published version, highest first. */
+  versions: { version: string; publishedAt: string }[];
 };
 
 // POC-6 boundary 1: POST /groups/resolve

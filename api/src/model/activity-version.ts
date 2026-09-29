@@ -8,6 +8,8 @@ export type PublishRequest = {
   declarations: Declarations;
   readme: string;
   exampleInput: Record<string, unknown>;
+  /** Required when the name is already published; ignored on a first publish (always 1.0.0). POC-11 API map, boundary 3. */
+  version?: string;
 };
 
 export type PublishResult = {

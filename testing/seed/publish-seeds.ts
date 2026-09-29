@@ -56,6 +56,17 @@ async function publish(folder: string): Promise<void> {
   const check = await call("POST", "/activities/check", { code, declarations });
   if (check.status !== 200) throw new Error(`check ${activityFile}: ${check.status} ${JSON.stringify(check.payload)}`);
 
+  // Since step 13, publishing an existing name makes a new version instead of
+  // failing, so an already-published seed is skipped before it gets that far.
+  const suggestion = await call("POST", "/activities/version-suggestion", { code });
+  if (suggestion.status !== 200) {
+    throw new Error(`version-suggestion ${activityFile}: ${suggestion.status} ${JSON.stringify(suggestion.payload)}`);
+  }
+  if (suggestion.payload.previousVersion !== null) {
+    console.log(`Skipped ${activityFile}: ${suggestion.payload.name}@${suggestion.payload.previousVersion} is already published.`);
+    return;
+  }
+
   const published = await call("POST", "/activities", { code, declarations, readme, exampleInput });
   if (published.status === 201) {
     console.log(`Published ${published.payload.address}`);

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import type { Check, Declarations, Detection } from "../api/types";
+import type { Check, Declarations, Detection, VersionSuggestion } from "../api/types";
 import { Panel } from "../components/Panel";
 import { DeclarationForm } from "../features/declaration-form/DeclarationForm";
 import { DetectionPanel } from "../features/detection-panel/DetectionPanel";
+import { VersionPanel } from "../features/detection-panel/VersionPanel";
 import { CheckResults } from "../features/evaluation-report/CheckResults";
 import { PasteEditor } from "../features/paste-editor/PasteEditor";
 import { ReadmeEditor } from "../features/readme-editor/ReadmeEditor";
@@ -14,7 +15,7 @@ import { SDK_LANGUAGES } from "../lib/sdks";
 // declarations and the checks until step 4 publishes them. api re-runs
 // detection and the checks itself when it publishes.
 
-type Detected = { code: string; detection: Detection; attempt: number };
+type Detected = { code: string; detection: Detection; suggestion: VersionSuggestion; attempt: number };
 
 export function PublishPage() {
   const [detected, setDetected] = useState<Detected | null>(null);
@@ -26,8 +27,8 @@ export function PublishPage() {
       <h1>Publish an activity</h1>
       <Panel step={1} title="Paste your activity">
         <PasteEditor
-          onDetected={(code, detection) => {
-            setDetected((previous) => ({ code, detection, attempt: (previous?.attempt ?? 0) + 1 }));
+          onDetected={(code, detection, suggestion) => {
+            setDetected((previous) => ({ code, detection, suggestion, attempt: (previous?.attempt ?? 0) + 1 }));
             setChecked(null);
           }}
         />
@@ -35,6 +36,11 @@ export function PublishPage() {
       {detected && (
         <Panel step={1} title="What detection found">
           <DetectionPanel detection={detected.detection} />
+        </Panel>
+      )}
+      {detected && (
+        <Panel step={1} title="Version">
+          <VersionPanel suggestion={detected.suggestion} />
         </Panel>
       )}
       {detected && (
@@ -62,6 +68,7 @@ export function PublishPage() {
           <ReadmeEditor
             code={detected.code}
             declarations={checked.declarations}
+            suggestion={detected.suggestion}
             onPublished={(result) => navigate(listingPath(result.owner, result.name, result.version))}
           />
         </Panel>

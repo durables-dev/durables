@@ -45,6 +45,14 @@
   border-radius: 6px;
   max-width: 520px;
 }
+.version input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  max-width: 160px;
+}
 .actions {
   display: flex;
   align-items: center;
