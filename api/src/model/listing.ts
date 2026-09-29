@@ -37,4 +37,8 @@ export type Listing = {
   configuration: { name: string; purpose: string; line: number }[];
   readme: string;
   checks: Check[];
+  /** The highest version: the default. POC-11 API map, boundary 4. */
+  latestVersion: string;
+  /** Every published version, highest first. */
+  versions: { version: string; publishedAt: string }[];
 };

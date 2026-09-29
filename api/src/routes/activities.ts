@@ -1,11 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { PublishRequest } from "../model/activity-version.js";
 import type { Declarations } from "../model/check.js";
-import { checkActivity, detectActivity, getListing, publishActivity } from "../services/activities.js";
+import { checkActivity, detectActivity, getListing, publishActivity, suggestActivityVersion } from "../services/activities.js";
 
 export const activitiesRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: { code: string } }>("/activities/detect", async (request) => {
     return detectActivity(request.body.code);
+  });
+
+  app.post<{ Body: { code: string } }>("/activities/version-suggestion", async (request) => {
+    return suggestActivityVersion(request.headers, request.body.code);
   });
 
   app.post<{ Body: { code: string; declarations: Declarations } }>("/activities/check", async (request) => {

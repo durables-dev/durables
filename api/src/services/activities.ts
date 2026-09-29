@@ -10,11 +10,13 @@ import { buildChecks } from "../domain/patterns/checks.js";
 import { idempotencyRubricFor } from "../domain/patterns/rubric.js";
 import { findMissingHeadings } from "../domain/readme/readme-template.js";
 import { generateSnippets } from "../domain/snippets/snippets.js";
-import { FIRST_VERSION, highestVersion } from "../domain/versioning/semver.js";
+import { compareVersions, FIRST_VERSION, highestVersion, isVersion } from "../domain/versioning/semver.js";
+import { suggestVersion } from "../domain/versioning/suggest-version.js";
 import type { ActivityVersion, PublishRequest, PublishResult } from "../model/activity-version.js";
 import type { Check, Declarations } from "../model/check.js";
 import type { Detection } from "../model/detection.js";
 import type { Listing } from "../model/listing.js";
+import type { VersionSuggestion } from "../model/version-suggestion.js";
 import { VersionExistsError } from "../storage/document-store.js";
 import { currentAccount } from "./accounts.js";
 import { documents } from "./documents.js";
@@ -52,10 +54,35 @@ export function checkActivity(code: string, declarations: Declarations): Check[]
 }
 
 /**
- * Publishes the first version of an activity. Detection and the pattern check
- * are re-run here, so nothing stored comes from the client's own results. The
+ * Suggests the version for publishing `code`: 1.0.0 when the signed-in user has
+ * not published its listing name, otherwise a bump of their highest published
+ * version, with the reasons. Both signatures are re-derived from code: the
+ * stored `detection` of the previous version is never read, because it may
+ * predate detection that the comparison relies on (dataclass fields).
+ */
+export async function suggestActivityVersion(
+  headers: Record<string, string | string[] | undefined>,
+  code: string,
+): Promise<VersionSuggestion> {
+  const owner = currentAccount(headers);
+  if (!owner) throw new ServiceError(401, "Unknown user");
+
+  const current = detectActivity(code);
+  const name = toKebabCase(current.activityName.value);
+  const previousVersion = highestVersion(await documents().listActivityVersions(owner.handle, name));
+  const previousDoc = previousVersion ? await documents().getActivityVersion(owner.handle, name, previousVersion) : null;
+  const previous = previousDoc ? detectActivity(previousDoc.code) : null;
+
+  return { name, ...suggestVersion(previous, current, previousDoc ? previousVersion : null) };
+}
+
+/**
+ * Publishes a version of an activity. Detection and the pattern check are
+ * re-run here, so nothing stored comes from the client's own results. The
  * listing name is the detected activity name in kebab-case, and the owner is
- * the signed-in user.
+ * the signed-in user. A first publish is always 1.0.0. A later one takes the
+ * publisher's `version`, which must be higher than every published version;
+ * a smaller bump than suggested is never refused.
  */
 // POC-SHORTCUT: SC-010
 export async function publishActivity(
@@ -83,10 +110,11 @@ export async function publishActivity(
   }
 
   const name = toKebabCase(detection.activityName.value);
-  const version = FIRST_VERSION;
-  if ((await documents().listActivityVersions(owner.handle, name)).length > 0) {
-    throw new ServiceError(409, `${formatActivityAddress(owner.handle, name)} is already published. Republishing arrives with step 13.`);
-  }
+  const version = chooseVersion(
+    formatActivityAddress(owner.handle, name),
+    await documents().listActivityVersions(owner.handle, name),
+    request.version,
+  );
 
   const doc: ActivityVersion = {
     owner: owner.handle,
@@ -121,6 +149,22 @@ export async function publishActivity(
   return { address: formatActivityAddress(owner.handle, name, version), owner: owner.handle, name, version };
 }
 
+/** 1.0.0 for a first publish. Otherwise the requested version, if it is a plain x.y.z above every published one. */
+function chooseVersion(address: string, published: string[], requested: string | undefined): string {
+  const highest = highestVersion(published);
+  if (!highest) return FIRST_VERSION;
+  const version = typeof requested === "string" ? requested.trim() : "";
+  if (version === "") {
+    throw new BadRequestError(`${address} is already published at ${highest}. Give the new version's number.`);
+  }
+  if (!isVersion(version)) throw new BadRequestError(`The version must look like 2.0.0 (x.y.z), not ${version}.`);
+  if (published.includes(version)) throw new ServiceError(409, `${address}@${version} is already published. Versions can't be changed.`);
+  if (compareVersions(version, highest) <= 0) {
+    throw new BadRequestError(`The version must be higher than ${highest}, the highest published version of ${address}.`);
+  }
+  return version;
+}
+
 /** The compensation address must name a published activity (a specific version, if it pins one). */
 async function resolveCompensation(address: string): Promise<void> {
   const parsed = parseActivityAddress(address);
@@ -133,9 +177,11 @@ async function resolveCompensation(address: string): Promise<void> {
 
 /** The listing for one version, or for the default (highest) version when none is given. */
 export async function getListing(owner: string, name: string, version?: string): Promise<Listing> {
-  const resolved = version ?? highestVersion(await documents().listActivityVersions(owner, name));
-  const doc = resolved ? await documents().getActivityVersion(owner, name, resolved) : null;
-  if (!doc) throw new ServiceError(404, `${formatActivityAddress(owner, name, version)} is not published.`);
+  const published = await documents().listActivityVersions(owner, name);
+  const latestVersion = highestVersion(published);
+  const resolved = version ?? latestVersion;
+  const doc = resolved && published.includes(resolved) ? await documents().getActivityVersion(owner, name, resolved) : null;
+  if (!doc || !latestVersion) throw new ServiceError(404, `${formatActivityAddress(owner, name, version)} is not published.`);
 
   const account = await findAccount(doc.owner);
   const detectedLines = new Map(doc.detection.envVars.map((envVar) => [envVar.value, envVar.line]));
@@ -160,5 +206,14 @@ export async function getListing(owner: string, name: string, version?: string):
     })),
     readme: doc.readme,
     checks: doc.checks,
+    latestVersion,
+    versions: await versionHistory(owner, name, published),
   };
+}
+
+/** Every published version with its publish date, highest first. Each date comes from that version's document. */
+async function versionHistory(owner: string, name: string, published: string[]): Promise<Listing["versions"]> {
+  const sorted = [...published].sort(compareVersions).reverse();
+  const docs = await Promise.all(sorted.map((each) => documents().getActivityVersion(owner, name, each)));
+  return docs.flatMap((each) => (each ? [{ version: each.version, publishedAt: each.publishedAt }] : []));
 }

@@ -5,7 +5,7 @@ import { SDK_NAMES } from "../../lib/sdks";
 import styles from "./ListingHeader.module.css";
 
 /**
- * The top of a listing: name, version and address, then the badge row with the
+ * The top of a listing: name, version (marked Latest on the default) and address, then the badge row with the
  * publisher (and the Verified Publisher badge) and an at-a-glance summary of the
  * evaluation report.
  */
@@ -16,6 +16,11 @@ export function ListingHeader({ listing }: { listing: Listing }) {
       <div className={styles.titleRow}>
         <h1 className={styles.name}>{listing.name}</h1>
         <Badge tone="neutral">{listing.version}</Badge>
+        {listing.version === listing.latestVersion && (
+          <span title="The highest published version, which opens by default.">
+            <Badge tone="success">Latest</Badge>
+          </span>
+        )}
         <Badge tone="muted">{SDK_NAMES[listing.sdk]}</Badge>
       </div>
       <p className={styles.address}>

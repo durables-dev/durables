@@ -1,14 +1,17 @@
 import { useState, type FormEvent } from "react";
-import { detectActivity } from "../../api/activities";
-import type { Detection } from "../../api/types";
+import { detectActivity, suggestVersion } from "../../api/activities";
+import type { Detection, VersionSuggestion } from "../../api/types";
 import { CodeView } from "../../components/code/CodeView";
 import styles from "./PasteEditor.module.css";
 
 type PasteEditorProps = {
-  onDetected(code: string, detection: Detection): void;
+  onDetected(code: string, detection: Detection, suggestion: VersionSuggestion): void;
 };
 
-/** Step 1: paste a single-file activity and submit it for detection. No manifest. */
+/**
+ * Step 1: paste a single-file activity and submit it for detection, and (step
+ * 13) for the version to publish it as. No manifest.
+ */
 export function PasteEditor({ onDetected }: PasteEditorProps) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -19,7 +22,8 @@ export function PasteEditor({ onDetected }: PasteEditorProps) {
     setBusy(true);
     setError(null);
     try {
-      onDetected(code, await detectActivity(code));
+      const [detection, suggestion] = await Promise.all([detectActivity(code), suggestVersion(code)]);
+      onDetected(code, detection, suggestion);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {

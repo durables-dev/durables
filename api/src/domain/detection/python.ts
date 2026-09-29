@@ -1,4 +1,4 @@
-import type { Detection, InputType, Located } from "../../model/detection.js";
+import type { Detection, Field, InputType, Located, TypeFields } from "../../model/detection.js";
 import type { Detector } from "./detector.js";
 import { collapseWhitespace as collapse, execFrom, findClosingBracket, LineIndex, skipString, splitTopLevel } from "./source-text.js";
 
@@ -20,6 +20,9 @@ const ENV_VAR_READS = [
   /\bos\.getenv\s*\(\s*(["'])([^"']+)\1/g,
 ];
 const SKIPPED_PARAMETERS = new Set(["self", "cls", "*", "/"]);
+const CLASS_STATEMENT = /^([ \t]*)class[ \t]+(\w+)\b[^\n]*:[ \t\r]*$/gm;
+const DATACLASS_DECORATOR = /^[ \t]*@(?:dataclasses\.)?dataclass\b/;
+const FIELD_LINE = /^(\w+)[ \t]*:(.*)$/;
 
 export const pythonDetector: Detector = {
   sdk: "python",
@@ -58,12 +61,18 @@ export const pythonDetector: Detector = {
       ? { value: explicitName[2], line: lines.lineAt(decoratorArgsOffset + explicitName.index) }
       : { value: functionName, line: lines.lineAt(def.index + def[0].indexOf(functionName)) };
 
-    const inputTypes = parseParameters(source.slice(paramsOpen + 1, paramsClose), paramsOpen + 1, lines);
+    const dataclasses = findDataclasses(source, lines);
+    const inputTypes = parseParameters(source.slice(paramsOpen + 1, paramsClose), paramsOpen + 1, lines).map(
+      (input) => ({ ...input, ...fieldsOf(input.type, dataclasses) }),
+    );
 
     const returns = RETURN_ANNOTATION.exec(source.slice(paramsClose + 1));
-    const outputType: Located<string> = returns
-      ? { value: collapse(returns[1]), line: lines.lineAt(paramsClose + 1 + returns[0].indexOf("->")) }
-      : { value: "Any", line: lines.lineAt(def.index) };
+    const outputValue = returns ? collapse(returns[1]) : "Any";
+    const outputType: Located<string> & TypeFields = {
+      value: outputValue,
+      line: returns ? lines.lineAt(paramsClose + 1 + returns[0].indexOf("->")) : lines.lineAt(def.index),
+      ...fieldsOf(outputValue, dataclasses),
+    };
 
     return {
       sdk: { value: "python", line: lines.lineAt(sdkMatch.index) },
@@ -90,6 +99,77 @@ function parseParameters(params: string, baseOffset: number, lines: LineIndex): 
     result.push({ name, type, line: lines.lineAt(baseOffset + offset + leading) });
   }
   return result;
+}
+
+/**
+ * The same-file `@dataclass` classes, by name, with their top-level
+ * `name: type` lines in order. Regex-level only: a class header or annotation
+ * spread over several lines is not followed, and a field whose type is itself a
+ * dataclass is listed by its type name, without that class's own fields.
+ * Imported types get no fields, and the TypeScript and .NET detectors list
+ * none at all, so for them version comparison sees type names only.
+ */
+// POC-SHORTCUT: SC-019
+function findDataclasses(source: string, lines: LineIndex): Map<string, Required<TypeFields>> {
+  const sourceLines = source.split("\n");
+  const found = new Map<string, Required<TypeFields>>();
+  for (const match of source.matchAll(CLASS_STATEMENT)) {
+    const classLine = lines.lineAt(match.index);
+    const classIndent = match[1].length;
+    if (!isDataclass(sourceLines, classLine, classIndent)) continue;
+    found.set(match[2], { fields: classFields(source, match.index + match[0].length, classIndent, lines), typeLine: classLine });
+  }
+  return found;
+}
+
+/** Whether a decorator line directly above the class (at its indent) is `@dataclass` or `@dataclasses.dataclass`. */
+function isDataclass(sourceLines: string[], classLine: number, classIndent: number): boolean {
+  for (let index = classLine - 2; index >= 0; index--) {
+    const text = sourceLines[index];
+    if (text.trim() === "") continue;
+    if (indentOf(text) !== classIndent || !text.trimStart().startsWith("@")) return false;
+    if (DATACLASS_DECORATOR.test(text)) return true;
+  }
+  return false;
+}
+
+/** The class body's top-level `name: type` lines, in order, from just past the class statement's colon. */
+function classFields(source: string, bodyStart: number, classIndent: number, lines: LineIndex): Field[] {
+  const fields: Field[] = [];
+  let bodyIndent = -1;
+  let offset = source.indexOf("\n", bodyStart);
+  while (offset !== -1 && offset < source.length) {
+    const lineStart = offset + 1;
+    const lineEnd = source.indexOf("\n", lineStart);
+    const text = source.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+    offset = lineEnd;
+    if (text.trim() === "") continue;
+    const indent = indentOf(text);
+    if (indent <= classIndent) break;
+    if (bodyIndent === -1) bodyIndent = indent;
+    if (indent !== bodyIndent) continue;
+    const content = text.slice(indent);
+    if (content[0] === '"' || content[0] === "'") {
+      // A docstring or other bare string: skip past its end, which may be lines further on.
+      const end = skipString(source, lineStart + indent);
+      offset = source.indexOf("\n", end);
+      continue;
+    }
+    const field = FIELD_LINE.exec(content.trimEnd());
+    if (!field) continue;
+    const [annotation] = splitTopLevel(field[2], "=").map((part) => part.part);
+    fields.push({ name: field[1], type: collapse(annotation), line: lines.lineAt(lineStart) });
+  }
+  return fields;
+}
+
+function fieldsOf(type: string, dataclasses: Map<string, Required<TypeFields>>): TypeFields {
+  const found = dataclasses.get(type);
+  return found ? { fields: found.fields, typeLine: found.typeLine } : {};
+}
+
+function indentOf(text: string): number {
+  return text.length - text.trimStart().length;
 }
 
 function findNonRetryableErrors(source: string, lines: LineIndex): Located<string>[] {

@@ -1,0 +1,46 @@
+.summary {
+  margin: 0;
+}
+.versions {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 10px 16px;
+  margin: 0;
+}
+.versions dt {
+  font-weight: 600;
+  color: #57606a;
+}
+.versions dd {
+  margin: 0;
+}
+.suggested {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.heading {
+  margin: 16px 0 8px;
+  font-size: 14px;
+}
+.reasons {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.reasons li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid #eaeef2;
+}
+.line {
+  font-size: 13px;
+  color: #57606a;
+}
+.hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #57606a;
+}

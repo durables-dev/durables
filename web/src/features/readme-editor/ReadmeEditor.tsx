@@ -2,13 +2,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { publishActivity } from "../../api/activities";
 import { ApiError } from "../../api/client";
 import { getReadmeTemplate } from "../../api/readme-template";
-import type { Declarations, PublishError, PublishResult, ReadmeTemplate } from "../../api/types";
+import type { Declarations, PublishError, PublishResult, ReadmeTemplate, VersionSuggestion } from "../../api/types";
 import { CodeView } from "../../components/code/CodeView";
 import styles from "./ReadmeEditor.module.css";
 
 type ReadmeEditorProps = {
   code: string;
   declarations: Declarations;
+  /** From step 1. When the name is already published, it prefills the version field. */
+  suggestion: VersionSuggestion;
   onPublished(result: PublishResult): void;
 };
 
@@ -17,9 +19,12 @@ const EXAMPLE_INPUT_PLACEHOLDER = '{\n  "amount_cents": 1999\n}';
 /**
  * Step 4: fill in the README template, give an example input for the starter
  * snippet, and publish. api checks the required headings and names any that are
- * missing or empty.
+ * missing or empty. When the name is already published (step 13), the publisher
+ * also confirms the new version, prefilled with the suggestion and editable.
  */
-export function ReadmeEditor({ code, declarations, onPublished }: ReadmeEditorProps) {
+export function ReadmeEditor({ code, declarations, suggestion, onPublished }: ReadmeEditorProps) {
+  const newVersion = suggestion.previousVersion !== null;
+  const [version, setVersion] = useState(suggestion.suggestedVersion);
   const [template, setTemplate] = useState<ReadmeTemplate | null>(null);
   const [readme, setReadme] = useState("");
   const [exampleInput, setExampleInput] = useState("");
@@ -54,7 +59,13 @@ export function ReadmeEditor({ code, declarations, onPublished }: ReadmeEditorPr
     setBusy(true);
     try {
       onPublished(
-        await publishActivity({ code, declarations, readme, exampleInput: parsedInput as Record<string, unknown> }),
+        await publishActivity({
+          code,
+          declarations,
+          readme,
+          exampleInput: parsedInput as Record<string, unknown>,
+          ...(newVersion ? { version: version.trim() } : {}),
+        }),
       );
     } catch (caught) {
       if (caught instanceof ApiError) setMissing((caught.payload as PublishError | null)?.missingHeadings ?? []);
@@ -103,8 +114,19 @@ export function ReadmeEditor({ code, declarations, onPublished }: ReadmeEditorPr
         />
       </label>
 
+      {newVersion && (
+        <label className={`${styles.field} ${styles.version}`}>
+          <span>
+            <strong>Version</strong>. {suggestion.name}@{suggestion.previousVersion} is published, so this is a new
+            version. Suggested: {suggestion.suggestedVersion}. Any x.y.z higher than {suggestion.previousVersion} is
+            accepted.
+          </span>
+          <input value={version} onChange={(event) => setVersion(event.target.value)} spellCheck={false} required />
+        </label>
+      )}
+
       <div className={styles.actions}>
-        <button type="submit" disabled={busy || exampleInput.trim() === ""}>
+        <button type="submit" disabled={busy || exampleInput.trim() === "" || (newVersion && version.trim() === "")}>
           {busy ? "Publishing…" : "Publish"}
         </button>
         {error && <span className={styles.error}>{error}</span>}

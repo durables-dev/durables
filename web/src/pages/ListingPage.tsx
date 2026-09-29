@@ -6,14 +6,15 @@ import { ConfigurationSection } from "../features/listing/ConfigurationSection";
 import { ListingHeader } from "../features/listing/ListingHeader";
 import { ListingReadme } from "../features/listing/ListingReadme";
 import { useListing } from "../features/listing/useListing";
+import { VersionHistory } from "../features/listing/VersionHistory";
 import { SnippetTabs } from "../features/snippet-tabs/SnippetTabs";
 import { parseAddress } from "../lib/address";
 import { SDK_LANGUAGES } from "../lib/sdks";
 import styles from "./ListingPage.module.css";
 
 /**
- * Steps 5 and 9: the activity listing at /<owner>/<name>@<version>, or the
- * default version at /<owner>/<name>, in any SDK.
+ * Steps 5, 9 and 13: the activity listing at /<owner>/<name>@<version>, or the
+ * default (latest) version at /<owner>/<name>, in any SDK.
  */
 export function ListingPage() {
   const params = useParams<{ owner: string; nameAtVersion: string }>();
@@ -41,6 +42,9 @@ export function ListingPage() {
           </Panel>
           <Panel title="Configuration">
             <ConfigurationSection configuration={listing.configuration} />
+          </Panel>
+          <Panel title="Versions">
+            <VersionHistory listing={listing} />
           </Panel>
         </aside>
       </div>
