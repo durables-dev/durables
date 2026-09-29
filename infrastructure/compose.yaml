@@ -2,9 +2,13 @@
 #
 #   docker compose -f infrastructure/compose.yaml up
 #
-# POC-5 adds postgres and the documents volume. testing's temporal and
-# mock-payments (pulled in with include:) are added by the epics that need them.
+# POC-5 adds postgres and the documents volume. POC-17 includes testing's
+# temporal and mock-payments, which testing owns: they are never redefined here.
 name: durables
+
+include:
+  - ../testing/temporal/compose.yaml
+  - ../testing/mock-payments/compose.yaml
 
 # Hosting is faked: everything runs on localhost, in dev mode, on published ports.
 # POC-SHORTCUT: SC-006

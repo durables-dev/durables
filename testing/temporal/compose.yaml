@@ -1,0 +1,16 @@
+# The local Temporal dev server. infrastructure/compose.yaml includes this file
+# and never redefines the service. It can also run on its own:
+#
+#   docker compose -f testing/temporal/compose.yaml up
+#
+# In memory: there is no database file, so a restart empties the history. The
+# dev server creates the `default` namespace the snippets connect to.
+# --ip 0.0.0.0 makes the dev server listen beyond its own container, so the
+# consumer's worker and starter on the host can reach it.
+services:
+  temporal:
+    image: temporalio/temporal:latest
+    command: ["server", "start-dev", "--ip", "0.0.0.0"]
+    ports:
+      - "7233:7233" # gRPC: the worker and starter connect here
+      - "8233:8233" # Temporal UI: http://localhost:8233
