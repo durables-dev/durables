@@ -33,6 +33,10 @@ npm run e2e         # end-to-end tests against both
 
 Both ports are forwarded to your machine. Installed packages and local D1/R2 data live in Docker volumes, not in your checkout; rebuilding the container keeps them.
 
+## Branches
+
+`mvp` is the default branch: branch from it and open pull requests into it. `main` is the release branch. It receives `mvp` once at the first release, and merging to it deploys to production (`docs/adr/0001-fresh-start.md`).
+
 ## Deploying
 
 Everything deployed is defined in `infrastructure/` (see `docs/adr/0003-infrastructure-as-code.md`). Merging to `main` deploys through the GitHub Actions workflow in `.github/workflows/ci.yml`, which runs the same dev container.

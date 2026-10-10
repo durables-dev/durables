@@ -4,6 +4,7 @@ The rules for working in `infrastructure/`: the CDK Terrain project that defines
 
 ## Status
 
+- Branch from `mvp` and open pull requests into `mvp`. `main` is the release branch, and merging to it deploys to production (ADR 0001).
 - `main.ts` and `src/` are real: the stack, its backend, and one construct per concern are the shape to mirror. `src/config.ts` holds placeholder account and zone IDs until the account is known.
 - Nothing has been deployed yet. The first `cdktn deploy` is the first time this code meets Cloudflare; its `diff` is reviewed line by line.
 
