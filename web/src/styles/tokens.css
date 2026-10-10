@@ -1,0 +1,51 @@
+/* Design tokens from the brand guide (docs/durables-brand-guide.pdf). Every colour, font,
+   size and radius in a component comes from here. Dark first: Ink is the default, Cream
+   under a light preference. */
+:root {
+  color-scheme: dark light;
+
+  /* Brand palette */
+  --color-tangerine: #ff5a1f;
+  --color-tangerine-deep: #c9481a;
+  --color-gold: #ffb700;
+  --color-ember: #ee1c3a;
+  --color-ink: #0b0806;
+  --color-cream: #fffbf5;
+  --color-sand: #f1e8dd;
+
+  /* Semantic colours, dark theme */
+  --bg: var(--color-ink);
+  --fg: var(--color-cream);
+  --fg-muted: #b0a597;
+  --surface: #1a1512;
+  --accent: var(--color-tangerine);
+  --link: var(--color-tangerine);
+  --focus: var(--color-gold);
+
+  /* Type */
+  --font-display: "Space Grotesk Variable", sans-serif;
+  --font-body: "IBM Plex Sans Variable", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --text-display: 44px;
+  --text-h1: 32px;
+  --text-h2: 24px;
+  --text-h3: 18px;
+  --text-body: 16px;
+  --text-small: 14px;
+  --text-code: 14px;
+
+  /* Corners */
+  --radius-panel: 12px;
+  --radius-control: 8px;
+  --radius-tag: 6px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: var(--color-cream);
+    --fg: var(--color-ink);
+    --fg-muted: #5e5448;
+    --surface: var(--color-sand);
+    --link: var(--color-tangerine-deep);
+  }
+}

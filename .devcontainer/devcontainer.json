@@ -1,0 +1,36 @@
+{
+  // The supported way to develop and test Durables (docs/adr/0011). Needs only Docker
+  // and an editor that opens dev containers, or the devcontainer CLI.
+  "name": "Durables",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/terraform:1": {
+      "version": "1.15.8",
+      "tflint": "none",
+      "terragrunt": "none"
+    }
+  },
+  // Installed packages and Wrangler's local D1/R2 state live in volumes, not the
+  // source mount: native binaries stay Linux-only, and SQLite never sits on a
+  // Windows or macOS file share.
+  "mounts": [
+    "source=durables-${devcontainerId}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
+    "source=durables-${devcontainerId}-api-node_modules,target=${containerWorkspaceFolder}/api/node_modules,type=volume",
+    "source=durables-${devcontainerId}-web-node_modules,target=${containerWorkspaceFolder}/web/node_modules,type=volume",
+    "source=durables-${devcontainerId}-infrastructure-node_modules,target=${containerWorkspaceFolder}/infrastructure/node_modules,type=volume",
+    "source=durables-${devcontainerId}-e2e-node_modules,target=${containerWorkspaceFolder}/e2e/node_modules,type=volume",
+    "source=durables-${devcontainerId}-wrangler-state,target=${containerWorkspaceFolder}/api/.wrangler,type=volume"
+  ],
+  // Edits made outside the container (a host-side editor, git on the host) raise no file
+  // events through a Windows or macOS bind mount. Polling makes Vite and Wrangler reload anyway.
+  "containerEnv": {
+    "CHOKIDAR_USEPOLLING": "true"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "forwardPorts": [5173, 8787],
+  "portsAttributes": {
+    "5173": { "label": "Website (Vite)" },
+    "8787": { "label": "API (Wrangler)" }
+  },
+  "remoteUser": "node"
+}

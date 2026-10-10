@@ -1,0 +1,1 @@
+Activity files tests paste into the contribute flow, one per SDK, as `.txt` so Prettier never touches them. They are real activities as a publisher would write them; a sample is never edited to make detection pass.

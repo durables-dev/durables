@@ -1,0 +1,15 @@
+{
+  "name": "@durables/schemas",
+  "private": true,
+  "type": "module",
+  "description": "Zod schemas validated by both api and web. No server-only or browser-only imports.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  }
+}
