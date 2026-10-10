@@ -1,0 +1,8 @@
+.message {
+  padding: 48px 24px;
+}
+
+.heading {
+  font-size: var(--text-h1);
+  font-weight: 600;
+}
