@@ -18,6 +18,7 @@
   --fg: var(--color-cream);
   --fg-muted: #b0a597;
   --surface: #1a1512;
+  --footer: #17120d;
   --accent: var(--color-tangerine);
   --link: var(--color-tangerine);
   --focus: var(--color-gold);
@@ -27,6 +28,7 @@
   --font-body: "IBM Plex Sans Variable", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
   --text-display: 44px;
+  --text-wordmark: 20px;
   --text-h1: 32px;
   --text-h2: 24px;
   --text-h3: 18px;
@@ -46,6 +48,7 @@
     --fg: var(--color-ink);
     --fg-muted: #5e5448;
     --surface: var(--color-sand);
+    --footer: var(--color-sand);
     --link: var(--color-tangerine-deep);
   }
 }
