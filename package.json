@@ -12,7 +12,7 @@
   "scripts": {
     "dev:api": "npm run dev --workspace api",
     "dev:web": "npm run dev --workspace web",
-    "build": "npm run build --workspace api && npm run build --workspace web",
+    "build": "npm run build:types --workspace api && npm run build --workspace web && npm run build --workspace api",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",
