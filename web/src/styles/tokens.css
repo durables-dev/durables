@@ -36,6 +36,9 @@
   --text-small: 14px;
   --text-code: 14px;
 
+  /* Layout */
+  --measure-prose: 72ch;
+
   /* Corners */
   --radius-panel: 12px;
   --radius-control: 8px;
