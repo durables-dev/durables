@@ -22,6 +22,11 @@ export default mergeConfig(
           extends: true,
           // MSW's worker script is served from here in tests only, never from public/.
           publicDir: "test/public",
+          // Pre-bundle what the lazy routes and the test renderer import. Found mid-run, these
+          // make Vite reload the test and load a second copy of React.
+          optimizeDeps: {
+            include: ["@tanstack/react-query", "react-dom/client"],
+          },
           test: {
             name: "component",
             include: ["src/**/*.test.tsx"],
