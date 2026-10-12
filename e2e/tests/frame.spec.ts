@@ -115,3 +115,106 @@ for (const scheme of ["light", "dark"] as const) {
     ).toEqual([]);
   });
 }
+
+// The footer's links, in the order the design gives them (API map D3).
+const footerLinks = [
+  { name: "Terms", path: "/terms", title: "Terms · Durables" },
+  { name: "Privacy", path: "/privacy", title: "Privacy · Durables" },
+  { name: "Security", path: "/security", title: "Security · Durables" },
+] as const;
+
+function footerNav(page: Page) {
+  return page
+    .getByRole("contentinfo")
+    .getByRole("navigation", { name: "Footer" });
+}
+
+test.describe("the footer", () => {
+  // The legal pages are for anyone, so the footer is tested as an anonymous visitor.
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("lists Terms, Privacy and Security, in that order", async ({
+    page,
+    expectAccessible,
+  }) => {
+    await page.goto("/");
+
+    await expect(footerNav(page).getByRole("link")).toHaveText(
+      footerLinks.map((link) => link.name),
+    );
+    await expectAccessible();
+  });
+
+  for (const { name, path, title } of footerLinks) {
+    test(`the home page footer's ${name} link lands on the ${name} page`, async ({
+      page,
+      expectAccessible,
+    }) => {
+      await page.goto("/");
+      await expect(
+        page.getByRole("heading", {
+          level: 1,
+          name: "Temporal activities, ready to copy.",
+        }),
+      ).toBeVisible();
+
+      await footerNav(page).getByRole("link", { name }).click();
+
+      await expect(page).toHaveURL(path);
+      await expect(
+        page.getByRole("main").getByRole("heading", { level: 1, name }),
+      ).toBeVisible();
+      await expect(page).toHaveTitle(title);
+      await expect(page.getByRole("contentinfo")).toBeVisible();
+      await expectAccessible();
+    });
+  }
+
+  test("from the Terms page, the footer reaches Privacy and then Security", async ({
+    page,
+    expectAccessible,
+  }) => {
+    await page.goto("/terms");
+    await expect(
+      page.getByRole("main").getByRole("heading", { level: 1, name: "Terms" }),
+    ).toBeVisible();
+
+    await footerNav(page).getByRole("link", { name: "Privacy" }).click();
+
+    await expect(page).toHaveURL("/privacy");
+    await expect(
+      page
+        .getByRole("main")
+        .getByRole("heading", { level: 1, name: "Privacy" }),
+    ).toBeVisible();
+    await expect(page).toHaveTitle("Privacy · Durables");
+    await expectAccessible();
+
+    await footerNav(page).getByRole("link", { name: "Security" }).click();
+
+    await expect(page).toHaveURL("/security");
+    await expect(
+      page
+        .getByRole("main")
+        .getByRole("heading", { level: 1, name: "Security" }),
+    ).toBeVisible();
+    await expect(page).toHaveTitle("Security · Durables");
+    await expectAccessible();
+  });
+
+  for (const scheme of ["dark", "light"] as const) {
+    test(`on the home page under a ${scheme} colour scheme, in view, passes the accessibility scan`, async ({
+      page,
+      expectAccessible,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto("/");
+
+      const footer = page.getByRole("contentinfo");
+      await footer.scrollIntoViewIfNeeded();
+      await expect(footer).toBeInViewport();
+      await expect(footer.getByRole("link")).toHaveCount(footerLinks.length);
+      await expectAccessible();
+    });
+  }
+});
