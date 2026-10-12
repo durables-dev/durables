@@ -7,6 +7,7 @@ import { Component as Frame, ErrorBoundary as FrameError } from "./frame-route";
 // Every page sits inside the frame route, which draws the header and the footer slot. The
 // frame is loaded up front, not lazily: React Router renders an unknown address with the
 // root route's ErrorBoundary without loading a lazy root, and every page needs it anyway.
+// Every top-level path is on the reserved-handle list in @durables/schemas.
 export const routes: RouteObject[] = [
   {
     id: "frame",
@@ -16,6 +17,18 @@ export const routes: RouteObject[] = [
       {
         path: "/",
         lazy: () => import("@/features/home/home-route"),
+      },
+      {
+        path: "/terms",
+        lazy: () => import("@/features/legal/terms-route"),
+      },
+      {
+        path: "/privacy",
+        lazy: () => import("@/features/legal/privacy-route"),
+      },
+      {
+        path: "/security",
+        lazy: () => import("@/features/legal/security-route"),
       },
     ],
   },
