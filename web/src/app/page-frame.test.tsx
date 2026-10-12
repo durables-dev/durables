@@ -16,7 +16,7 @@ function follows(first: Element, second: Element) {
   );
 }
 
-test("renders the header, the page's content, then the footer slot", async () => {
+test("renders the header, the page's content, then the footer", async () => {
   const screen = await renderFrame(
     <PageFrame>
       <h1>Page content</h1>
@@ -30,12 +30,15 @@ test("renders the header, the page's content, then the footer slot", async () =>
   await expect
     .element(main.getByRole("heading", { name: "Page content" }))
     .toBeVisible();
-  await expect.element(footer).toBeInTheDocument();
+  await expect.element(footer).toBeVisible();
+  await expect
+    .element(footer.getByRole("navigation", { name: "Footer" }))
+    .toBeVisible();
   expect(follows(header.element(), main.element())).toBe(true);
   expect(follows(main.element(), footer.element())).toBe(true);
 });
 
-test("leaves out the footer slot and keeps the header when the page opts out", async () => {
+test("leaves out the footer and keeps the header when the page opts out", async () => {
   const screen = await renderFrame(
     <PageFrame footer={false}>
       <h1>Search results</h1>
@@ -47,4 +50,5 @@ test("leaves out the footer slot and keeps the header when the page opts out", a
     .element(screen.getByRole("heading", { name: "Search results" }))
     .toBeVisible();
   await expect.element(screen.getByRole("contentinfo")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Terms" }).elements()).toEqual([]);
 });
