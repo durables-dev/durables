@@ -1,5 +1,8 @@
 import { createBrowserRouter, type RouteObject } from "react-router";
 import { Component as Frame, ErrorBoundary as FrameError } from "./frame-route";
+import type { RouteHandle } from "./route-handle";
+
+const contributeHandle: RouteHandle = { footer: false };
 
 // React Router in data mode (web/CONVENTIONS.md). Every page route is lazy, so each feature
 // is its own chunk. A route module exports Component, loader and friends by name.
@@ -17,6 +20,12 @@ export const routes: RouteObject[] = [
       {
         path: "/",
         lazy: () => import("@/features/home/home-route"),
+      },
+      {
+        // The step is in the address. The flow has no footer, as the contribute canvas shows.
+        path: "/contribute/:step?",
+        lazy: () => import("@/features/contribute/contribute-route"),
+        handle: contributeHandle,
       },
       {
         path: "/terms",
