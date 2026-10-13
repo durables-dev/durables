@@ -67,6 +67,7 @@ The rules for working in `infrastructure/`: the CDK Terrain project that defines
 - **Synth tests** (`src/*.test.ts`) run in Jest with CDK Terrain's matchers: each construct synthesizes alone through `Testing.synthScope` and the test asserts the resources and properties it produces.
 - `worker.test.ts` asserts the version's compatibility date and binding names against `api/wrangler.toml`, so drift between the two fails the build (ADR 0004).
 - **Commands:** `npm test` in `infrastructure`. The root `npm test` includes it.
+- `npm run lint`, `npm run typecheck` and `npm test` all import `.gen/`. The dev container's post-create step generates it; in any other environment, or if it is missing, run `npm run get` first. A missing `.gen/` is a setup step to run, not a failure to report.
 - Before handing back, run `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` and `npm run synth`, then `terraform validate` on `cdktf.out/stacks/durables` after `terraform init -backend=false`, which checks attribute names against the real provider schema.
 - **Deliberately not tested here:** that resources behave once created, which `api`'s tests and the deployed site cover; the migration step, which only runs in a real deploy.
 - **Owed to `api`:** the Worker's bindings, compatibility date and flags match `wrangler.toml`; Workers Logs is on; the rate-limit bindings the API calls exist.
