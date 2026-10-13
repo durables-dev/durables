@@ -1,10 +1,37 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, type RouteObject } from "react-router";
+import { Component as Frame, ErrorBoundary as FrameError } from "./frame-route";
 
-// React Router in data mode (web/CONVENTIONS.md). Every route is lazy, so each feature is
-// its own chunk. A route module exports Component, loader and friends by name.
-export const router = createBrowserRouter([
+// React Router in data mode (web/CONVENTIONS.md). Every page route is lazy, so each feature
+// is its own chunk. A route module exports Component, loader and friends by name.
+//
+// Every page sits inside the frame route, which draws the header and the footer slot. The
+// frame is loaded up front, not lazily: React Router renders an unknown address with the
+// root route's ErrorBoundary without loading a lazy root, and every page needs it anyway.
+// Every top-level path is on the reserved-handle list in @durables/schemas.
+export const routes: RouteObject[] = [
   {
-    path: "/",
-    lazy: () => import("@/features/home/home-route"),
+    id: "frame",
+    Component: Frame,
+    ErrorBoundary: FrameError,
+    children: [
+      {
+        path: "/",
+        lazy: () => import("@/features/home/home-route"),
+      },
+      {
+        path: "/terms",
+        lazy: () => import("@/features/legal/terms-route"),
+      },
+      {
+        path: "/privacy",
+        lazy: () => import("@/features/legal/privacy-route"),
+      },
+      {
+        path: "/security",
+        lazy: () => import("@/features/legal/security-route"),
+      },
+    ],
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);

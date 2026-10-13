@@ -1,0 +1,36 @@
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--footer);
+  color: var(--fg-muted);
+  font-size: var(--text-small);
+}
+
+.copyright {
+  padding: 15px 0;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.link {
+  padding: 15px;
+  color: var(--fg-muted);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .footer {
+    justify-content: center;
+  }
+}

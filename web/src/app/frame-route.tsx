@@ -1,0 +1,41 @@
+import { PageTitle } from "@/components/page-title";
+import {
+  isRouteErrorResponse,
+  Outlet,
+  useMatches,
+  useRouteError,
+} from "react-router";
+import styles from "./frame-route.module.css";
+import { PageFrame } from "./page-frame";
+import { showsFooter } from "./route-handle";
+
+// Layout route module: every page renders inside the frame. A page opts out of the footer
+// slot with `handle: { footer: false }` (see route-handle.ts).
+export function Component() {
+  const matches = useMatches();
+
+  return (
+    <PageFrame footer={showsFooter(matches)}>
+      <Outlet />
+    </PageFrame>
+  );
+}
+
+// An unknown address, or a page that fails, still renders inside the frame, so the logo
+// link home is always there.
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const heading =
+    isRouteErrorResponse(error) && error.status === 404
+      ? "Page not found"
+      : "Something went wrong";
+
+  return (
+    <PageFrame>
+      <PageTitle page={heading} />
+      <div className={styles["message"]}>
+        <h1 className={styles["heading"]}>{heading}</h1>
+      </div>
+    </PageFrame>
+  );
+}
