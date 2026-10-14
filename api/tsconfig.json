@@ -4,5 +4,10 @@
     "lib": ["ES2022"],
     "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"]
   },
-  "include": ["src", "vitest.config.ts", "worker-configuration.d.ts"]
+  "include": [
+    "src",
+    "drizzle.config.ts",
+    "vitest.config.ts",
+    "worker-configuration.d.ts"
+  ]
 }
