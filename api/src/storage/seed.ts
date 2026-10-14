@@ -7,7 +7,7 @@ import {
   type Provider,
 } from "./schema";
 
-// Test-only writes. Accounts and handles are written at publish ("Epic: Describe and
+// Test-only writes and reads. Accounts and handles are written at publish ("Epic: Describe and
 // publish a listing"); until then, tests seed them here. Never import this from a route.
 
 /** What seedAccount creates. */
@@ -62,4 +62,24 @@ export const seedRetiredHandle = async (
   handle: string,
 ): Promise<void> => {
   await drizzle(database).insert(retiredHandles).values({ handle });
+};
+
+/** Every row in every table, so a test can check what was stored. */
+export const readAllRows = async (
+  database: D1Database,
+): Promise<Record<string, unknown[]>> => {
+  const db = drizzle(database);
+  const [accountRows, providerAccountRows, handleRows, retiredHandleRows] =
+    await db.batch([
+      db.select().from(accounts),
+      db.select().from(providerAccounts),
+      db.select().from(handles),
+      db.select().from(retiredHandles),
+    ]);
+  return {
+    accounts: accountRows,
+    providerAccounts: providerAccountRows,
+    handles: handleRows,
+    retiredHandles: retiredHandleRows,
+  };
 };

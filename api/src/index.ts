@@ -8,6 +8,7 @@ import { notFound, onError } from "./http/error-handlers";
 import type { ProblemDetails } from "./http/problem";
 import { sameOrigin } from "./http/same-origin";
 import { session } from "./session/session";
+import { signIn } from "./session/sign-in";
 import { storage } from "./storage/storage-middleware";
 
 /**
@@ -32,7 +33,8 @@ export const createApp = () =>
 // Production entry point. Routes are chained so their types reach web through AppType.
 const app = createApp()
   .get("/api/health", (c) => c.json({ ok: true }))
-  .route("/api/session", session);
+  .route("/api/session", session)
+  .route("/api/session/providers", signIn);
 
 // Every route can answer these Problem Details responses (api/CONVENTIONS.md, ADR 0010).
 export type AppType = ApplyGlobalResponse<
