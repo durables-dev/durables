@@ -3,14 +3,16 @@ import type { ApplyGlobalResponse } from "hono/client";
 import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import type { AppEnv } from "./app-env";
+import { auth } from "./auth/auth-middleware";
 import { notFound, onError } from "./http/error-handlers";
 import type { ProblemDetails } from "./http/problem";
 import { sameOrigin } from "./http/same-origin";
+import { session } from "./session/session";
 import { storage } from "./storage/storage-middleware";
 
 /**
  * The API foundation, with no routes: request ID, security headers, the same-origin check on
- * writes, storage, and the Problem Details 404 and error handlers.
+ * writes, storage, auth, and the Problem Details 404 and error handlers.
  */
 export const createApp = () =>
   new Hono<AppEnv>()
@@ -23,11 +25,14 @@ export const createApp = () =>
     .use(secureHeaders())
     .use(sameOrigin())
     .use(storage())
+    .use(auth())
     .notFound(notFound)
     .onError(onError);
 
 // Production entry point. Routes are chained so their types reach web through AppType.
-const app = createApp().get("/api/health", (c) => c.json({ ok: true }));
+const app = createApp()
+  .get("/api/health", (c) => c.json({ ok: true }))
+  .route("/api/session", session);
 
 // Every route can answer these Problem Details responses (api/CONVENTIONS.md, ADR 0010).
 export type AppType = ApplyGlobalResponse<

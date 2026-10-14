@@ -8,6 +8,8 @@ import {
   type Provider,
 } from "./schema";
 
+export { providers, type Provider } from "./schema";
+
 /** A provider account: which provider, and the account's ID at that provider. */
 export interface ProviderIdentity {
   provider: Provider;
