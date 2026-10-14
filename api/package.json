@@ -21,10 +21,15 @@
     "db:migrate:local": "wrangler d1 migrations apply durables --local"
   },
   "dependencies": {
-    "hono": "4.13.13"
+    "@durables/schemas": "*",
+    "@hono/zod-validator": "^0.9.1",
+    "drizzle-orm": "^0.45.4",
+    "hono": "4.13.13",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.3.7",
+    "drizzle-kit": "^0.31.11",
     "vitest": "~4.1.11",
     "wrangler": "^4.148.0"
   }
