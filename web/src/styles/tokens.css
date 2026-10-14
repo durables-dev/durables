@@ -12,6 +12,8 @@
   --color-ink: #0b0806;
   --color-cream: #fffbf5;
   --color-sand: #f1e8dd;
+  --color-lagoon: #4fbdb7;
+  --color-lagoon-deep: #0f7471;
 
   /* Semantic colours, dark theme */
   --bg: var(--color-ink);
@@ -22,6 +24,10 @@
   --accent: var(--color-tangerine);
   --link: var(--color-tangerine);
   --focus: var(--color-gold);
+  --border: #6e6255;
+  --rule: #3a322a;
+  --selected: #2a231c;
+  --positive: var(--color-lagoon);
 
   /* Type */
   --font-display: "Space Grotesk Variable", sans-serif;
@@ -35,6 +41,8 @@
   --text-body: 16px;
   --text-small: 14px;
   --text-code: 14px;
+  --text-label: 13px;
+  --text-caption: 12px;
 
   /* Layout */
   --measure-prose: 72ch;
@@ -53,5 +61,9 @@
     --surface: var(--color-sand);
     --footer: var(--color-sand);
     --link: var(--color-tangerine-deep);
+    --border: #9a8d7c;
+    --rule: #e3d8ca;
+    --selected: var(--color-sand);
+    --positive: var(--color-lagoon-deep);
   }
 }
