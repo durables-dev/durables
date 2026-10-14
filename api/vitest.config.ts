@@ -1,5 +1,9 @@
-import { cloudflareTest } from "@cloudflare/vitest-plugin";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
+
+// The D1 migrations, applied to the local database before each integration test file
+// (src/storage/apply-migrations.setup.ts).
+const d1Migrations = await readD1Migrations("./migrations");
 
 // Two levels (api/CONVENTIONS.md): unit tests run in Node, integration tests run in the
 // Workers runtime with local D1 and R2, against the Worker wrangler.toml defines.
@@ -22,6 +26,8 @@ export default defineConfig({
         test: {
           name: "integration",
           include: ["src/**/*.integration.test.ts"],
+          provide: { d1Migrations },
+          setupFiles: ["./src/storage/apply-migrations.setup.ts"],
         },
       },
     ],
