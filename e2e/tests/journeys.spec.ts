@@ -57,9 +57,7 @@ test(
         await expect(
           page.getByRole("main").getByRole("heading", { level: 1, name }),
         ).toBeVisible();
-        await expect(
-          page.getByRole("note", { name: "Placeholder notice" }),
-        ).toBeVisible();
+        await expect(page.getByRole("main")).toContainText("Last updated");
         await expect(signIn).toHaveCount(0);
         await expectAccessible();
       });
