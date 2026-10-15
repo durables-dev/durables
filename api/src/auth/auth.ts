@@ -48,6 +48,8 @@ const sessionSchema = z.object({
   name: z.string().min(1),
   email: z.string().optional(),
   avatarUrl: z.string().optional(),
+  /** The provider account's username, where the provider has one. Never shown as the name. */
+  username: z.string().optional(),
   handle: z.string().nullable(),
   /** Seconds since the epoch. */
   expiresAt: z.number().int(),

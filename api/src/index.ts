@@ -30,11 +30,18 @@ export const createApp = () =>
     .notFound(notFound)
     .onError(onError);
 
-// Production entry point. Routes are chained so their types reach web through AppType.
-const app = createApp()
-  .get("/api/health", (c) => c.json({ ok: true }))
-  .route("/api/session", session)
-  .route("/api/session/providers", signIn);
+/**
+ * The foundation with every production route. Routes are chained so their types reach web
+ * through AppType. The local entry point builds its own copy and adds local-only routes to it.
+ */
+export const createProductionApp = () =>
+  createApp()
+    .get("/api/health", (c) => c.json({ ok: true }))
+    .route("/api/session", session)
+    .route("/api/session/providers", signIn);
+
+// Production entry point.
+const app = createProductionApp();
 
 // Every route can answer these Problem Details responses (api/CONVENTIONS.md, ADR 0010).
 export type AppType = ApplyGlobalResponse<
