@@ -140,3 +140,76 @@ describe("identityFromProviderUser for Microsoft", () => {
     ).toEqual({ provider: "microsoft", providerAccountId: "m-1", name: "Ada" });
   });
 });
+
+describe("identityFromProviderUser for GitLab", () => {
+  test("keeps the name, username, email, avatar and account ID", () => {
+    expect(
+      identityFromProviderUser("gitlab", {
+        id: 31,
+        username: "ghopper",
+        name: "Grace Hopper",
+        email: "grace@example.com",
+        avatar_url: "https://gitlab.example.com/grace.png",
+        state: "active",
+        bio: "COBOL",
+      }),
+    ).toEqual({
+      provider: "gitlab",
+      providerAccountId: "31",
+      name: "Grace Hopper",
+      username: "ghopper",
+      email: "grace@example.com",
+      avatarUrl: "https://gitlab.example.com/grace.png",
+    });
+  });
+
+  test("uses the username when the account has no name", () => {
+    expect(
+      identityFromProviderUser("gitlab", { id: 31, username: "ghopper" }),
+    ).toMatchObject({ name: "ghopper", username: "ghopper" });
+  });
+
+  test("falls back to the public email when there is no primary email", () => {
+    expect(
+      identityFromProviderUser("gitlab", {
+        id: 31,
+        username: "ghopper",
+        public_email: "grace@public.example",
+      }),
+    ).toMatchObject({ email: "grace@public.example" });
+  });
+
+  test("completes without an email when there is none", () => {
+    expect(
+      identityFromProviderUser("gitlab", {
+        id: 31,
+        username: "ghopper",
+        name: "Grace",
+        email: null,
+      }),
+    ).toEqual({
+      provider: "gitlab",
+      providerAccountId: "31",
+      name: "Grace",
+      username: "ghopper",
+    });
+  });
+
+  test("never uses an email address as the name", () => {
+    expect(
+      identityFromProviderUser("gitlab", {
+        id: 31,
+        name: "grace@example.com",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("is not an identity without an account ID", () => {
+    expect(
+      identityFromProviderUser("gitlab", {
+        username: "ghopper",
+        name: "Grace",
+      }),
+    ).toBeUndefined();
+  });
+});
