@@ -55,7 +55,8 @@ test("the home page shows the Durables header with the logo link", async ({
   await expect(
     header.getByRole("link", { name: "Durables home" }),
   ).toBeVisible();
-  await expect(header.getByRole("link")).toHaveCount(1);
+  // Signed out, the header's right side holds the Contribute pill and no account menu.
+  await expect(header.getByRole("link", { name: "Contribute" })).toBeVisible();
   await expect(header.getByRole("button")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page).toHaveTitle("Durables");
