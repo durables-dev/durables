@@ -1,12 +1,28 @@
 import type { Context } from "hono";
-import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
+import {
+  deleteCookie,
+  getCookie,
+  getSignedCookie,
+  setSignedCookie,
+} from "hono/cookie";
 import { z } from "zod";
 import type { AppEnv } from "../app-env";
 import { ProblemError } from "../http/problem";
 import { providers } from "../storage/storage";
+import {
+  type ClientCredentials,
+  exchangeTimeoutMs,
+  type OAuthProvider,
+  providerMiddleware,
+  providerUserVariable,
+  stateCookieName,
+  TimeoutError,
+  withTimeout,
+} from "./oauth-providers";
+import { identityFromProviderUser } from "./provider-identity";
 
-// The auth interface (ADR 0007). Session handling sits behind it, so the provider callbacks,
-// the handle step and publishing read and change the session only through c.var.auth.
+// The auth interface (ADR 0007). Session handling and the provider exchange sit behind it, so
+// the provider callbacks, the handle step and publishing reach them only through c.var.auth.
 
 /** The cookie's name. Hono adds the __Host- prefix, so the browser sees __Host-session. */
 export const sessionCookieName = "session";
@@ -45,7 +61,32 @@ export type SessionIdentity = Omit<Session, "handle" | "expiresAt">;
 /** The parts of a session a handler may change. */
 export type SessionChanges = Pick<Session, "handle">;
 
+/** Each provider's OAuth application credentials, as supplied at deploy. */
+export type ProviderClients = Partial<Record<OAuthProvider, ClientCredentials>>;
+
+/** Why a provider sign-in did not finish. Logged; never shown to the visitor. */
+type SignInFailure =
+  | "cancelled"
+  | "provider-error"
+  | "missing-code"
+  | "state-mismatch"
+  | "exchange-failed"
+  | "timeout"
+  | "incomplete-identity";
+
 const nowInSeconds = () => Math.floor(Date.now() / 1000);
+
+const encoder = new TextEncoder();
+
+/** Compares two secrets in constant time (api/CONVENTIONS.md). */
+const secretsMatch = (a: string, b: string): boolean => {
+  const left = encoder.encode(a);
+  const right = encoder.encode(b);
+  return (
+    left.byteLength === right.byteLength &&
+    crypto.subtle.timingSafeEqual(left, right)
+  );
+};
 
 const parseJson = (value: string): unknown => {
   try {
@@ -60,12 +101,21 @@ const parseJson = (value: string): unknown => {
  * c.var.auth. Reading or issuing a session without a signing key fails closed with 503.
  */
 export class Auth {
-  readonly #context: Context<AppEnv>;
+  readonly #context: Context<AppEnv, string>;
   readonly #signingKey: string | undefined;
+  readonly #clients: ProviderClients;
+  readonly #exchangeTimeoutMs: number;
 
-  constructor(context: Context<AppEnv>, signingKey: string | undefined) {
+  constructor(
+    context: Context<AppEnv, string>,
+    signingKey: string | undefined,
+    clients: ProviderClients = {},
+    options: { exchangeTimeoutMs?: number } = {},
+  ) {
     this.#context = context;
     this.#signingKey = signingKey;
+    this.#clients = clients;
+    this.#exchangeTimeoutMs = options.exchangeTimeoutMs ?? exchangeTimeoutMs;
   }
 
   /**
@@ -114,6 +164,159 @@ export class Auth {
   /** Signs the publisher out by clearing the cookie. Safe to call with no session. */
   end(): void {
     deleteCookie(this.#context, sessionCookieName, cookieOptions);
+  }
+
+  /**
+   * Sends the visitor to the provider's consent screen, asking only for identity scopes. The
+   * package sets the state cookie the callback checks. The callback URL must be the one
+   * completeProviderSignIn is given.
+   */
+  async redirectToProvider(
+    provider: OAuthProvider,
+    callbackUrl: string,
+  ): Promise<Response> {
+    const c = this.#context;
+    // With a code, the package would run the exchange. Starting never does.
+    if (c.req.query("code") !== undefined) {
+      throw new ProblemError({
+        status: 400,
+        detail: "Starting sign-in takes no code.",
+      });
+    }
+    const middleware = providerMiddleware(
+      provider,
+      this.#client(provider),
+      callbackUrl,
+    );
+    const response = await middleware(c, () => Promise.resolve());
+    if (!(response instanceof Response)) {
+      throw new Error("The sign-in package did not redirect");
+    }
+    return response;
+  }
+
+  /**
+   * Finishes a provider sign-in: checks the state, exchanges the code and reads the
+   * provider identity. Undefined when the visitor cancelled, the provider answered with an
+   * error, the state does not match, or the exchange failed or timed out. The provider's
+   * tokens are used only here: they are dropped before this returns and never stored.
+   * It does not start a session; the caller does that with the identity.
+   */
+  async completeProviderSignIn(
+    provider: OAuthProvider,
+    callbackUrl: string,
+  ): Promise<SessionIdentity | undefined> {
+    const c = this.#context;
+    const client = this.#client(provider);
+    try {
+      const error = c.req.query("error");
+      if (error !== undefined) {
+        return this.#signInFailed(
+          provider,
+          error === "access_denied" ? "cancelled" : "provider-error",
+        );
+      }
+      if (c.req.query("code") === undefined) {
+        return this.#signInFailed(provider, "missing-code");
+      }
+      if (!this.#stateMatches()) {
+        return this.#signInFailed(provider, "state-mismatch");
+      }
+      const middleware = providerMiddleware(provider, client, callbackUrl);
+      await withTimeout(
+        Promise.resolve(middleware(c, () => Promise.resolve())),
+        this.#exchangeTimeoutMs,
+      );
+      const identity = identityFromProviderUser(
+        provider,
+        c.get(providerUserVariable[provider]),
+      );
+      return identity ?? this.#signInFailed(provider, "incomplete-identity");
+    } catch (error) {
+      return this.#signInFailed(
+        provider,
+        error instanceof TimeoutError ? "timeout" : "exchange-failed",
+        error,
+      );
+    } finally {
+      this.#dropProviderResults();
+      deleteCookie(c, stateCookieName, { path: "/", secure: true });
+    }
+  }
+
+  /** True when the state the provider returned is the one the start step stored. */
+  #stateMatches(): boolean {
+    const stored = getCookie(this.#context, stateCookieName);
+    const returned = this.#context.req.query("state");
+    return (
+      stored !== undefined &&
+      stored !== "" &&
+      returned !== undefined &&
+      returned !== "" &&
+      secretsMatch(stored, returned)
+    );
+  }
+
+  /** Clears what the package left on the context, so no token outlives the exchange. */
+  #dropProviderResults(): void {
+    const c = this.#context;
+    c.set("token", undefined);
+    c.set("refresh-token", undefined);
+    c.set("granted-scopes", undefined);
+    c.set("user-github", undefined);
+    c.set("user-google", undefined);
+    c.set("user-msentra", undefined);
+  }
+
+  /**
+   * Records why a sign-in did not finish and returns no identity. Only the reason and the
+   * error's name are logged: never its message, which may quote the provider's answer.
+   */
+  #signInFailed(
+    provider: OAuthProvider,
+    reason: SignInFailure,
+    error?: unknown,
+  ): undefined {
+    if (reason !== "cancelled") {
+      console.warn({
+        message: "Sign-in did not finish",
+        requestId: this.#context.var.requestId,
+        provider,
+        reason,
+        ...(error instanceof Error ? { error: { name: error.name } } : {}),
+      });
+    }
+    return undefined;
+  }
+
+  /**
+   * Whether this provider's credentials are configured. When they are not, it logs the
+   * misconfiguration, and the sign-in routes send the visitor to the failure redirect.
+   */
+  providerAvailable(provider: OAuthProvider): boolean {
+    const client = this.#clients[provider];
+    if (!client?.clientId || !client.clientSecret) {
+      console.error({
+        message: "A sign-in provider's credentials are not configured",
+        requestId: this.#context.var.requestId,
+        provider,
+      });
+      return false;
+    }
+    return true;
+  }
+
+  #client(provider: OAuthProvider): { clientId: string; clientSecret: string } {
+    const client = this.#clients[provider];
+    // The routes check providerAvailable first. This guard keeps the method fail-closed.
+    if (!client?.clientId || !client.clientSecret) {
+      throw new ProblemError({
+        status: 503,
+        title: "Service Unavailable",
+        detail: "Signing in with this provider is not available right now.",
+      });
+    }
+    return { clientId: client.clientId, clientSecret: client.clientSecret };
   }
 
   async #issue(session: Session): Promise<void> {
