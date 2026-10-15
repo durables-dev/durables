@@ -22,6 +22,7 @@
   --surface: #1a1512;
   --footer: #17120d;
   --accent: var(--color-tangerine);
+  --on-accent: var(--color-ink);
   --link: var(--color-tangerine);
   --focus: var(--color-gold);
   --border: #6e6255;
@@ -51,6 +52,7 @@
   --radius-panel: 12px;
   --radius-control: 8px;
   --radius-tag: 6px;
+  --radius-pill: 9999px;
 }
 
 @media (prefers-color-scheme: light) {
