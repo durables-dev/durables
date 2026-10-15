@@ -1,13 +1,15 @@
 import { z } from "zod";
 
 // Words no publisher can hold. Activity pages live at /:handle/:name, so web's top-level
-// routes are here (web/CONVENTIONS.md): adding a top-level route means adding it here. The
-// rest are names that would suggest an official account. Every entry fits the format rule.
+// routes are here (web/CONVENTIONS.md): adding a top-level route means adding it here. So is
+// "assets", the path the site build is served from. The rest are names that would suggest an
+// official account. Every entry fits the format rule.
 export const reservedHandles = new Set([
   "admin",
   "durables",
   "temporal",
   "api",
+  "assets",
   "search",
   "contribute",
   "terms",
@@ -22,6 +24,9 @@ export const reservedHandles = new Set([
  */
 export const handlePattern = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){2,38}$/;
 
+/** The wording for an empty handle, which is told apart from a bad format. */
+export const handleEmptyMessage = "Choose a handle.";
+
 export const handleFormatMessage =
   "Use 3 to 39 lowercase letters, numbers and single hyphens.";
 
@@ -32,15 +37,21 @@ export const handleAvailableMessage = (handle: string) =>
 /** The one wording for a handle that cannot be had: used, retired or reserved. */
 export const handleTakenMessage = (handle: string) => `${handle} is taken.`;
 
+/** The wording for a handle the format rule refuses: empty, or a bad format. */
+export const handleInvalidMessage = (handle: string) =>
+  handle === "" ? handleEmptyMessage : handleFormatMessage;
+
 /** True when the handle is one of the reserved words. */
 export const isReservedHandle = (handle: string) => reservedHandles.has(handle);
 
 /**
- * The format rule alone. Uppercase is refused, never lowercased. Use it where a reserved
- * word must be told apart from a bad format, such as a 409 for taken and a 400 for format.
+ * The format rule alone. Uppercase is refused, never lowercased. An empty handle gets the
+ * empty wording only. Use it where a reserved word must be told apart from a bad format,
+ * such as a 409 for taken and a 400 for format.
  */
 export const handleFormatSchema = z
   .string()
+  .min(1, { error: handleEmptyMessage, abort: true })
   .regex(handlePattern, { error: handleFormatMessage });
 
 /** The format rule plus the reserved words, which report as taken. */

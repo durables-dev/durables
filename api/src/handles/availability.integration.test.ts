@@ -87,8 +87,15 @@ describe("checking a handle's availability", () => {
     expect((await checkHandle("q".repeat(39))).availability).toBe("available");
   });
 
+  test("reports an empty handle as invalid with the empty message", async () => {
+    expect(await checkHandle("")).toEqual({
+      handle: "",
+      availability: "invalid",
+      message: "Choose a handle.",
+    });
+  });
+
   test.each([
-    ["an empty handle", ""],
     ["2 characters", "ab"],
     ["40 characters", "a".repeat(40)],
     ["an uppercase letter", "Ddieruf"],
@@ -133,6 +140,7 @@ describe("checking a handle's availability", () => {
       "durables",
       "temporal",
       "contribute",
+      "assets",
     ];
     const fromRule = { valid: "available", taken: "taken", invalid: "invalid" };
 

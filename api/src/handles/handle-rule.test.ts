@@ -1,6 +1,8 @@
 import {
   checkHandleRule,
+  handleEmptyMessage,
   handleFormatMessage,
+  handleInvalidMessage,
   handleFormatSchema,
   handleSchema,
   handleTakenMessage,
@@ -33,7 +35,6 @@ describe("the handle format rule", () => {
   });
 
   test.each([
-    ["an empty handle", ""],
     ["2 characters", "ab"],
     ["40 characters", "a".repeat(40)],
     ["an uppercase letter", "Ddieruf"],
@@ -49,6 +50,18 @@ describe("the handle format rule", () => {
     expect(messagesFor(handle)).toEqual([handleFormatMessage]);
     expect(handleFormatSchema.safeParse(handle).success).toBe(false);
     expect(checkHandleRule(handle)).toBe("invalid");
+    expect(handleInvalidMessage(handle)).toBe(handleFormatMessage);
+  });
+
+  test("refuses an empty handle with the empty message only", () => {
+    expect(messagesFor("")).toEqual([handleEmptyMessage]);
+    expect(handleFormatSchema.safeParse("").success).toBe(false);
+    expect(checkHandleRule("")).toBe("invalid");
+    expect(handleInvalidMessage("")).toBe(handleEmptyMessage);
+  });
+
+  test("states the empty message as the design words it", () => {
+    expect(handleEmptyMessage).toBe("Choose a handle.");
   });
 
   test("refuses uppercase rather than lowercasing it", () => {
@@ -73,6 +86,7 @@ describe("reserved words", () => {
       [
         "admin",
         "api",
+        "assets",
         "contribute",
         "durables",
         "privacy",
@@ -87,6 +101,11 @@ describe("reserved words", () => {
   test.each([...reservedHandles])("reports %s as taken", (word) => {
     expect(checkHandleRule(word)).toBe("taken");
     expect(messagesFor(word)).toEqual([`${word} is taken.`]);
+  });
+
+  test("include assets, the path the site build is served from", () => {
+    expect(reservedHandles.has("assets")).toBe(true);
+    expect(checkHandleRule("assets")).toBe("taken");
   });
 
   test("all pass the format rule, so only the reserved check refuses them", () => {

@@ -1,7 +1,7 @@
 import {
   checkHandleRule,
   handleAvailableMessage,
-  handleFormatMessage,
+  handleInvalidMessage,
   handleTakenMessage,
 } from "@durables/schemas";
 import { zValidator } from "@hono/zod-validator";
@@ -20,7 +20,10 @@ export interface HandleAvailabilityResponse {
   message: string;
 }
 
-/** The query the check accepts. The handle is required but may be empty, which is invalid. */
+/**
+ * The query the check accepts. The handle is required but may be empty, which is invalid
+ * and answered with the empty wording.
+ */
 const availabilityQuery = z.object({ handle: z.string() });
 
 /** Applies the shared rule first, then looks the handle up only if the rule allows it. */
@@ -38,7 +41,7 @@ export const handleAvailability = async (
 const messages: Record<HandleAvailability, (handle: string) => string> = {
   available: handleAvailableMessage,
   taken: handleTakenMessage,
-  invalid: () => handleFormatMessage,
+  invalid: handleInvalidMessage,
 };
 
 /** The handles resource, mounted at /api/handles. */
