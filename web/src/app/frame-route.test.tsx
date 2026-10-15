@@ -1,6 +1,7 @@
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test } from "vitest";
 import { render } from "vitest-browser-react";
+import { TestProviders } from "../../test/test-providers";
 import type { RouteHandle } from "./route-handle";
 import { routes } from "./router";
 
@@ -22,7 +23,9 @@ function renderAt(path: string) {
     ],
     { initialEntries: [path] },
   );
-  return render(<RouterProvider router={router} />);
+  return render(<RouterProvider router={router} />, {
+    wrapper: TestProviders,
+  });
 }
 
 test("the logo link takes a visitor home from another page", async () => {
@@ -71,4 +74,34 @@ test("an unknown address renders inside the frame, with the logo link home", asy
     .element(screen.getByRole("link", { name: "Durables home" }))
     .toBeVisible();
   await expect.poll(() => document.title).toBe("Page not found · Durables");
+});
+
+test("the header's Contribute pill takes a signed-out visitor to the sign-in step", async () => {
+  const router = createMemoryRouter(routes, { initialEntries: ["/"] });
+  const screen = await render(<RouterProvider router={router} />, {
+    wrapper: TestProviders,
+  });
+
+  await screen
+    .getByRole("banner")
+    .getByRole("link", { name: "Contribute" })
+    .click();
+
+  await expect
+    .element(screen.getByRole("region", { name: "Profile & Handle" }))
+    .toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/contribute/profile");
+});
+
+test("every page outside the Contribute flow shows the Contribute pill", async () => {
+  for (const path of ["/", "/elsewhere", "/search", "/no-such-page"]) {
+    const screen = await renderAt(path);
+
+    await expect
+      .element(
+        screen.getByRole("banner").getByRole("link", { name: "Contribute" }),
+      )
+      .toBeVisible();
+    await screen.unmount();
+  }
 });

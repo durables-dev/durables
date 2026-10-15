@@ -4,6 +4,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { TestProviders } from "../../../test/test-providers";
 
 const legalPages = [
   { path: "/terms", heading: "Terms", title: "Terms · Durables" },
@@ -11,12 +12,14 @@ const legalPages = [
   { path: "/security", heading: "Security", title: "Security · Durables" },
 ] as const;
 
-// The real route tree, opened at an address as if typed into the browser. There is no
-// QueryClientProvider and no MSW handler, so the pages render with no signed-in state and
-// any request to the API would fail the test.
+// The real route tree, opened at an address as if typed into the browser. The header reads
+// the session, which the default MSW handler answers as an anonymous visitor. Any other
+// request to the API would fail the test.
 async function openAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
-  return render(<RouterProvider router={router} />);
+  return render(<RouterProvider router={router} />, {
+    wrapper: TestProviders,
+  });
 }
 
 afterEach(async () => {

@@ -1,8 +1,11 @@
 import { routes } from "@/app/router";
 import "@/styles/global.css";
+import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, test } from "vitest";
 import { render } from "vitest-browser-react";
+import { TestProviders } from "../../../test/test-providers";
+import { worker } from "../../../test/worker";
 import { ContributeDraftProvider } from "./contribute-draft-provider";
 import { draftStorageKey } from "./draft";
 import type { StepId } from "./steps";
@@ -11,7 +14,9 @@ import { useContributeDraft } from "./use-contribute-draft";
 // The real route tree, opened at an address as if typed into the browser.
 async function openAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
-  const screen = await render(<RouterProvider router={router} />);
+  const screen = await render(<RouterProvider router={router} />, {
+    wrapper: TestProviders,
+  });
   return { screen, router };
 }
 
@@ -270,6 +275,40 @@ test("the header shows only the logo, with no Contribute button or link", async 
       .map((link) => link.getAttribute("aria-label")),
   ).toEqual(["Durables home"]);
   expect(header.getByRole("button").elements()).toHaveLength(0);
+  expect(
+    screen.getByRole("link", { name: /contribute/i }).elements(),
+  ).toHaveLength(0);
+  expect(
+    screen.getByRole("button", { name: /contribute/i }).elements(),
+  ).toHaveLength(0);
+});
+
+test("signed in, the header shows the logo and the initials, with no Contribute button", async () => {
+  worker.use(
+    http.get("/api/session", () =>
+      HttpResponse.json({
+        user: {
+          name: "Dana Dieruf",
+          initials: "DD",
+          provider: "google",
+          handle: null,
+          accountExists: false,
+        },
+      }),
+    ),
+  );
+  const { screen } = await openAt("/contribute");
+
+  const header = screen.getByRole("banner");
+  await expect
+    .element(header.getByRole("button", { name: "Account menu" }))
+    .toHaveTextContent("DD");
+  expect(
+    header
+      .getByRole("link")
+      .elements()
+      .map((link) => link.getAttribute("aria-label")),
+  ).toEqual(["Durables home"]);
   expect(
     screen.getByRole("link", { name: /contribute/i }).elements(),
   ).toHaveLength(0);

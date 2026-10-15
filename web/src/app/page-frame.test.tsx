@@ -2,12 +2,15 @@ import type { ReactNode } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test } from "vitest";
 import { render } from "vitest-browser-react";
+import { TestProviders } from "../../test/test-providers";
 import { PageFrame } from "./page-frame";
 
 // The header holds a Link, so the frame renders inside a router.
 function renderFrame(frame: ReactNode) {
   const router = createMemoryRouter([{ path: "/", element: frame }]);
-  return render(<RouterProvider router={router} />);
+  return render(<RouterProvider router={router} />, {
+    wrapper: TestProviders,
+  });
 }
 
 function follows(first: Element, second: Element) {
