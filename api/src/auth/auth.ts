@@ -289,7 +289,11 @@ export class Auth {
     return undefined;
   }
 
-  #client(provider: OAuthProvider): { clientId: string; clientSecret: string } {
+  /**
+   * Whether this provider's credentials are configured. When they are not, it logs the
+   * misconfiguration, and the sign-in routes send the visitor to the failure redirect.
+   */
+  providerAvailable(provider: OAuthProvider): boolean {
     const client = this.#clients[provider];
     if (!client?.clientId || !client.clientSecret) {
       console.error({
@@ -297,6 +301,15 @@ export class Auth {
         requestId: this.#context.var.requestId,
         provider,
       });
+      return false;
+    }
+    return true;
+  }
+
+  #client(provider: OAuthProvider): { clientId: string; clientSecret: string } {
+    const client = this.#clients[provider];
+    // The routes check providerAvailable first. This guard keeps the method fail-closed.
+    if (!client?.clientId || !client.clientSecret) {
       throw new ProblemError({
         status: 503,
         title: "Service Unavailable",

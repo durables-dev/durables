@@ -270,18 +270,32 @@ describe("GET /api/session/providers/:provider", () => {
     expect(response.headers.get("Content-Type")).toBe(problemContentType);
   });
 
-  test("fails closed with 503 when the provider's credentials are missing", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+  test.each([
+    ["start", "/api/session/providers/google"],
+    [
+      "callback",
+      `/api/session/providers/google/callback?code=${code}&state=any-state`,
+    ],
+  ])(
+    "takes the failure redirect on %s when the provider's credentials are missing",
+    async (_route, path) => {
+      const log = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
 
-    const response = await app.request(
-      "/api/session/providers/google",
-      {},
-      { ...env, GOOGLE_CLIENT_SECRET: undefined },
-    );
+      const response = await app.request(
+        path,
+        {},
+        { ...env, GOOGLE_CLIENT_SECRET: undefined },
+      );
 
-    expect(response.status).toBe(503);
-    expect(response.headers.get("Content-Type")).toBe(problemContentType);
-  });
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe(signInFailedPath);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(response.headers.get("Set-Cookie")).toBeNull();
+      expect(log).toHaveBeenCalledOnce();
+    },
+  );
 });
 
 describe("GET /api/session/providers/:provider/callback", () => {

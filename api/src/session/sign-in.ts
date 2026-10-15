@@ -35,6 +35,9 @@ export const signIn = new Hono<AppEnv>()
   .get("/:provider", async (c) => {
     const provider = providerParam(c.req.param("provider"));
     c.header("Cache-Control", "no-store");
+    if (!c.var.auth.providerAvailable(provider)) {
+      return c.redirect(signInFailedPath, 302);
+    }
     return c.var.auth.redirectToProvider(
       provider,
       callbackUrl(c.req.url, provider),
@@ -43,6 +46,9 @@ export const signIn = new Hono<AppEnv>()
   .get("/:provider/callback", async (c) => {
     const provider = providerParam(c.req.param("provider"));
     c.header("Cache-Control", "no-store");
+    if (!c.var.auth.providerAvailable(provider)) {
+      return c.redirect(signInFailedPath, 302);
+    }
     const identity = await c.var.auth.completeProviderSignIn(
       provider,
       callbackUrl(c.req.url, provider),

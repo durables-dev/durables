@@ -70,6 +70,9 @@ export const providerMiddleware = (
         client_secret: clientSecret,
         scope: [...identityScopes.github],
         // An OAuth app, so the scope is sent. A GitHub App would ignore it.
+        // With oauthApp the package does not send redirect_uri, so GitHub returns to the
+        // callback registered on the OAuth App. It must be exactly
+        // https://<domain>/api/session/providers/github/callback.
         oauthApp: true,
         redirect_uri: callbackUrl,
       });
