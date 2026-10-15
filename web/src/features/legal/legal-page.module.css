@@ -9,12 +9,33 @@
   letter-spacing: -0.023em;
 }
 
+.updated {
+  margin: 8px 0 0;
+  color: var(--fg-muted);
+  font-size: var(--text-small);
+}
+
 .body {
   margin-top: 24px;
   line-height: 1.6;
   overflow-wrap: break-word;
 }
 
-.body p {
+.body h2 {
+  margin: 32px 0 12px;
+  font-size: var(--text-h2);
+  font-weight: 600;
+}
+
+.body p,
+.body ul {
   margin: 0 0 16px;
+}
+
+.body ul {
+  padding-left: 24px;
+}
+
+.body li + li {
+  margin-top: 4px;
 }

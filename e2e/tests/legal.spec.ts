@@ -23,9 +23,10 @@ for (const { path, heading, title } of legalPages) {
     await expect(
       page.getByRole("banner").getByRole("link", { name: "Durables home" }),
     ).toBeVisible();
+    await expect(page.getByRole("main")).toContainText("Last updated");
     await expect(
       page.getByRole("note", { name: "Placeholder notice" }),
-    ).toContainText("The final text of this page is coming.");
+    ).toHaveCount(0);
     await expect(page.getByRole("link", { name: /sign in/i })).toHaveCount(0);
     await expect(page).toHaveTitle(title);
     await expectAccessible();

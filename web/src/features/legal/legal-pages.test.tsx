@@ -48,46 +48,61 @@ describe.each(legalPages)("$path", ({ path, heading, title }) => {
     await expect.element(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
 
-  test("shows the placeholder notice between the heading and the body text", async () => {
+  test("shows when the text last changed, then the text, below the heading", async () => {
     const screen = await openAt(path);
 
-    const notice = screen.getByRole("note", { name: "Placeholder notice" });
-    await expect.element(notice).toBeVisible();
-    await expect
-      .element(notice)
-      .toHaveTextContent("The final text of this page is coming.");
+    const headingLocator = screen.getByRole("heading", {
+      level: 1,
+      name: heading,
+    });
+    await expect.element(headingLocator).toBeVisible();
+    const headingElement = headingLocator.element();
+    const updated = screen.getByText(/^Last updated \d{1,2} \w+ \d{4}$/);
+    await expect.element(updated).toBeVisible();
 
-    const headingElement = screen
-      .getByRole("heading", { level: 1, name: heading })
-      .element();
-    const noticeElement = notice.element();
-    const body = [
-      ...screen.getByRole("main").element().querySelectorAll("p"),
-    ].filter((paragraph) => !noticeElement.contains(paragraph));
-    const [firstBody] = body;
-    if (!firstBody) throw new Error("Expected body text below the notice");
+    const [, firstBody] = screen
+      .getByRole("main")
+      .element()
+      .querySelectorAll("p");
+    if (!firstBody) throw new Error("Expected text below the date");
     expect(
-      headingElement.compareDocumentPosition(noticeElement) &
+      headingElement.compareDocumentPosition(updated.element()) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      noticeElement.compareDocumentPosition(firstBody) &
+      updated.element().compareDocumentPosition(firstBody) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     await expect.element(firstBody).toBeVisible();
   });
 
-  test("sets the notice apart from the body text", async () => {
+  test("shows no placeholder text", async () => {
     const screen = await openAt(path);
 
-    const notice = screen.getByRole("note", { name: "Placeholder notice" });
-    await expect.element(notice).toBeVisible();
-    const noticeStyle = getComputedStyle(notice.element());
-    const pageBackground = getComputedStyle(document.body).backgroundColor;
+    await expect
+      .element(screen.getByRole("heading", { level: 1, name: heading }))
+      .toBeVisible();
+    expect(
+      screen.getByRole("note", { name: "Placeholder notice" }).elements(),
+    ).toEqual([]);
+    expect(screen.getByRole("main").element().textContent).not.toMatch(
+      /placeholder|the final text/i,
+    );
+  });
 
-    expect(noticeStyle.borderTopStyle).toBe("solid");
-    expect(noticeStyle.backgroundColor).not.toBe(pageBackground);
-    expect(noticeStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  test("gives every contact address a mail link", async () => {
+    const screen = await openAt(path);
+
+    await expect
+      .element(screen.getByRole("heading", { level: 1, name: heading }))
+      .toBeVisible();
+    const mailLinks = screen
+      .getByRole("link", { name: /@durables\.dev$/ })
+      .elements();
+    expect(mailLinks.length).toBeGreaterThan(0);
+    for (const link of mailLinks) {
+      expect(link.getAttribute("href")).toBe(`mailto:${link.textContent}`);
+    }
   });
 
   test(`sets the tab title to "${title}"`, async () => {
