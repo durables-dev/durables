@@ -15,6 +15,10 @@ export const auth = () =>
           clientId: c.env.GITHUB_CLIENT_ID,
           clientSecret: c.env.GITHUB_CLIENT_SECRET,
         },
+        gitlab: {
+          clientId: c.env.GITLAB_CLIENT_ID,
+          clientSecret: c.env.GITLAB_CLIENT_SECRET,
+        },
         google: {
           clientId: c.env.GOOGLE_CLIENT_ID,
           clientSecret: c.env.GOOGLE_CLIENT_SECRET,

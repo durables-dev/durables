@@ -1,9 +1,10 @@
 import { z } from "zod";
 import type { SessionIdentity } from "./auth";
-import type { OAuthProvider } from "./oauth-providers";
+import type { Provider } from "../storage/storage";
 
 // Turns the user record a provider returns into the identity a session starts with (ADR 0007):
-// name, email, avatar and the provider's account ID. Nothing else is kept.
+// name, email, avatar and the provider's account ID, plus the username where the provider has
+// one. Nothing else is kept.
 //
 // The name is never an email address, because the session read returns the name and must
 // never return the email. A record with no account ID or no usable name is not an identity.
@@ -54,15 +55,26 @@ const microsoftUser = z.object({
   userPrincipalName: optionalText,
 });
 
+/** GitLab's GET /api/v4/user. The email is the primary one, which read_user can see. */
+const gitLabUser = z.object({
+  id: z.union([z.number().int(), z.string().min(1)]),
+  username: optionalText,
+  name: optionalText,
+  email: optionalText,
+  public_email: optionalText,
+  avatar_url: optionalText,
+});
+
 interface IdentityFields {
   providerAccountId: string;
   name: string | undefined;
   email: string | undefined;
   avatarUrl: string | undefined;
+  username?: string | undefined;
 }
 
 const fieldsFor = (
-  provider: OAuthProvider,
+  provider: Provider,
   user: unknown,
 ): IdentityFields | undefined => {
   switch (provider) {
@@ -79,6 +91,22 @@ const fieldsFor = (
         // Never use it to link or look up accounts; identity is provider + providerAccountId.
         email,
         avatarUrl: avatar_url,
+      };
+    }
+    case "gitlab": {
+      const parsed = gitLabUser.safeParse(user);
+      if (!parsed.success) {
+        return undefined;
+      }
+      const { id, username, name, email, public_email, avatar_url } =
+        parsed.data;
+      return {
+        providerAccountId: String(id),
+        name: displayName(name, username),
+        // Never use it to link or look up accounts; identity is provider + providerAccountId.
+        email: email ?? public_email,
+        avatarUrl: avatar_url,
+        username,
       };
     }
     case "google": {
@@ -117,7 +145,7 @@ const fieldsFor = (
  * account ID or no name. A missing email or avatar is left out rather than failing sign-in.
  */
 export const identityFromProviderUser = (
-  provider: OAuthProvider,
+  provider: Provider,
   user: unknown,
 ): SessionIdentity | undefined => {
   const fields = fieldsFor(provider, user);
@@ -130,5 +158,6 @@ export const identityFromProviderUser = (
     name: fields.name,
     ...(fields.email === undefined ? {} : { email: fields.email }),
     ...(fields.avatarUrl === undefined ? {} : { avatarUrl: fields.avatarUrl }),
+    ...(fields.username === undefined ? {} : { username: fields.username }),
   };
 };

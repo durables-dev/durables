@@ -17,7 +17,7 @@ import {
 // for the global fetch answers the token, user and email requests the sign-in package makes.
 // D1 and every internal module are real, and requests go to the Worker over HTTP.
 
-const providers = ["github", "google", "microsoft"] as const;
+const providers = ["github", "gitlab", "google", "microsoft"] as const;
 type Provider = (typeof providers)[number];
 
 const problemContentType = "application/problem+json";
@@ -32,6 +32,10 @@ const shortTimeoutApp = new Hono<AppEnv>()
         c,
         c.env.SESSION_SIGNING_KEY,
         {
+          gitlab: {
+            clientId: c.env.GITLAB_CLIENT_ID,
+            clientSecret: c.env.GITLAB_CLIENT_SECRET,
+          },
           microsoft: {
             clientId: c.env.MICROSOFT_CLIENT_ID,
             clientSecret: c.env.MICROSOFT_CLIENT_SECRET,
@@ -52,18 +56,21 @@ const email = "ada.never-logged@example.com";
 
 const authorizeUrls: Record<Provider, string> = {
   github: "https://github.com/login/oauth/authorize",
+  gitlab: "https://gitlab.com/oauth/authorize",
   google: "https://accounts.google.com/o/oauth2/v2/auth",
   microsoft: "https://login.microsoft.com/common/oauth2/v2.0/authorize",
 };
 
 const tokenUrls: Record<Provider, string> = {
   github: "https://github.com/login/oauth/access_token",
+  gitlab: "https://gitlab.com/oauth/token",
   google: "https://oauth2.googleapis.com/token",
   microsoft: "https://login.microsoft.com/common/oauth2/v2.0/token",
 };
 
 const userUrls: Record<Provider, string> = {
   github: "https://api.github.com/user",
+  gitlab: "https://gitlab.com/api/v4/user",
   google: "https://www.googleapis.com/oauth2/v2/userinfo",
   microsoft: "https://graph.microsoft.com/v1.0/me",
 };
@@ -72,6 +79,7 @@ const githubEmailsUrl = "https://api.github.com/user/emails";
 
 const grantedScopes: Record<Provider, string> = {
   github: "user:email",
+  gitlab: "read_user",
   google: "openid email profile",
   microsoft: "openid email profile User.Read",
 };
@@ -85,6 +93,15 @@ const providerUser = (provider: Provider, accountId: string): unknown => {
         login: "ada",
         name: "Ada Lovelace",
         avatar_url: "https://avatars.example.com/ada",
+      };
+    case "gitlab":
+      return {
+        id: Number(accountId),
+        username: "ada",
+        name: "Ada Lovelace",
+        email,
+        avatar_url: "https://gitlab.example.com/ada.png",
+        state: "active",
       };
     case "google":
       return {
@@ -101,11 +118,23 @@ const providerUser = (provider: Provider, accountId: string): unknown => {
 interface ProviderAnswers {
   token?: () => Promise<Response>;
   user?: unknown;
+  /** Replaces the whole user response, for a provider that fails after the exchange. */
+  userResponse?: () => Promise<Response>;
   emails?: unknown;
 }
 
 /** Every request the Worker made to a provider, by URL. */
 let providerRequests: string[] = [];
+
+interface LoggedRequest {
+  method: string;
+  url: string;
+  headers: Headers;
+  body: string;
+}
+
+/** Every request the Worker made to a provider, in full. */
+let providerRequestLog: LoggedRequest[] = [];
 
 /** Fakes the provider's endpoints. Any other outbound request fails the test. */
 const fakeProvider = (provider: Provider, answers: ProviderAnswers = {}) => {
@@ -123,24 +152,29 @@ const fakeProvider = (provider: Provider, answers: ProviderAnswers = {}) => {
           scope: grantedScopes[provider],
         }),
       ));
-  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const request = new Request(input, init);
     const url = request.url.split("?")[0] ?? "";
     providerRequests.push(url);
+    // Read the body here: it cannot be read later, outside the request's I/O context.
+    providerRequestLog.push({
+      method: request.method,
+      url: request.url,
+      headers: request.headers,
+      body: new TextDecoder().decode(await request.arrayBuffer()),
+    });
     if (request.method === "POST" && url === tokenUrls[provider]) {
       return token();
     }
     if (request.method === "GET" && url === userUrls[provider]) {
-      return Promise.resolve(Response.json(user));
+      return answers.userResponse?.() ?? Response.json(user);
     }
     if (request.method === "GET" && url === githubEmailsUrl) {
-      return Promise.resolve(
-        Response.json(
-          answers.emails ?? [{ email, primary: true, verified: true }],
-        ),
+      return Response.json(
+        answers.emails ?? [{ email, primary: true, verified: true }],
       );
     }
-    return Promise.reject(new Error(`Unexpected request to ${url}`));
+    throw new Error(`Unexpected request to ${url}`);
   });
   return { accountId };
 };
@@ -195,6 +229,18 @@ const readSession = async (response: Response) => {
   return session.json<{ user: Record<string, unknown> | null }>();
 };
 
+/** What the signed session cookie carries, read without the API. */
+const sessionPayload = (response: Response): Record<string, unknown> => {
+  const value = decodeURIComponent(
+    cookieNamed(response, "__Host-session")?.split("=").slice(1).join("=") ??
+      "",
+  );
+  return JSON.parse(value.slice(0, value.lastIndexOf("."))) as Record<
+    string,
+    unknown
+  >;
+};
+
 const expectFailureRedirect = (response: Response) => {
   expect(response.status).toBe(302);
   expect(response.headers.get("Location")).toBe(signInFailedPath);
@@ -211,6 +257,7 @@ const captureLogs = () => {
 
 beforeEach(() => {
   providerRequests = [];
+  providerRequestLog = [];
 });
 
 afterEach(() => {
@@ -271,14 +318,33 @@ describe("GET /api/session/providers/:provider", () => {
   });
 
   test.each([
-    ["start", "/api/session/providers/google"],
     [
+      "google",
+      "start",
+      "/api/session/providers/google",
+      "GOOGLE_CLIENT_SECRET",
+    ],
+    [
+      "google",
       "callback",
       `/api/session/providers/google/callback?code=${code}&state=any-state`,
+      "GOOGLE_CLIENT_SECRET",
+    ],
+    [
+      "gitlab",
+      "start",
+      "/api/session/providers/gitlab",
+      "GITLAB_CLIENT_SECRET",
+    ],
+    [
+      "gitlab",
+      "callback",
+      `/api/session/providers/gitlab/callback?code=${code}&state=any-state`,
+      "GITLAB_CLIENT_SECRET",
     ],
   ])(
-    "takes the failure redirect on %s when the provider's credentials are missing",
-    async (_route, path) => {
+    "takes the failure redirect on %s %s when the provider's credentials are missing",
+    async (_provider, _route, path, secret) => {
       const log = vi
         .spyOn(console, "error")
         .mockImplementation(() => undefined);
@@ -286,7 +352,7 @@ describe("GET /api/session/providers/:provider", () => {
       const response = await app.request(
         path,
         {},
-        { ...env, GOOGLE_CLIENT_SECRET: undefined },
+        { ...env, [secret]: undefined },
       );
 
       expect(response.status).toBe(302);
@@ -431,6 +497,11 @@ describe("GET /api/session/providers/:provider/callback", () => {
       error: "bad_verification_code",
       error_description: "The code passed is incorrect or expired.",
     },
+    gitlab: {
+      error: "invalid_grant",
+      error_description:
+        "The provided authorization grant is invalid, expired, revoked, does not match the redirection URI used in the authorization request, or was issued to another client.",
+    },
     google: { error: "invalid_grant", error_description: "Bad Request" },
     microsoft: { error: "invalid_grant" },
   };
@@ -463,30 +534,35 @@ describe("GET /api/session/providers/:provider/callback", () => {
     expectFailureRedirect(response);
   });
 
-  test("redirects with the failure indicator when the exchange times out", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const { state, stateCookie } = await start("microsoft");
-    // The provider answers, with a refusal, only well after a short exchange timeout.
-    fakeProvider("microsoft", {
-      token: () =>
-        new Promise<Response>((resolve) => {
-          setTimeout(() => {
-            resolve(Response.json({ error: "too_late" }, { status: 400 }));
-          }, 500);
-        }),
-    });
+  test.each(["microsoft", "gitlab"] as const)(
+    "redirects with the failure indicator when the %s exchange times out",
+    async (provider) => {
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+      const { state, stateCookie } = await start(provider);
+      // The provider answers, with a refusal, only well after a short exchange timeout.
+      fakeProvider(provider, {
+        token: () =>
+          new Promise<Response>((resolve) => {
+            setTimeout(() => {
+              resolve(Response.json({ error: "too_late" }, { status: 400 }));
+            }, 500);
+          }),
+      });
 
-    const response = await shortTimeoutApp.request(
-      `/api/session/providers/microsoft/callback?code=${code}&state=${encodeURIComponent(state)}`,
-      { headers: { Cookie: stateCookie } },
-      env,
-    );
+      const response = await shortTimeoutApp.request(
+        `/api/session/providers/${provider}/callback?code=${code}&state=${encodeURIComponent(state)}`,
+        { headers: { Cookie: stateCookie } },
+        env,
+      );
 
-    expectFailureRedirect(response);
-    expect(warn).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: "microsoft", reason: "timeout" }),
-    );
-  });
+      expectFailureRedirect(response);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ provider, reason: "timeout" }),
+      );
+    },
+  );
 
   test("completes without an email when the provider returns none", async () => {
     fakeProvider("github", {
@@ -518,17 +594,164 @@ describe("GET /api/session/providers/:provider/callback", () => {
     expect(response.headers.get("Content-Type")).toBe(problemContentType);
   });
 
-  test("never asks for or creates a password", async () => {
-    fakeProvider("github");
-    const { location } = await start("github");
+  test.each(providers)(
+    "never asks for or creates a password with %s",
+    async (provider) => {
+      fakeProvider(provider);
+      const { location } = await start(provider);
 
-    const response = await signIn("github");
+      const response = await signIn(provider);
 
-    expect(location.search).not.toMatch(/password/iu);
-    expect(response.headers.get("Location")).not.toMatch(/password/iu);
-    expect(JSON.stringify(await readSession(response))).not.toMatch(
-      /password/iu,
+      expect(location.search).not.toMatch(/password/iu);
+      expect(response.headers.get("Location")).not.toMatch(/password/iu);
+      expect(JSON.stringify(await readSession(response))).not.toMatch(
+        /password/iu,
+      );
+    },
+  );
+});
+
+describe("GitLab sign-in, hand-written beside the package", () => {
+  test("keeps the GitLab username and provider in the session", async () => {
+    fakeProvider("gitlab");
+
+    const response = await signIn("gitlab");
+
+    expect(response.headers.get("Location")).toBe(signedInPath);
+    expect(sessionPayload(response)).toMatchObject({
+      provider: "gitlab",
+      name: "Ada Lovelace",
+      username: "ada",
+      handle: null,
+    });
+    expect(await readSession(response)).toMatchObject({
+      user: { provider: "gitlab", name: "Ada Lovelace" },
+    });
+  });
+
+  test("uses the GitLab username as the name when the account has no name", async () => {
+    fakeProvider("gitlab", { user: { id: 31, username: "ghopper", name: "" } });
+
+    const response = await signIn("gitlab");
+
+    expect(await readSession(response)).toMatchObject({
+      user: { provider: "gitlab", name: "ghopper" },
+    });
+  });
+
+  test("exchanges the code at GitLab with the callback, then reads the user with the token", async () => {
+    fakeProvider("gitlab");
+
+    await signIn("gitlab");
+
+    const [tokenRequest, userRequest] = providerRequestLog;
+    expect(tokenRequest?.method).toBe("POST");
+    const body = new URLSearchParams(tokenRequest?.body);
+    expect(Object.fromEntries(body)).toEqual({
+      client_id: "local-placeholder",
+      client_secret: "local-placeholder",
+      code,
+      grant_type: "authorization_code",
+      redirect_uri: "http://localhost/api/session/providers/gitlab/callback",
+    });
+    expect(userRequest?.url).toBe(userUrls.gitlab);
+    expect(userRequest?.headers.get("Authorization")).toBe(
+      `Bearer ${accessToken}`,
     );
+    expect(providerRequestLog).toHaveLength(2);
+  });
+
+  test("starts each GitLab sign-in with a fresh, unguessable state", async () => {
+    const first = await start("gitlab");
+    const second = await start("gitlab");
+
+    expect(first.state).toMatch(/^[\w-]{43}$/u);
+    expect(second.state).not.toBe(first.state);
+    const stateHeader = setCookies(first.response).find((header) =>
+      header.startsWith("state="),
+    );
+    expect(stateHeader).toContain("HttpOnly");
+    expect(stateHeader).toContain("Secure");
+    expect(stateHeader).toContain("SameSite=Lax");
+    expect(stateHeader).toContain("Max-Age=600");
+  });
+
+  test.each([
+    [
+      "answers with an error",
+      () =>
+        Promise.resolve(
+          Response.json({ message: "401 Unauthorized" }, { status: 401 }),
+        ),
+    ],
+    [
+      "cannot be reached",
+      () => Promise.reject(new TypeError("Network connection lost.")),
+    ],
+    [
+      "answers with something that is not JSON",
+      () => Promise.resolve(new Response("<html>", { status: 200 })),
+    ],
+  ])(
+    "creates no session when the GitLab profile fetch %s after a successful exchange",
+    async (_case, userResponse) => {
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+      fakeProvider("gitlab", { userResponse });
+
+      const response = await signIn("gitlab");
+
+      expectFailureRedirect(response);
+      expect(providerRequests).toEqual([tokenUrls.gitlab, userUrls.gitlab]);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "gitlab",
+          reason: "profile-failed",
+        }),
+      );
+    },
+  );
+
+  test("redirects with the failure indicator when GitLab answers the exchange without a token", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    fakeProvider("gitlab", {
+      token: () => Promise.resolve(Response.json({ token_type: "Bearer" })),
+    });
+
+    const response = await signIn("gitlab");
+
+    expectFailureRedirect(response);
+    expect(providerRequests).toEqual([tokenUrls.gitlab]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "gitlab",
+        reason: "exchange-failed",
+      }),
+    );
+  });
+
+  test("never logs or stores the token or email when the GitLab profile fetch fails", async () => {
+    const logs = captureLogs();
+    fakeProvider("gitlab", {
+      userResponse: () =>
+        Promise.resolve(
+          Response.json(
+            { message: `Token ${accessToken} for ${email} was refused` },
+            { status: 401 },
+          ),
+        ),
+    });
+    const before = JSON.stringify(await readAllRows(env.DB));
+
+    await signIn("gitlab");
+
+    const logged = logs();
+    expect(logged).toContain("Sign-in did not finish");
+    for (const secret of [accessToken, refreshToken, code, email]) {
+      expect(logged).not.toContain(secret);
+    }
+    expect(JSON.stringify(await readAllRows(env.DB))).toBe(before);
   });
 });
 
