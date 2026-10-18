@@ -4,6 +4,7 @@ import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import type { AppEnv } from "./app-env";
 import { auth } from "./auth/auth-middleware";
+import { handles } from "./handles/availability";
 import { notFound, onError } from "./http/error-handlers";
 import type { ProblemDetails } from "./http/problem";
 import { sameOrigin } from "./http/same-origin";
@@ -38,7 +39,8 @@ export const createProductionApp = () =>
   createApp()
     .get("/api/health", (c) => c.json({ ok: true }))
     .route("/api/session", session)
-    .route("/api/session/providers", signIn);
+    .route("/api/session/providers", signIn)
+    .route("/api/handles", handles);
 
 // Production entry point.
 const app = createProductionApp();
