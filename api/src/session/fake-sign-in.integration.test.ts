@@ -73,6 +73,7 @@ describe("POST /api/session/providers/fake in the local Worker", () => {
         name: "Grace Hopper",
         initials: "GH",
         provider: "gitlab",
+        suggestedHandle: "ghopper",
         handle: null,
         accountExists: false,
       },

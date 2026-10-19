@@ -7,7 +7,13 @@ import { initials } from "../auth/initials";
 export interface SessionUser {
   name: string;
   initials: string;
+  /** The provider the publisher signed in with, which the suggestion was taken from. */
   provider: Provider;
+  /**
+   * The handle suggested from the provider account, to start the handle step with. Absent when
+   * the account has nothing that cleans to a valid handle.
+   */
+  suggestedHandle?: string;
   /** The handle chosen on the handle step, or null before one is chosen. */
   handle: string | null;
   /** True once the provider account is linked to a Durables account. */
@@ -33,6 +39,9 @@ export const session = new Hono<AppEnv>()
           name: current.name,
           initials: initials(current.name),
           provider: current.provider,
+          ...(current.suggestedHandle === undefined
+            ? {}
+            : { suggestedHandle: current.suggestedHandle }),
           handle: current.handle,
           accountExists: account !== undefined,
         },

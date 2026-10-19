@@ -87,6 +87,7 @@ const fieldsFor = (
       return {
         providerAccountId: String(id),
         name: displayName(name, login),
+        username: login,
         // Unverified: the package picks the primary email without checking `verified`.
         // Never use it to link or look up accounts; identity is provider + providerAccountId.
         email,
