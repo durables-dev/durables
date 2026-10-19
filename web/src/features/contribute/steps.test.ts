@@ -1,6 +1,12 @@
 import { reservedHandles } from "@durables/schemas";
 import { describe, expect, test } from "vitest";
-import { earliestUnfinished, isLocked, resolveStep, steps } from "./steps";
+import {
+  earliestUnfinished,
+  finishedSteps,
+  isLocked,
+  resolveStep,
+  steps,
+} from "./steps";
 
 test("lists Profile & Handle, then Code, Detected, Details and Review, with no README", () => {
   expect(steps.map((step) => step.label)).toEqual([
@@ -82,5 +88,24 @@ describe("resolveStep", () => {
   test("sends a missing step to the earliest unfinished step", () => {
     expect(resolveStep(undefined, [])).toBe("profile");
     expect(resolveStep(undefined, ["profile", "code"])).toBe("detected");
+  });
+});
+
+describe("finishedSteps", () => {
+  test("is the draft's finished steps for a publisher with no account", () => {
+    expect(finishedSteps([], false)).toEqual([]);
+    expect(finishedSteps(["profile"], false)).toEqual(["profile"]);
+  });
+
+  test("counts Profile & Handle as finished for a publisher with an account", () => {
+    expect(finishedSteps([], true)).toEqual(["profile"]);
+    expect(resolveStep("code", finishedSteps([], true))).toBe("code");
+  });
+
+  test("keeps the draft's steps for a publisher with an account", () => {
+    expect(finishedSteps(["profile", "code"], true)).toEqual([
+      "profile",
+      "code",
+    ]);
   });
 });
