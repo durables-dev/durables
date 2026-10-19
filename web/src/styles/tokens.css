@@ -30,6 +30,19 @@
   --selected: #2a231c;
   --positive: var(--color-lagoon);
 
+  /* Sign-in providers' own colours (DUR-2). They are the providers', so no theme changes them. */
+  --provider-github-bg: #24292f;
+  --provider-github-fg: #ffffff;
+  --provider-gitlab-bg: #171321;
+  --provider-gitlab-fg: #ffffff;
+  --provider-gitlab-edge: #fc6d26;
+  --provider-google-bg: #ffffff;
+  --provider-google-fg: #1f1f1f;
+  --provider-google-border: #747775;
+  --provider-microsoft-bg: #ffffff;
+  --provider-microsoft-fg: #5e5e5e;
+  --provider-microsoft-border: #8c8c8c;
+
   /* Type */
   --font-display: "Space Grotesk Variable", sans-serif;
   --font-body: "IBM Plex Sans Variable", sans-serif;

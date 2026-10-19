@@ -3,6 +3,7 @@ import {
   draftReducer,
   draftStorageKey,
   emptyDraft,
+  enterDraft,
   readDraft,
   writeDraft,
 } from "./draft";
@@ -64,5 +65,44 @@ describe("readDraft", () => {
     expect(readDraft(memoryStorage({ [draftStorageKey]: "null" }))).toEqual(
       emptyDraft,
     );
+  });
+});
+
+describe("the page the flow was opened from", () => {
+  test("is kept with the draft, as after a round trip to a sign-in provider", () => {
+    const storage = memoryStorage();
+    writeDraft(storage, { finished: [], origin: "/terms" });
+
+    expect(readDraft(storage)).toEqual({ finished: [], origin: "/terms" });
+  });
+
+  test("an unreadable origin is dropped and the rest of the draft kept", () => {
+    const storage = memoryStorage({
+      [draftStorageKey]: JSON.stringify({
+        finished: ["profile"],
+        origin: "https://example.com/",
+      }),
+    });
+
+    expect(readDraft(storage)).toEqual({ finished: ["profile"] });
+  });
+
+  test("opening the flow from a page records that page", () => {
+    expect(enterDraft({ finished: ["profile"] }, "/privacy")).toEqual({
+      finished: ["profile"],
+      origin: "/privacy",
+    });
+  });
+
+  test("opening the flow from a newer page replaces the kept one", () => {
+    expect(enterDraft({ finished: [], origin: "/terms" }, "/privacy")).toEqual({
+      finished: [],
+      origin: "/privacy",
+    });
+  });
+
+  test("opening the flow without naming a page keeps the kept one", () => {
+    const draft = { finished: [], origin: "/terms" };
+    expect(enterDraft(draft, undefined)).toBe(draft);
   });
 });
