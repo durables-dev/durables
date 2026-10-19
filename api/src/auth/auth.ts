@@ -8,6 +8,7 @@ import {
 } from "hono/cookie";
 import { z } from "zod";
 import type { AppEnv } from "../app-env";
+import { suggestHandle } from "../handles/handle-suggestion";
 import { ProblemError } from "../http/problem";
 import { type Provider, providers } from "../storage/storage";
 import {
@@ -55,6 +56,11 @@ const sessionSchema = z.object({
   avatarUrl: z.string().optional(),
   /** The provider account's username, where the provider has one. Never shown as the name. */
   username: z.string().optional(),
+  /**
+   * The handle suggested from the provider account at sign-in, already cleaned to fit the
+   * format rule. Absent when nothing in the account cleans to a valid handle.
+   */
+  suggestedHandle: z.string().optional(),
   handle: z.string().nullable(),
   /** Seconds since the epoch. */
   expiresAt: z.number().int(),
@@ -63,7 +69,10 @@ const sessionSchema = z.object({
 export type Session = z.infer<typeof sessionSchema>;
 
 /** The provider identity a sign-in starts a session with. */
-export type SessionIdentity = Omit<Session, "handle" | "expiresAt">;
+export type SessionIdentity = Omit<
+  Session,
+  "suggestedHandle" | "handle" | "expiresAt"
+>;
 
 /** The parts of a session a handler may change. */
 export type SessionChanges = Pick<Session, "handle">;
@@ -157,10 +166,15 @@ export class Auth {
     return parsed.data;
   }
 
-  /** Signs the publisher in: issues a new session for the identity, with no handle chosen. */
+  /**
+   * Signs the publisher in: issues a new session for the identity, with a handle suggested from
+   * the provider account and no handle chosen.
+   */
   async start(identity: SessionIdentity): Promise<Session> {
+    const suggestedHandle = suggestHandle(identity);
     const session: Session = {
       ...identity,
+      ...(suggestedHandle === undefined ? {} : { suggestedHandle }),
       handle: null,
       expiresAt: nowInSeconds() + sessionLifetimeSeconds,
     };

@@ -77,6 +77,17 @@ const userUrls: Record<Provider, string> = {
 
 const githubEmailsUrl = "https://api.github.com/user/emails";
 
+/**
+ * The handle each provider's fake account suggests: the username for GitHub and GitLab, and
+ * the cleaned part of the email before the @ for Google and Microsoft.
+ */
+const suggestedHandles: Record<Provider, string> = {
+  github: "ada",
+  gitlab: "ada",
+  google: "ada-never-logged",
+  microsoft: "ada-never-logged",
+};
+
 const grantedScopes: Record<Provider, string> = {
   github: "user:email",
   gitlab: "read_user",
@@ -380,6 +391,7 @@ describe("GET /api/session/providers/:provider/callback", () => {
           name: "Ada Lovelace",
           initials: "AL",
           provider,
+          suggestedHandle: suggestedHandles[provider],
           handle: null,
           accountExists: false,
         },
@@ -607,6 +619,112 @@ describe("GET /api/session/providers/:provider/callback", () => {
       expect(JSON.stringify(await readSession(response))).not.toMatch(
         /password/iu,
       );
+    },
+  );
+});
+
+describe("the suggested handle", () => {
+  test.each(["github", "gitlab"] as const)(
+    "is the cleaned %s username, with the provider named",
+    async (provider) => {
+      const usernameField = provider === "github" ? "login" : "username";
+      fakeProvider(provider, {
+        user: { id: 51, [usernameField]: "Octo_Cat", name: "Octo Cat", email },
+      });
+
+      const response = await signIn(provider);
+
+      expect(await readSession(response)).toMatchObject({
+        user: { provider, suggestedHandle: "octo-cat" },
+      });
+    },
+  );
+
+  test.each(["google", "microsoft"] as const)(
+    "is the cleaned part of the %s email before the @, with the provider named",
+    async (provider) => {
+      const user =
+        provider === "google"
+          ? { id: "g-51", name: "Jane Doe", email: "Jane.Doe+x@example.com" }
+          : {
+              id: "m-51",
+              displayName: "Jane Doe",
+              mail: "Jane.Doe+x@example.com",
+            };
+      fakeProvider(provider, { user });
+
+      const response = await signIn(provider);
+
+      expect(await readSession(response)).toMatchObject({
+        user: { provider, suggestedHandle: "jane-doe-x" },
+      });
+    },
+  );
+
+  test("is left out when the username cleans to under 3 characters", async () => {
+    fakeProvider("github", { user: { id: 52, login: "A_", name: "Ada" } });
+
+    const response = await signIn("github");
+
+    const { user } = await readSession(response);
+    expect(user).toMatchObject({ provider: "github", name: "Ada" });
+    expect(user).not.toHaveProperty("suggestedHandle");
+    expect(sessionPayload(response)).not.toHaveProperty("suggestedHandle");
+  });
+
+  test("is left out when Google returns no email", async () => {
+    fakeProvider("google", { user: { id: "g-52", name: "Ada" } });
+
+    const response = await signIn("google");
+
+    expect((await readSession(response)).user).not.toHaveProperty(
+      "suggestedHandle",
+    );
+  });
+
+  test("is still returned when it is a reserved word", async () => {
+    fakeProvider("google", {
+      user: { id: "g-53", name: "Ada", email: "admin@example.com" },
+    });
+
+    const response = await signIn("google");
+
+    expect(await readSession(response)).toMatchObject({
+      user: { suggestedHandle: "admin" },
+    });
+  });
+
+  test("is kept in the session cookie at sign-in", async () => {
+    fakeProvider("microsoft");
+
+    const response = await signIn("microsoft");
+
+    expect(sessionPayload(response)).toMatchObject({
+      provider: "microsoft",
+      suggestedHandle: "ada-never-logged",
+      handle: null,
+    });
+  });
+
+  test.each(providers)(
+    "comes with a %s session read that names the provider and never contains the email",
+    async (provider) => {
+      const logs = captureLogs();
+      fakeProvider(provider);
+
+      const response = await signIn(provider);
+      const session = await get(
+        "/api/session",
+        cookieNamed(response, "__Host-session"),
+      );
+
+      const body = await session.text();
+      expect(JSON.parse(body)).toMatchObject({
+        user: { provider, suggestedHandle: suggestedHandles[provider] },
+      });
+      expect(body).not.toContain(email);
+      expect(body).not.toContain("example.com");
+      expect(logs()).not.toContain(email);
     },
   );
 });

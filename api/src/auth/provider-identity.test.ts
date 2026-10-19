@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { identityFromProviderUser } from "./provider-identity";
 
 describe("identityFromProviderUser for GitHub", () => {
-  test("keeps the name, email, avatar and account ID", () => {
+  test("keeps the name, username, email, avatar and account ID", () => {
     expect(
       identityFromProviderUser("github", {
         id: 4242,
@@ -16,6 +16,7 @@ describe("identityFromProviderUser for GitHub", () => {
       provider: "github",
       providerAccountId: "4242",
       name: "Ada Lovelace",
+      username: "ada",
       email: "ada@example.com",
       avatarUrl: "https://avatars.example.com/ada",
     });
@@ -24,7 +25,15 @@ describe("identityFromProviderUser for GitHub", () => {
   test("uses the username when the account has no name", () => {
     expect(
       identityFromProviderUser("github", { id: 1, login: "ada", name: null }),
-    ).toMatchObject({ name: "ada" });
+    ).toMatchObject({ name: "ada", username: "ada" });
+  });
+
+  test("completes without a username when the account has none", () => {
+    expect(identityFromProviderUser("github", { id: 1, name: "Ada" })).toEqual({
+      provider: "github",
+      providerAccountId: "1",
+      name: "Ada",
+    });
   });
 
   test("completes without an email when the provider returns none", () => {
@@ -39,6 +48,7 @@ describe("identityFromProviderUser for GitHub", () => {
       provider: "github",
       providerAccountId: "1",
       name: "Ada",
+      username: "ada",
     });
   });
 

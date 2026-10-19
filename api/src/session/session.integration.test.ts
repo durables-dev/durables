@@ -71,7 +71,7 @@ describe("GET /api/session", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
-  test("returns name, initials, provider, handle and account-exists, and no email", async () => {
+  test("returns name, initials, provider, suggestion, handle and account-exists, and no email", async () => {
     const cookie = await signIn(identity({ name: "David Dieruf" }));
 
     const response = await readSession(cookie);
@@ -84,13 +84,28 @@ describe("GET /api/session", () => {
         name: "David Dieruf",
         initials: "DD",
         provider: "google",
+        suggestedHandle: "ada",
         handle: null,
         accountExists: false,
       },
     });
     expect(body).not.toContain("ada@example.com");
+    expect(body).not.toContain("example.com");
     expect(body).not.toContain("avatar");
     expect(body).not.toContain("providerAccountId");
+  });
+
+  test("leaves the suggestion out when the email cleans to under 3 characters", async () => {
+    const cookie = await signIn(identity({ email: "a.@example.com" }));
+
+    const { user } = await (
+      await readSession(cookie)
+    ).json<{
+      user: Record<string, unknown>;
+    }>();
+
+    expect(user).toMatchObject({ provider: "google" });
+    expect(user).not.toHaveProperty("suggestedHandle");
   });
 
   test("reports that an account exists for a linked provider identity", async () => {
