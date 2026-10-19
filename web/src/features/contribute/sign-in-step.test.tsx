@@ -20,6 +20,26 @@ async function openAt(...entries: string[]) {
   return { screen, router };
 }
 
+// Every address the router shows, from the first, including redirects that replace an entry.
+function recordAddresses(router: ReturnType<typeof createMemoryRouter>) {
+  const visited = [router.state.location.pathname];
+  router.subscribe((state) => {
+    if (state.location.pathname !== visited.at(-1)) {
+      visited.push(state.location.pathname);
+    }
+  });
+  return visited;
+}
+
+async function openRecordingAt(entry: string) {
+  const router = createMemoryRouter(routes, { initialEntries: [entry] });
+  const visited = recordAddresses(router);
+  const screen = await render(<RouterProvider router={router} />, {
+    wrapper: TestProviders,
+  });
+  return { screen, router, visited };
+}
+
 type Screen = Awaited<ReturnType<typeof openAt>>["screen"];
 
 const publisher: SessionUser = {
@@ -265,7 +285,8 @@ describe("back from the provider", () => {
 
   test("signed in with an account, opening Code directly stays on Code", async () => {
     signIn({ accountExists: true, handle: "ddieruf" });
-    const { screen, router } = await openAt("/contribute/code");
+    const { screen, router, visited } =
+      await openRecordingAt("/contribute/code");
 
     await expect
       .element(
@@ -275,6 +296,28 @@ describe("back from the provider", () => {
       )
       .toHaveAttribute("aria-current", "step");
     expect(router.state.location.pathname).toBe("/contribute/code");
+    expect(visited).toEqual(["/contribute/code"]);
+  });
+
+  test("signed in with an account and Code finished, reopening Detected stays on Detected", async () => {
+    signIn({ accountExists: true, handle: "ddieruf" });
+    sessionStorage.setItem(
+      draftStorageKey,
+      JSON.stringify({ finished: ["code"] }),
+    );
+    const { screen, router, visited } = await openRecordingAt(
+      "/contribute/detected",
+    );
+
+    await expect
+      .element(
+        screen
+          .getByRole("navigation", { name: "Steps" })
+          .getByRole("link", { name: "Detected" }),
+      )
+      .toHaveAttribute("aria-current", "step");
+    expect(router.state.location.pathname).toBe("/contribute/detected");
+    expect(visited).toEqual(["/contribute/detected"]);
   });
 
   test("after a sign-in that did not finish, the message shows and the buttons stay usable", async () => {
