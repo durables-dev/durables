@@ -3,7 +3,7 @@ import { googleAuth } from "@hono/oauth-providers/google";
 import { msentraAuth } from "@hono/oauth-providers/msentra";
 import type { MiddlewareHandler } from "hono";
 import type { AppEnv } from "../app-env";
-import type { Provider } from "../storage/storage";
+import { providers, type Provider } from "../storage/storage";
 
 // The providers whose sign-in runs through @hono/oauth-providers (ADR 0007). GitLab is one of
 // the four providers too, but the package has no GitLab flow, so it is hand-written apart
@@ -20,6 +20,10 @@ export type OAuthProvider = (typeof oauthProviders)[number];
 export const isOAuthProvider = (name: string): name is OAuthProvider =>
   (oauthProviders as readonly string[]).includes(name);
 
+/** True for any of the four sign-in providers, GitLab included. */
+export const isSignInProvider = (name: string): name is Provider =>
+  (providers as readonly string[]).includes(name);
+
 /**
  * The scopes each provider is asked for. Identity only: name, email, avatar and account ID.
  * No repository, organization or other scopes in the MVP (ADR 0007).
@@ -30,7 +34,10 @@ export const identityScopes = {
   google: ["openid", "email", "profile"],
   // User.Read is what Microsoft Graph's /me needs to return the signed-in user.
   microsoft: ["openid", "email", "profile", "User.Read"],
-} as const satisfies Record<OAuthProvider, readonly string[]>;
+  // read_user is what GitLab's /api/v4/user needs. GitLab's openid scope is not used, because
+  // it also exposes the user's group memberships.
+  gitlab: ["read_user"],
+} as const satisfies Record<Provider, readonly string[]>;
 
 /** Personal and work or school Microsoft accounts can both sign in. */
 const microsoftTenant = "common";

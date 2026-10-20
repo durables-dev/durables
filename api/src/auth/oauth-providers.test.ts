@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { providers } from "../storage/storage";
 import {
   identityScopes,
   isOAuthProvider,
-  oauthProviders,
+  isSignInProvider,
   TimeoutError,
   withTimeout,
 } from "./oauth-providers";
@@ -15,14 +16,21 @@ describe("identityScopes", () => {
   test("ask each provider for identity only", () => {
     expect(identityScopes).toEqual({
       github: ["user:email"],
+      gitlab: ["read_user"],
       google: ["openid", "email", "profile"],
       microsoft: ["openid", "email", "profile", "User.Read"],
     });
   });
 
-  test("never include a repository or organization scope", () => {
+  test("never ask GitLab for a repository, group or API scope", () => {
+    for (const scope of identityScopes.gitlab) {
+      expect(scope).not.toMatch(/repository|group|api|write|sudo|admin/iu);
+    }
+  });
+
+  test("never include a repository or organization scope for any provider", () => {
     const repositoryOrOrganization = /repo|org|gist|workflow|write|admin/iu;
-    for (const provider of oauthProviders) {
+    for (const provider of providers) {
       for (const scope of identityScopes[provider]) {
         expect(scope).not.toMatch(repositoryOrOrganization);
       }
@@ -35,10 +43,28 @@ describe("isOAuthProvider", () => {
     expect(["github", "google", "microsoft"].every(isOAuthProvider)).toBe(true);
   });
 
+  test("refuses GitLab, whose flow is hand-written", () => {
+    expect(isOAuthProvider("gitlab")).toBe(false);
+  });
+
   test("refuses any other name", () => {
     expect(isOAuthProvider("myspace")).toBe(false);
     expect(isOAuthProvider("GitHub")).toBe(false);
     expect(isOAuthProvider("")).toBe(false);
+  });
+});
+
+describe("isSignInProvider", () => {
+  test("accepts all four providers, GitLab included", () => {
+    expect(
+      ["github", "gitlab", "google", "microsoft"].every(isSignInProvider),
+    ).toBe(true);
+  });
+
+  test("refuses any other name", () => {
+    expect(isSignInProvider("myspace")).toBe(false);
+    expect(isSignInProvider("GitLab")).toBe(false);
+    expect(isSignInProvider("")).toBe(false);
   });
 });
 

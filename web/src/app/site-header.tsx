@@ -1,5 +1,6 @@
+import { contributeEntryState } from "@/lib/contribute-origin";
 import { useSessionUser } from "@/lib/use-session-user";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { AccountMenu } from "./account-menu";
 import styles from "./site-header.module.css";
 
@@ -14,9 +15,11 @@ export interface SiteHeaderProps {
 }
 
 // The logo at the left. At the right, the Contribute button and, once signed in, the
-// publisher's initials, which open the account menu.
+// publisher's initials, which open the account menu. The Contribute link tells the flow which
+// page it was followed from, so the flow's Back can return there.
 export function SiteHeader({ contribute = true }: SiteHeaderProps) {
   const user = useSessionUser();
+  const location = useLocation();
 
   return (
     <header className={styles["header"]}>
@@ -36,7 +39,11 @@ export function SiteHeader({ contribute = true }: SiteHeaderProps) {
       {contribute || user ? (
         <div className={styles["actions"]}>
           {contribute ? (
-            <Link to="/contribute" className={styles["contribute"]}>
+            <Link
+              to="/contribute"
+              state={contributeEntryState(location)}
+              className={styles["contribute"]}
+            >
               Contribute
             </Link>
           ) : null}

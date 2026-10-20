@@ -51,3 +51,16 @@ export function resolveStep(
   }
   return parsed.data;
 }
+
+/**
+ * The finished steps. A publisher whose provider account already has a Durables account has
+ * finished Profile & Handle, whatever the draft holds, so they go straight to Code.
+ */
+export function finishedSteps(
+  draftFinished: readonly StepId[],
+  accountExists: boolean,
+): readonly StepId[] {
+  return accountExists && !draftFinished.includes("profile")
+    ? ["profile", ...draftFinished]
+    : draftFinished;
+}

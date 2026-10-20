@@ -3,16 +3,22 @@ import {
   deleteCookie,
   getCookie,
   getSignedCookie,
+  setCookie,
   setSignedCookie,
 } from "hono/cookie";
 import { z } from "zod";
 import type { AppEnv } from "../app-env";
+import { suggestHandle } from "../handles/handle-suggestion";
 import { ProblemError } from "../http/problem";
-import { providers } from "../storage/storage";
+import { type Provider, providers } from "../storage/storage";
+import {
+  fetchGitLabUser,
+  gitLabAuthorizationUrl,
+  GitLabProfileError,
+} from "./gitlab";
 import {
   type ClientCredentials,
   exchangeTimeoutMs,
-  type OAuthProvider,
   providerMiddleware,
   providerUserVariable,
   stateCookieName,
@@ -50,6 +56,11 @@ const sessionSchema = z.object({
   avatarUrl: z.string().optional(),
   /** The provider account's username, where the provider has one. Never shown as the name. */
   username: z.string().optional(),
+  /**
+   * The handle suggested from the provider account at sign-in, already cleaned to fit the
+   * format rule. Absent when nothing in the account cleans to a valid handle.
+   */
+  suggestedHandle: z.string().optional(),
   handle: z.string().nullable(),
   /** Seconds since the epoch. */
   expiresAt: z.number().int(),
@@ -58,13 +69,16 @@ const sessionSchema = z.object({
 export type Session = z.infer<typeof sessionSchema>;
 
 /** The provider identity a sign-in starts a session with. */
-export type SessionIdentity = Omit<Session, "handle" | "expiresAt">;
+export type SessionIdentity = Omit<
+  Session,
+  "suggestedHandle" | "handle" | "expiresAt"
+>;
 
 /** The parts of a session a handler may change. */
 export type SessionChanges = Pick<Session, "handle">;
 
 /** Each provider's OAuth application credentials, as supplied at deploy. */
-export type ProviderClients = Partial<Record<OAuthProvider, ClientCredentials>>;
+export type ProviderClients = Partial<Record<Provider, ClientCredentials>>;
 
 /** Why a provider sign-in did not finish. Logged; never shown to the visitor. */
 type SignInFailure =
@@ -74,11 +88,22 @@ type SignInFailure =
   | "state-mismatch"
   | "exchange-failed"
   | "timeout"
+  | "profile-failed"
   | "incomplete-identity";
 
 const nowInSeconds = () => Math.floor(Date.now() / 1000);
 
 const encoder = new TextEncoder();
+
+/** How long a started sign-in may wait for its callback, as the sign-in package allows. */
+const stateLifetimeSeconds = 600;
+
+/** A fresh state for one sign-in: 32 random bytes, base64url, as the sign-in package makes. */
+const randomState = (): string =>
+  btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
 
 /** Compares two secrets in constant time (api/CONVENTIONS.md). */
 const secretsMatch = (a: string, b: string): boolean => {
@@ -141,10 +166,15 @@ export class Auth {
     return parsed.data;
   }
 
-  /** Signs the publisher in: issues a new session for the identity, with no handle chosen. */
+  /**
+   * Signs the publisher in: issues a new session for the identity, with a handle suggested from
+   * the provider account and no handle chosen.
+   */
   async start(identity: SessionIdentity): Promise<Session> {
+    const suggestedHandle = suggestHandle(identity);
     const session: Session = {
       ...identity,
+      ...(suggestedHandle === undefined ? {} : { suggestedHandle }),
       handle: null,
       expiresAt: nowInSeconds() + sessionLifetimeSeconds,
     };
@@ -169,12 +199,13 @@ export class Auth {
   }
 
   /**
-   * Sends the visitor to the provider's consent screen, asking only for identity scopes. The
-   * package sets the state cookie the callback checks. The callback URL must be the one
+   * Sends the visitor to the provider's consent screen, asking only for identity scopes, and
+   * sets the state cookie the callback checks. The package does this for every provider but
+   * GitLab, whose flow is hand-written. The callback URL must be the one
    * completeProviderSignIn is given.
    */
   async redirectToProvider(
-    provider: OAuthProvider,
+    provider: Provider,
     callbackUrl: string,
   ): Promise<Response> {
     const c = this.#context;
@@ -184,6 +215,9 @@ export class Auth {
         status: 400,
         detail: "Starting sign-in takes no code.",
       });
+    }
+    if (provider === "gitlab") {
+      return this.#redirectToGitLab(callbackUrl);
     }
     const middleware = providerMiddleware(
       provider,
@@ -205,7 +239,7 @@ export class Auth {
    * It does not start a session; the caller does that with the identity.
    */
   async completeProviderSignIn(
-    provider: OAuthProvider,
+    provider: Provider,
     callbackUrl: string,
   ): Promise<SessionIdentity | undefined> {
     const c = this.#context;
@@ -218,32 +252,73 @@ export class Auth {
           error === "access_denied" ? "cancelled" : "provider-error",
         );
       }
-      if (c.req.query("code") === undefined) {
+      const code = c.req.query("code");
+      if (code === undefined) {
         return this.#signInFailed(provider, "missing-code");
       }
       if (!this.#stateMatches()) {
         return this.#signInFailed(provider, "state-mismatch");
       }
-      const middleware = providerMiddleware(provider, client, callbackUrl);
-      await withTimeout(
-        Promise.resolve(middleware(c, () => Promise.resolve())),
+      const user = await withTimeout(
+        this.#providerUser(provider, client, code, callbackUrl),
         this.#exchangeTimeoutMs,
       );
-      const identity = identityFromProviderUser(
-        provider,
-        c.get(providerUserVariable[provider]),
-      );
+      const identity = identityFromProviderUser(provider, user);
       return identity ?? this.#signInFailed(provider, "incomplete-identity");
     } catch (error) {
       return this.#signInFailed(
         provider,
-        error instanceof TimeoutError ? "timeout" : "exchange-failed",
+        error instanceof TimeoutError
+          ? "timeout"
+          : error instanceof GitLabProfileError
+            ? "profile-failed"
+            : "exchange-failed",
         error,
       );
     } finally {
       this.#dropProviderResults();
       deleteCookie(c, stateCookieName, { path: "/", secure: true });
     }
+  }
+
+  /**
+   * Starts a GitLab sign-in the way the package starts the others: a fresh state in a short
+   * cookie, and a redirect to the consent screen carrying it.
+   */
+  #redirectToGitLab(callbackUrl: string): Response {
+    const c = this.#context;
+    const { clientId } = this.#client("gitlab");
+    const state = randomState();
+    setCookie(c, stateCookieName, state, {
+      maxAge: stateLifetimeSeconds,
+      httpOnly: true,
+      path: "/",
+      secure: true,
+      sameSite: "Lax",
+    });
+    return c.redirect(
+      gitLabAuthorizationUrl({ clientId, callbackUrl, state }),
+      302,
+    );
+  }
+
+  /**
+   * Exchanges the code and returns the provider's user record. GitLab runs the hand-written
+   * flow; the others run the package, which leaves the record on the context.
+   */
+  async #providerUser(
+    provider: Provider,
+    client: { clientId: string; clientSecret: string },
+    code: string,
+    callbackUrl: string,
+  ): Promise<unknown> {
+    if (provider === "gitlab") {
+      return fetchGitLabUser(client, code, callbackUrl);
+    }
+    const c = this.#context;
+    const middleware = providerMiddleware(provider, client, callbackUrl);
+    await middleware(c, () => Promise.resolve());
+    return c.get(providerUserVariable[provider]);
   }
 
   /** True when the state the provider returned is the one the start step stored. */
@@ -275,7 +350,7 @@ export class Auth {
    * error's name are logged: never its message, which may quote the provider's answer.
    */
   #signInFailed(
-    provider: OAuthProvider,
+    provider: Provider,
     reason: SignInFailure,
     error?: unknown,
   ): undefined {
@@ -295,7 +370,7 @@ export class Auth {
    * Whether this provider's credentials are configured. When they are not, it logs the
    * misconfiguration, and the sign-in routes send the visitor to the failure redirect.
    */
-  providerAvailable(provider: OAuthProvider): boolean {
+  providerAvailable(provider: Provider): boolean {
     const client = this.#clients[provider];
     if (!client?.clientId || !client.clientSecret) {
       console.error({
@@ -308,7 +383,7 @@ export class Auth {
     return true;
   }
 
-  #client(provider: OAuthProvider): { clientId: string; clientSecret: string } {
+  #client(provider: Provider): { clientId: string; clientSecret: string } {
     const client = this.#clients[provider];
     // The routes check providerAvailable first. This guard keeps the method fail-closed.
     if (!client?.clientId || !client.clientSecret) {
