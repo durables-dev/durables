@@ -5,7 +5,8 @@ export interface StepFooterProps {
   /** Said beside Continue, as while it is disabled. */
   hint?: string | undefined;
   continueDisabled: boolean;
-  onContinue: () => void;
+  /** Without it, Continue submits the form the footer sits in. */
+  onContinue?: (() => void) | undefined;
 }
 
 // The foot of a step: Back at the left; at the right, the hint and Continue. The hint is a
@@ -26,7 +27,7 @@ export function StepFooter({
           {hint}
         </span>
         <button
-          type="button"
+          type={onContinue ? "button" : "submit"}
           className={styles["continue"]}
           disabled={continueDisabled}
           onClick={onContinue}

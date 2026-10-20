@@ -36,7 +36,7 @@ export function ProfileStep() {
 
   return (
     <section aria-label="Profile & Handle">
-      <HandleStep />
+      <HandleStep user={user} />
     </section>
   );
 }
