@@ -58,13 +58,24 @@ export const pythonTypeName: Pattern = {
     /^(["']?)([A-Za-z_][\w.]*(?:\[[\w., |[\]]*\])?(?:[ \t]*\|[ \t]*[A-Za-z_][\w.]*(?:\[[\w., |[\]]*\])?)*)\1$/,
 };
 
-/** A non-retryable application error being raised, such as `raise ApplicationError(..., non_retryable=True)`. */
+/**
+ * A raise of the SDK's application error, up to the opening parenthesis of its arguments, such
+ * as `raise ApplicationError(`. It counts when `pythonNonRetryableArgument` is one of the
+ * arguments inside those parentheses.
+ */
 export const pythonNonRetryableRaise: Pattern = {
   name: "python-non-retryable-raise",
   description:
-    "A raise of the SDK's ApplicationError with non_retryable=True among its arguments. The line reported is the line of non_retryable=True.",
-  regex:
-    /(?<![\w.])raise[ \t]+(?:[\w.]+\.)?ApplicationError\s*\((?:[^()]|\([^()]*\))*?\bnon_retryable\s*=\s*True\b/,
+    "A raise of the SDK's ApplicationError with non_retryable=True among its own arguments. The arguments may nest calls to any depth, and brackets inside strings are ignored. The line reported is the line of non_retryable=True.",
+  regex: /(?<![\w.])raise[ \t]+(?:[\w.]+\.)?ApplicationError\s*\(/,
+};
+
+/** The `non_retryable=True` keyword argument, as read inside a raised application error. */
+export const pythonNonRetryableArgument: Pattern = {
+  name: "python-non-retryable-argument",
+  description:
+    "The keyword argument non_retryable=True. It marks an error as non-retryable only when it is an argument of the raised ApplicationError itself, not of a call nested inside it.",
+  regex: /(?<![\w.])non_retryable\s*=\s*True\b/,
 };
 
 /** An environment variable read by name. Group 2 is the variable's name. */
@@ -118,9 +129,20 @@ export const pythonHeartbeatCall: Pattern = {
 export const pythonCommentOrString: Pattern = {
   name: "python-comment-or-string",
   description:
-    "A comment or a string literal. Nothing that starts inside one is detected, so commented-out code and examples inside strings are ignored.",
+    "A comment or a string literal. Nothing that starts inside one is detected, so commented-out code and examples inside strings are ignored. The replacement fields of an f-string, the parts in braces, are code and are detected.",
   regex:
     /#[^\n]*|"""[\s\S]*?(?:"""|$)|'''[\s\S]*?(?:'''|$)|"(?:[^"\\\n]|\\.)*"?|'(?:[^'\\\n]|\\.)*'?/,
+};
+
+/**
+ * The prefix of an f-string, read from the text just before a string's opening quote: f, rf or
+ * fr, in any case. The braced replacement fields of an f-string are code.
+ */
+export const pythonFStringPrefix: Pattern = {
+  name: "python-f-string-prefix",
+  description:
+    'The prefix that makes a string an f-string: f, rf or fr in any case, directly before the opening quote, such as f"Bearer {token}". The parts of an f-string in braces are code, so an environment read inside them is detected.',
+  regex: /(?<!\w)(?:[fF][rR]?|[rR][fF])$/,
 };
 
 /** Every Python pattern, as published in the rubric. */
@@ -131,12 +153,14 @@ export const pythonPatterns: readonly Pattern[] = [
   pythonAnnotatedParameter,
   pythonTypeName,
   pythonNonRetryableRaise,
+  pythonNonRetryableArgument,
   pythonEnvironmentRead,
   pythonImportStatement,
   pythonImportedModule,
   pythonFromImport,
   pythonHeartbeatCall,
   pythonCommentOrString,
+  pythonFStringPrefix,
 ];
 
 /** The Temporal SDK's own package, which Dependencies leaves out. */
@@ -200,6 +224,110 @@ const lineFinder = (text: string): LineOf => {
     }
     return low + 1;
   };
+};
+
+/** Where a string literal's body starts after its opening quote, and where it ends. */
+const stringBody = (literal: string) => {
+  const quote = literal.startsWith('"""') || literal.startsWith("'''") ? 3 : 1;
+  const closing = literal.slice(0, quote);
+  const end =
+    literal.length >= quote * 2 && literal.endsWith(closing)
+      ? literal.length - quote
+      : literal.length;
+  return { start: quote, end };
+};
+
+/**
+ * The braced replacement fields of an f-string's body, as offsets into the literal. Doubled
+ * braces are literal text. Brackets and strings inside a field are skipped over, so a field
+ * ends at its own closing brace.
+ */
+const fStringFields = (literal: string): Span[] => {
+  const { start, end } = stringBody(literal);
+  const fields: Span[] = [];
+  let i = start;
+  while (i < end) {
+    const character = literal[i];
+    if (character === "{" && literal[i + 1] === "{") {
+      i += 2;
+      continue;
+    }
+    if (character !== "{") {
+      i++;
+      continue;
+    }
+    const fieldStart = i;
+    let depth = 0;
+    while (i < end) {
+      const inner = literal[i] ?? "";
+      if (inner === "'" || inner === '"') {
+        const close = literal.indexOf(inner, i + 1);
+        i = close === -1 || close >= end ? end : close + 1;
+        continue;
+      }
+      if ("([{".includes(inner)) {
+        depth++;
+      } else if (")]}".includes(inner)) {
+        depth--;
+      }
+      i++;
+      if (depth === 0) {
+        break;
+      }
+    }
+    fields.push({ start: fieldStart, end: i });
+  }
+  return fields;
+};
+
+/**
+ * The spans of the text that are comments or strings, in order. An f-string's replacement
+ * fields are left out, so the code inside them is read like any other code.
+ */
+const ignoredSpans = (text: string): Span[] =>
+  allMatches(pythonCommentOrString, text).flatMap((match) => {
+    const start = match.index;
+    const literal = match[0];
+    const isFString =
+      !literal.startsWith("#") &&
+      pythonFStringPrefix.regex.test(text.slice(Math.max(0, start - 3), start));
+    if (!isFString) {
+      return [{ start, end: start + literal.length }];
+    }
+    const spans: Span[] = [];
+    let from = 0;
+    for (const field of fStringFields(literal)) {
+      spans.push({ start: start + from, end: start + field.start });
+      from = field.end;
+    }
+    spans.push({ start: start + from, end: start + literal.length });
+    return spans.filter((span) => span.end > span.start);
+  });
+
+/**
+ * For each offset of the text, the offset of the innermost open bracket around it, or -1. Built
+ * in one pass over the code, skipping comments and strings, so brackets inside them don't count.
+ */
+const enclosingBrackets = (text: string, ignored: readonly Span[]) => {
+  const enclosing = new Int32Array(text.length).fill(-1);
+  const open: number[] = [];
+  let next = 0;
+  for (let i = 0; i < text.length; i++) {
+    const span = ignored[next];
+    if (span !== undefined && i >= span.start) {
+      i = span.end - 1;
+      next++;
+      continue;
+    }
+    const character = text[i] ?? "";
+    enclosing[i] = open[open.length - 1] ?? -1;
+    if ("([{".includes(character)) {
+      open.push(i);
+    } else if (")]}".includes(character)) {
+      open.pop();
+    }
+  }
+  return enclosing;
 };
 
 /** Splits a parameter list on its top-level commas, leaving out empty entries. */
@@ -327,18 +455,25 @@ export const pythonDetector: Detector = {
   detect(source) {
     const { text } = source;
     const lineOf = lineFinder(text);
-    const ignored: Span[] = allMatches(pythonCommentOrString, text).map(
-      (match) => ({ start: match.index, end: match.index + match[0].length }),
-    );
+    const ignored = ignoredSpans(text);
     const inCode = (match: RegExpExecArray) => !isInside(ignored, match.index);
     const found = (pattern: Pattern) =>
       allMatches(pattern, text).filter(inCode);
 
-    const nonRetryableErrors: LineRef[] = found(pythonNonRetryableRaise).map(
-      (match) => ({
-        line: lineOf(match.index + match[0].lastIndexOf("non_retryable")),
-      }),
-    );
+    const enclosing = enclosingBrackets(text, ignored);
+    // The first non_retryable=True directly inside each open bracket, by the bracket's offset.
+    const nonRetryableArguments = new Map<number, number>();
+    for (const match of found(pythonNonRetryableArgument).reverse()) {
+      nonRetryableArguments.set(enclosing[match.index] ?? -1, match.index);
+    }
+    const nonRetryableErrors: LineRef[] = found(
+      pythonNonRetryableRaise,
+    ).flatMap((raise) => {
+      const argument = nonRetryableArguments.get(
+        raise.index + raise[0].length - 1,
+      );
+      return argument === undefined ? [] : [{ line: lineOf(argument) }];
+    });
     const configurationRead = firstByName(
       found(pythonEnvironmentRead).map((match) => ({
         name: match[2] ?? "",

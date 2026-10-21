@@ -346,6 +346,32 @@ describe("pythonDetector", () => {
     it("reports none when nothing is read", () => {
       expect(onlyActivity(activityWith()).configurationRead).toEqual([]);
     });
+
+    it("finds an environment read inside an f-string", () => {
+      const facts = onlyActivity(
+        activityWith(`    print(f"{os.environ['X']}")`),
+      );
+      expect(facts.configurationRead).toEqual([{ name: "X", line: 6 }]);
+    });
+
+    it("finds environment reads in the fields of every f-string prefix and quote style", () => {
+      const code = activityWith(
+        `    a = f"Bearer {os.environ['A']}"`,
+        `    b = rf'{os.getenv("B")}'`,
+        `    c = FR"x {environ.get('C')} y"`,
+        `    d = f"""{os.environ["D"]}`,
+        `    """`,
+        `    e = f"{{os.environ['E']}} {len(x)!r:>{width}}"`,
+        `    g = "{os.environ['G']}"`,
+        `    h = b"{os.environ['H']}"`,
+      );
+      expect(onlyActivity(code).configurationRead).toEqual([
+        { name: "A", line: 6 },
+        { name: "B", line: 7 },
+        { name: "C", line: 8 },
+        { name: "D", line: 9 },
+      ]);
+    });
   });
 
   describe("dependencies", () => {
@@ -455,6 +481,36 @@ describe("pythonDetector", () => {
         { line: 6 },
         { line: 8 },
       ]);
+    });
+
+    it("finds a non-retryable raise whose arguments nest calls two deep", () => {
+      const facts = onlyActivity(
+        activityWith(
+          "    raise ApplicationError(str(fmt(x)), non_retryable=True)",
+        ),
+      );
+      expect(facts.nonRetryableErrors).toEqual([{ line: 6 }]);
+    });
+
+    it("finds a non-retryable raise past deeper nesting and brackets inside strings", () => {
+      const code = activityWith(
+        "    raise ApplicationError(",
+        '        f"failed ({a(b(c(d)))})", ")(", "[",',
+        "        details=[{'k': (1, 2)}],",
+        "        non_retryable=True,",
+        "    )",
+      );
+      expect(onlyActivity(code).nonRetryableErrors).toEqual([{ line: 9 }]);
+    });
+
+    it("reports none when non_retryable=True belongs to a call nested in the arguments", () => {
+      const code = activityWith(
+        "    raise ApplicationError(wrap(non_retryable=True))",
+        '    raise ApplicationError("x", "non_retryable=True")',
+        "    raise ApplicationError(x)",
+        "    other(non_retryable=True)",
+      );
+      expect(onlyActivity(code).nonRetryableErrors).toEqual([]);
     });
 
     it("reports none for retryable errors, commented raises and no raise", () => {
