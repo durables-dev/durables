@@ -9,6 +9,7 @@ import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
 import { draftStorageKey } from "./draft";
+import { acceptedCheck, pastedCode } from "./test-drafts";
 
 // The real route tree, opened at the given history as if the publisher had walked it. The
 // last entry is the page on screen.
@@ -301,9 +302,10 @@ describe("back from the provider", () => {
 
   test("signed in with an account and Code finished, reopening Detected stays on Detected", async () => {
     signIn({ accountExists: true, handle: "ddieruf" });
+    // Code is finished while the pasted file is accepted.
     sessionStorage.setItem(
       draftStorageKey,
-      JSON.stringify({ finished: ["code"] }),
+      JSON.stringify({ finished: [], code: pastedCode, check: acceptedCheck }),
     );
     const { screen, router, visited } = await openRecordingAt(
       "/contribute/detected",

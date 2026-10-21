@@ -7,8 +7,9 @@ import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
 import { ContributeDraftProvider } from "./contribute-draft-provider";
-import { draftStorageKey } from "./draft";
+import { draftStorageKey, type Draft } from "./draft";
 import type { StepId } from "./steps";
+import { acceptedDraft } from "./test-drafts";
 import { useContributeDraft } from "./use-contribute-draft";
 
 // The real route tree, opened at an address as if typed into the browser.
@@ -22,7 +23,29 @@ async function openAt(path: string) {
 
 // A draft kept in the browser session from earlier in the flow.
 function keepDraft(finished: StepId[]) {
-  sessionStorage.setItem(draftStorageKey, JSON.stringify({ finished }));
+  keepWholeDraft({ finished });
+}
+
+function keepWholeDraft(draft: Draft) {
+  sessionStorage.setItem(draftStorageKey, JSON.stringify(draft));
+}
+
+// The session endpoint answers for a signed-in publisher with no account yet. Every step after
+// Profile & Handle is for signed-in publishers only.
+function signIn() {
+  worker.use(
+    http.get("/api/session", () =>
+      HttpResponse.json({
+        user: {
+          name: "Dana Dieruf",
+          initials: "DD",
+          provider: "google",
+          handle: "ddieruf",
+          accountExists: false,
+        },
+      }),
+    ),
+  );
 }
 
 function follows(first: Element, second: Element) {
@@ -118,6 +141,7 @@ test("locks every later step until the earlier steps are finished", async () => 
 });
 
 test("opens the next step once the steps before it are finished", async () => {
+  signIn();
   keepDraft(["profile"]);
   const { screen } = await openAt("/contribute/profile");
 
@@ -132,7 +156,9 @@ test("opens the next step once the steps before it are finished", async () => {
 
 describe("a finished step", () => {
   test("shows a tick", async () => {
-    keepDraft(["profile", "code"]);
+    signIn();
+    // Code is finished while the pasted file is accepted.
+    keepWholeDraft(acceptedDraft);
     const { screen } = await openAt("/contribute/detected");
 
     const nav = stepLinks(screen);
@@ -146,6 +172,7 @@ describe("a finished step", () => {
   });
 
   test("draws the tick on the positive token", async () => {
+    signIn();
     keepDraft(["profile"]);
     const { screen } = await openAt("/contribute/code");
 
@@ -164,6 +191,7 @@ describe("a finished step", () => {
   });
 
   test("an unfinished step shows its number, not a tick", async () => {
+    signIn();
     keepDraft(["profile"]);
     const { screen } = await openAt("/contribute/code");
 
@@ -187,6 +215,7 @@ describe("the address", () => {
   });
 
   test("a locked step redirects past the steps already finished", async () => {
+    signIn();
     keepDraft(["profile"]);
     const { screen, router } = await openAt("/contribute/details");
 
@@ -197,6 +226,7 @@ describe("the address", () => {
   });
 
   test("an unknown step falls back to the earliest unfinished step", async () => {
+    signIn();
     keepDraft(["profile"]);
     const { screen, router } = await openAt("/contribute/readme");
 
@@ -229,6 +259,7 @@ function FinishStep({ step }: { step: StepId }) {
 }
 
 test("reloading mid-flow keeps the draft and the current step", async () => {
+  signIn();
   const before = await render(
     <ContributeDraftProvider>
       <FinishStep step="profile" />
