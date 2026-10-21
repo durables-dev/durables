@@ -6,19 +6,14 @@ import {
   multipleActivities,
   noActivity,
   notTemporalActivity,
-  type Refusal,
   unacceptedSdk,
 } from "./refusals";
 import { isWithinSizeLimit } from "./size-limit";
 import { type Source, toSource } from "./source";
 import { unacceptedSdks } from "./unaccepted-sdks";
 
-// The checks pipeline (ADR 0008): pasted code in, the activity's facts or a refusal out.
-// It never logs, and nothing it throws carries the code.
-
-export type CheckOutcome =
-  | { readonly accepted: true; readonly facts: Facts }
-  | { readonly accepted: false; readonly refusal: Refusal };
+// The checks pipeline (ADR 0008): pasted code in, the activity's facts out, or a CheckRefusal
+// thrown. It never logs, and nothing it throws carries the code.
 
 /**
  * A detector threw. The message names the SDK and the original error's name only, never its
@@ -70,24 +65,23 @@ const detect = (detector: Detector, source: Source) => {
   }
 };
 
-const refuse = (refusal: Refusal): CheckOutcome => ({
-  accepted: false,
-  refusal,
-});
-
 /**
- * Checks pasted code. Accepted SDKs are recognised through `detectors`; Java, Go and PHP are
- * recognised so they can be refused by name.
+ * Checks pasted code and returns the activity's facts. Accepted SDKs are recognised through
+ * `detectors`; Java, Go and PHP are recognised so they can be refused by name.
+ *
+ * @throws {CheckRefusal} when the file is too large, isn't a Temporal activity, is in an SDK
+ * Durables doesn't accept, or has no activity or more than one.
+ * @throws {DetectorFailure} when a detector throws.
  */
 export const checkCode = (
   code: string,
   detectors: readonly Detector[],
-): CheckOutcome => {
+): Facts => {
   if (!isWithinSizeLimit(code)) {
-    return refuse(codeTooLarge());
+    throw codeTooLarge();
   }
   if (code.trim() === "") {
-    return refuse(notTemporalActivity());
+    throw notTemporalActivity();
   }
 
   const source = toSource(code);
@@ -97,20 +91,20 @@ export const checkCode = (
   ];
   const chosen = chooseSdk(source.text, candidates);
   if (chosen === undefined) {
-    return refuse(notTemporalActivity());
+    throw notTemporalActivity();
   }
   if (!chosen.accepted) {
-    return refuse(unacceptedSdk(chosen.markers.sdk));
+    throw unacceptedSdk(chosen.markers.sdk);
   }
 
   const detector = chosen.markers;
   const activities = detect(detector, source);
   const [only, ...rest] = activities;
   if (only === undefined) {
-    return refuse(noActivity());
+    throw noActivity();
   }
   if (rest.length > 0) {
-    return refuse(multipleActivities(activities.length));
+    throw multipleActivities(activities.length);
   }
-  return { accepted: true, facts: { sdk: detector.sdk, ...only } };
+  return { sdk: detector.sdk, ...only };
 };

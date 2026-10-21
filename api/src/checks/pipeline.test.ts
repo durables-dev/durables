@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Detector } from "./detector";
 import type { AcceptedSdk, ActivityFacts } from "./facts";
 import { checkCode, DetectorFailure } from "./pipeline";
-import { refusalTypes } from "./refusals";
+import { CheckRefusal, refusalTypes } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
 import { lineAt, type Source } from "./source";
 
@@ -53,12 +53,21 @@ const lineCountingStub: Detector = {
     ),
 };
 
-const refusalOf = (code: string, detectors: readonly Detector[]) => {
-  const outcome = checkCode(code, detectors);
-  if (outcome.accepted) {
-    throw new Error("Expected a refusal");
+/** The refusal checkCode throws, so a test can assert on it. */
+const thrownBy = (code: string, detectors: readonly Detector[]) => {
+  try {
+    checkCode(code, detectors);
+  } catch (error) {
+    return error;
   }
-  return outcome.refusal;
+  throw new Error("Expected a refusal");
+};
+
+/** The Problem Details body of the refusal checkCode throws. */
+const refusalOf = (code: string, detectors: readonly Detector[]) => {
+  const error = thrownBy(code, detectors);
+  expect(error).toBeInstanceOf(CheckRefusal);
+  return (error as CheckRefusal).problem;
 };
 
 const javaActivity = [
@@ -110,6 +119,7 @@ describe("checkCode", () => {
         type: refusalTypes.noActivity,
         status: 422,
         title: expect.any(String) as string,
+        detail: expect.any(String) as string,
       });
     });
 
@@ -140,6 +150,7 @@ describe("checkCode", () => {
           type: refusalTypes.unacceptedSdk,
           status: 422,
           title: expect.any(String) as string,
+          detail: expect.stringContaining(sdk) as string,
           sdk,
         });
       },
@@ -163,6 +174,7 @@ describe("checkCode", () => {
           type: refusalTypes.multipleActivities,
           status: 422,
           title: expect.any(String) as string,
+          detail: expect.stringContaining(String(count)) as string,
           count,
         });
       },
@@ -188,7 +200,7 @@ describe("checkCode", () => {
 
     it("checks a file of exactly the limit", () => {
       const code = padTo("STUB_SDK\n", MAX_CODE_BYTES);
-      expect(checkCode(code, [stub([facts("act")])]).accepted).toBe(true);
+      expect(checkCode(code, [stub([facts("act")])]).activity.name).toBe("act");
     });
 
     it("refuses a file one byte over the limit as too large", () => {
@@ -197,6 +209,7 @@ describe("checkCode", () => {
         type: refusalTypes.codeTooLarge,
         status: 413,
         title: expect.any(String) as string,
+        detail: expect.any(String) as string,
         limitBytes: MAX_CODE_BYTES,
       });
     });
@@ -216,22 +229,16 @@ describe("checkCode", () => {
     const typescript = stub([facts("tsAct")], "TypeScript", "TS");
 
     it("chooses the SDK with an activity marker when a file has markers for two", () => {
-      const outcome = checkCode("PY_SDK\nTS_SDK\nTS_ACTIVITY\n", [
+      const found = checkCode("PY_SDK\nTS_SDK\nTS_ACTIVITY\n", [
         python,
         typescript,
       ]);
-      expect(outcome).toMatchObject({
-        accepted: true,
-        facts: { sdk: "TypeScript" },
-      });
+      expect(found.sdk).toBe("TypeScript");
     });
 
     it("chooses an accepted SDK's activity over an unaccepted SDK's import", () => {
       const code = `PY_SDK\nPY_ACTIVITY\nimport io.temporal.client.WorkflowClient;\n`;
-      expect(checkCode(code, [python])).toMatchObject({
-        accepted: true,
-        facts: { sdk: "Python" },
-      });
+      expect(checkCode(code, [python]).sdk).toBe("Python");
     });
 
     it("names an unaccepted SDK whose activity marker is the only one", () => {
@@ -249,10 +256,7 @@ describe("checkCode", () => {
 
     it("takes the earlier detector when two SDKs have activity markers", () => {
       const code = "PY_SDK\nPY_ACTIVITY\nTS_SDK\nTS_ACTIVITY\n";
-      expect(checkCode(code, [python, typescript])).toMatchObject({
-        accepted: true,
-        facts: { sdk: "Python" },
-      });
+      expect(checkCode(code, [python, typescript]).sdk).toBe("Python");
     });
   });
 
@@ -260,8 +264,8 @@ describe("checkCode", () => {
     it("passes the detector's result through unchanged, with its SDK", () => {
       const found = facts("post_slack_message", 25);
       expect(checkCode("STUB_SDK", [stub([found], ".NET")])).toEqual({
-        accepted: true,
-        facts: { sdk: ".NET", ...found },
+        sdk: ".NET",
+        ...found,
       });
     });
 
@@ -269,7 +273,7 @@ describe("checkCode", () => {
       const lines = ["STUB_SDK", "", "STUB_ACTIVITY first", "x", "y"];
       const lf = checkCode(lines.join("\n"), [lineCountingStub]);
       const crlf = checkCode(lines.join("\r\n"), [lineCountingStub]);
-      expect(lf).toMatchObject({ facts: { activity: { line: 3 } } });
+      expect(lf.activity.line).toBe(3);
       expect(crlf).toEqual(lf);
     });
   });
@@ -306,11 +310,14 @@ describe("checkCode", () => {
       "logs no code during a %s refusal",
       (_, code, detectors: readonly Detector[]) => {
         const spies = captureConsole();
-        const outcome = checkCode(code, detectors);
-        expect(outcome.accepted).toBe(false);
+        const refusal = thrownBy(code, detectors);
+        expect(refusal).toBeInstanceOf(CheckRefusal);
         const logged = JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
         expect(logged).not.toContain(secret);
-        expect(JSON.stringify(outcome)).not.toContain(secret);
+        const { message, stack, problem } = refusal as CheckRefusal;
+        expect(message).not.toContain(secret);
+        expect(stack).not.toContain(secret);
+        expect(JSON.stringify(problem)).not.toContain(secret);
       },
     );
 
