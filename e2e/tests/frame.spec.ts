@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures";
+import { expect, publisherInitials, test } from "../fixtures";
 
 const marks = {
   light: "/durables-mark-on-cream.svg",
@@ -44,23 +44,29 @@ async function enforceImagePolicy(page: Page) {
   });
 }
 
-test("the home page shows the Durables header with the logo link", async ({
-  page,
-  expectAccessible,
-}) => {
-  await page.goto("/");
+test.describe("signed out", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
 
-  const header = page.getByRole("banner");
-  await expect(header).toBeVisible();
-  await expect(
-    header.getByRole("link", { name: "Durables home" }),
-  ).toBeVisible();
-  // Signed out, the header's right side holds the Contribute pill and no account menu.
-  await expect(header.getByRole("link", { name: "Contribute" })).toBeVisible();
-  await expect(header.getByRole("button")).toHaveCount(0);
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page).toHaveTitle("Durables");
-  await expectAccessible();
+  test("the home page shows the Durables header with the logo link", async ({
+    page,
+    expectAccessible,
+  }) => {
+    await page.goto("/");
+
+    const header = page.getByRole("banner");
+    await expect(header).toBeVisible();
+    await expect(
+      header.getByRole("link", { name: "Durables home" }),
+    ).toBeVisible();
+    // Signed out, the header's right side holds the Contribute pill and no account menu.
+    await expect(
+      header.getByRole("link", { name: "Contribute" }),
+    ).toBeVisible();
+    await expect(header.getByRole("button")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page).toHaveTitle("Durables");
+    await expectAccessible();
+  });
 });
 
 test(
@@ -219,3 +225,50 @@ test.describe("the footer", () => {
     });
   }
 });
+
+test(
+  "signing out from the initials menu returns the header to its signed-out state",
+  { tag: "@journey" },
+  async ({ page, expectAccessible }) => {
+    const header = page.getByRole("banner");
+    const initials = header.getByRole("button", { name: "Account menu" });
+
+    await test.step("the signed-in header shows Contribute and the initials", async () => {
+      await page.goto("/");
+      await expect(initials).toHaveText(publisherInitials);
+      await expect(
+        header.getByRole("link", { name: "Contribute" }),
+      ).toBeVisible();
+    });
+
+    await test.step("the initials menu holds one item, Sign out", async () => {
+      await initials.click();
+
+      const menu = page.getByRole("menu", { name: "Account" });
+      await expect(menu).toBeVisible();
+      await expect(menu.getByRole("menuitem")).toHaveText(["Sign out"]);
+      await expectAccessible();
+    });
+
+    await test.step("choosing Sign out returns the header to signed out", async () => {
+      await page.getByRole("menuitem", { name: "Sign out" }).click();
+
+      await expect(initials).toHaveCount(0);
+      await expect(
+        header.getByRole("link", { name: "Contribute" }),
+      ).toBeVisible();
+      await expect(header.getByRole("button")).toHaveCount(0);
+    });
+
+    await test.step("the session has ended, so a reload stays signed out", async () => {
+      await page.reload();
+
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(
+        header.getByRole("link", { name: "Contribute" }),
+      ).toBeVisible();
+      await expect(header.getByRole("button")).toHaveCount(0);
+      await expectAccessible();
+    });
+  },
+);
