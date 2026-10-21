@@ -20,6 +20,9 @@
   --fg: var(--color-cream);
   --fg-muted: #b0a597;
   --surface: #1a1512;
+  /* A panel that carries link-coloured text. Tangerine Deep fails AA on Sand, so on Cream
+     the panel stays Cream and a border sets it apart. */
+  --surface-link: var(--surface);
   --footer: #17120d;
   --accent: var(--color-tangerine);
   --on-accent: var(--color-ink);
@@ -74,6 +77,7 @@
     --fg: var(--color-ink);
     --fg-muted: #5e5448;
     --surface: var(--color-sand);
+    --surface-link: var(--color-cream);
     --footer: var(--color-sand);
     --link: var(--color-tangerine-deep);
     --border: #9a8d7c;
