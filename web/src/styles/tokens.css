@@ -46,6 +46,21 @@
   --provider-microsoft-fg: #5e5e5e;
   --provider-microsoft-border: #8c8c8c;
 
+  /* Code panel and syntax colours. The panel is dark under both themes, so these are not
+     overridden for Cream. The highlighter's theme reads the --code-token-* names. */
+  --code-background: var(--color-ink);
+  --code-foreground: var(--color-cream);
+  --code-muted: #b0a597;
+  --code-token-keyword: var(--color-tangerine);
+  --code-token-string: var(--color-gold);
+  --code-token-string-expression: var(--color-gold);
+  --code-token-constant: var(--color-gold);
+  --code-token-comment: var(--code-muted);
+  --code-token-function: var(--color-cream);
+  --code-token-parameter: var(--color-cream);
+  --code-token-punctuation: var(--color-cream);
+  --code-token-link: var(--color-tangerine);
+
   /* Type */
   --font-display: "Space Grotesk Variable", sans-serif;
   --font-body: "IBM Plex Sans Variable", sans-serif;
