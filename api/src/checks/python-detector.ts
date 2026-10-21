@@ -2,6 +2,15 @@ import type { Detector } from "./detector";
 import type { ActivityFacts, LineRef, NamedLineRef } from "./facts";
 import type { Pattern } from "./pattern";
 import { pythonStandardLibrary } from "./python-stdlib";
+import {
+  allMatches,
+  enclosingBrackets,
+  firstByName,
+  isInside,
+  type LineOf,
+  lineFinder,
+  type Span,
+} from "./scan";
 import type { Source } from "./source";
 
 // Python detection (ADR 0008). Every pattern below is part of the published rubric. A match
@@ -166,66 +175,6 @@ export const pythonPatterns: readonly Pattern[] = [
 /** The Temporal SDK's own package, which Dependencies leaves out. */
 const temporalSdkPackage = "temporalio";
 
-/** Every match of a pattern in the text, in order. */
-const allMatches = (pattern: Pattern, text: string) => [
-  ...text.matchAll(new RegExp(pattern.regex.source, `${pattern.regex.flags}g`)),
-];
-
-interface Span {
-  readonly start: number;
-  readonly end: number;
-}
-
-/** Whether an offset falls inside one of the spans, which are in order and don't overlap. */
-const isInside = (spans: readonly Span[], offset: number) => {
-  let low = 0;
-  let high = spans.length - 1;
-  while (low <= high) {
-    const middle = (low + high) >> 1;
-    const span = spans[middle];
-    if (span === undefined) {
-      return false;
-    }
-    if (offset < span.start) {
-      high = middle - 1;
-    } else if (offset >= span.end) {
-      low = middle + 1;
-    } else {
-      return true;
-    }
-  }
-  return false;
-};
-
-/** The 1-based line number of an offset in the text. */
-type LineOf = (offset: number) => number;
-
-/**
- * Numbers lines the way `lineAt` does, from an index of line starts built once, so that a file
- * with many matches is not rescanned from the top for each one.
- */
-const lineFinder = (text: string): LineOf => {
-  const lineStarts = [0];
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === "\n") {
-      lineStarts.push(i + 1);
-    }
-  }
-  return (offset) => {
-    let low = 0;
-    let high = lineStarts.length - 1;
-    while (low < high) {
-      const middle = (low + high + 1) >> 1;
-      if ((lineStarts[middle] ?? 0) <= offset) {
-        low = middle;
-      } else {
-        high = middle - 1;
-      }
-    }
-    return low + 1;
-  };
-};
-
 /** Where a string literal's body starts after its opening quote, and where it ends. */
 const stringBody = (literal: string) => {
   const quote = literal.startsWith('"""') || literal.startsWith("'''") ? 3 : 1;
@@ -304,32 +253,6 @@ const ignoredSpans = (text: string): Span[] =>
     return spans.filter((span) => span.end > span.start);
   });
 
-/**
- * For each offset of the text, the offset of the innermost open bracket around it, or -1. Built
- * in one pass over the code, skipping comments and strings, so brackets inside them don't count.
- */
-const enclosingBrackets = (text: string, ignored: readonly Span[]) => {
-  const enclosing = new Int32Array(text.length).fill(-1);
-  const open: number[] = [];
-  let next = 0;
-  for (let i = 0; i < text.length; i++) {
-    const span = ignored[next];
-    if (span !== undefined && i >= span.start) {
-      i = span.end - 1;
-      next++;
-      continue;
-    }
-    const character = text[i] ?? "";
-    enclosing[i] = open[open.length - 1] ?? -1;
-    if ("([{".includes(character)) {
-      open.push(i);
-    } else if (")]}".includes(character)) {
-      open.pop();
-    }
-  }
-  return enclosing;
-};
-
 /** Splits a parameter list on its top-level commas, leaving out empty entries. */
 const splitParameters = (parameters: string) => {
   const parts: string[] = [];
@@ -401,18 +324,6 @@ const readActivity = (
     output: typeName(returns),
     runsAs: isAsync === undefined ? "sync" : "async",
   };
-};
-
-/** Keeps the first entry for each name. */
-const firstByName = (found: readonly NamedLineRef[]) => {
-  const seen = new Set<string>();
-  return found.filter(({ name }) => {
-    if (seen.has(name)) {
-      return false;
-    }
-    seen.add(name);
-    return true;
-  });
 };
 
 /** Each third-party package imported, with the line of its first import. */
