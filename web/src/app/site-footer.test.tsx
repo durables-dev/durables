@@ -3,6 +3,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { TestProviders } from "../../test/test-providers";
 import { routes } from "./router";
 import { SiteFooter } from "./site-footer";
 
@@ -14,7 +15,9 @@ function renderFooter() {
 // The real route tree, so a footer link lands on the real legal page.
 function openAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
-  return render(<RouterProvider router={router} />);
+  return render(<RouterProvider router={router} />, {
+    wrapper: TestProviders,
+  });
 }
 
 async function emulateColorScheme(value: "light" | "dark" | "") {

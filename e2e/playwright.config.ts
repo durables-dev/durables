@@ -18,7 +18,10 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
-      command: "npm run dev --workspace api",
+      // Local D1 starts empty, so its migrations are applied before the Worker starts. A
+      // reused Worker needs `npm run db:migrate:local --workspace api` run once by hand.
+      command:
+        "npm run db:migrate:local --workspace api && npm run dev --workspace api",
       url: "http://localhost:8787/api/health",
       cwd: "..",
       reuseExistingServer: !ci,

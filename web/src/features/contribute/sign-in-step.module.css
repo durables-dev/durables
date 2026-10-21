@@ -1,0 +1,91 @@
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.intro {
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lede {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.failure {
+  max-width: 620px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: var(--text-small);
+}
+
+.providers {
+  max-width: 620px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* Each provider keeps its own colours (DUR-2). Flat: GitLab's orange edge is a border. */
+.provider {
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid;
+  border-radius: var(--radius-control);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-body);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.provider[data-provider="github"] {
+  border-color: var(--provider-github-bg);
+  background: var(--provider-github-bg);
+  color: var(--provider-github-fg);
+}
+
+.provider[data-provider="gitlab"] {
+  border-color: var(--provider-gitlab-bg);
+  border-bottom: 3px solid var(--provider-gitlab-edge);
+  background: var(--provider-gitlab-bg);
+  color: var(--provider-gitlab-fg);
+}
+
+.provider[data-provider="google"] {
+  border-color: var(--provider-google-border);
+  background: var(--provider-google-bg);
+  color: var(--provider-google-fg);
+}
+
+.provider[data-provider="microsoft"] {
+  border-color: var(--provider-microsoft-border);
+  background: var(--provider-microsoft-bg);
+  color: var(--provider-microsoft-fg);
+}
+
+.note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  .providers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

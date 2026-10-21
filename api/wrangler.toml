@@ -36,3 +36,18 @@ name = "PREVIEW_LIMIT"
 type = "ratelimit"
 namespace_id = "1002"
 simple = { limit = 30, period = 60 }
+
+# Sign-in configuration (docs/adr/0007). These are local placeholders only, so the names are
+# typed and the Worker runs locally. They are not real credentials and sign no real session.
+# infrastructure/main.ts supplies the real client IDs and secrets at deploy; local sign-in
+# uses the fake provider instead of these applications.
+[vars]
+GITHUB_CLIENT_ID = "local-placeholder"
+GITLAB_CLIENT_ID = "local-placeholder"
+GOOGLE_CLIENT_ID = "local-placeholder"
+MICROSOFT_CLIENT_ID = "local-placeholder"
+GITHUB_CLIENT_SECRET = "local-placeholder"
+GITLAB_CLIENT_SECRET = "local-placeholder"
+GOOGLE_CLIENT_SECRET = "local-placeholder"
+MICROSOFT_CLIENT_SECRET = "local-placeholder"
+SESSION_SIGNING_KEY = "local-placeholder-session-signing-key"

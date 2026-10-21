@@ -62,3 +62,18 @@ test.each([
     expect(contrast(text ?? "", band ?? "")).toBeGreaterThanOrEqual(4.5);
   },
 );
+
+test.each([
+  ["Ink", ink],
+  ["Cream", cream],
+])(
+  "link-coloured text keeps AA contrast on the link surface under %s",
+  (_theme, block) => {
+    const text = resolve(block, "--link") ?? resolve(ink, "--link");
+    const panel =
+      resolve(block, "--surface-link") ?? resolve(ink, "--surface-link");
+    expect(text).toMatch(/^#[0-9a-f]{6}$/);
+    expect(panel).toMatch(/^#[0-9a-f]{6}$/);
+    expect(contrast(text ?? "", panel ?? "")).toBeGreaterThanOrEqual(4.5);
+  },
+);

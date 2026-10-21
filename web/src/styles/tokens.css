@@ -12,16 +12,39 @@
   --color-ink: #0b0806;
   --color-cream: #fffbf5;
   --color-sand: #f1e8dd;
+  --color-lagoon: #4fbdb7;
+  --color-lagoon-deep: #0f7471;
 
   /* Semantic colours, dark theme */
   --bg: var(--color-ink);
   --fg: var(--color-cream);
   --fg-muted: #b0a597;
   --surface: #1a1512;
+  /* A panel that carries link-coloured text. Tangerine Deep fails AA on Sand, so on Cream
+     the panel stays Cream and a border sets it apart. */
+  --surface-link: var(--surface);
   --footer: #17120d;
   --accent: var(--color-tangerine);
+  --on-accent: var(--color-ink);
   --link: var(--color-tangerine);
   --focus: var(--color-gold);
+  --border: #6e6255;
+  --rule: #3a322a;
+  --selected: #2a231c;
+  --positive: var(--color-lagoon);
+
+  /* Sign-in providers' own colours (DUR-2). They are the providers', so no theme changes them. */
+  --provider-github-bg: #24292f;
+  --provider-github-fg: #ffffff;
+  --provider-gitlab-bg: #171321;
+  --provider-gitlab-fg: #ffffff;
+  --provider-gitlab-edge: #fc6d26;
+  --provider-google-bg: #ffffff;
+  --provider-google-fg: #1f1f1f;
+  --provider-google-border: #747775;
+  --provider-microsoft-bg: #ffffff;
+  --provider-microsoft-fg: #5e5e5e;
+  --provider-microsoft-border: #8c8c8c;
 
   /* Type */
   --font-display: "Space Grotesk Variable", sans-serif;
@@ -35,6 +58,8 @@
   --text-body: 16px;
   --text-small: 14px;
   --text-code: 14px;
+  --text-label: 13px;
+  --text-caption: 12px;
 
   /* Layout */
   --measure-prose: 72ch;
@@ -43,6 +68,7 @@
   --radius-panel: 12px;
   --radius-control: 8px;
   --radius-tag: 6px;
+  --radius-pill: 9999px;
 }
 
 @media (prefers-color-scheme: light) {
@@ -51,7 +77,12 @@
     --fg: var(--color-ink);
     --fg-muted: #5e5448;
     --surface: var(--color-sand);
+    --surface-link: var(--color-cream);
     --footer: var(--color-sand);
     --link: var(--color-tangerine-deep);
+    --border: #9a8d7c;
+    --rule: #e3d8ca;
+    --selected: var(--color-sand);
+    --positive: var(--color-lagoon-deep);
   }
 }

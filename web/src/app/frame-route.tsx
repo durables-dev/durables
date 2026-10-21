@@ -7,15 +7,19 @@ import {
 } from "react-router";
 import styles from "./frame-route.module.css";
 import { PageFrame } from "./page-frame";
-import { showsFooter } from "./route-handle";
+import { showsContribute, showsFooter } from "./route-handle";
 
 // Layout route module: every page renders inside the frame. A page opts out of the footer
-// slot with `handle: { footer: false }` (see route-handle.ts).
+// slot with `handle: { footer: false }`, and out of the header's Contribute button with
+// `handle: { contribute: false }` (see route-handle.ts).
 export function Component() {
   const matches = useMatches();
 
   return (
-    <PageFrame footer={showsFooter(matches)}>
+    <PageFrame
+      footer={showsFooter(matches)}
+      contribute={showsContribute(matches)}
+    >
       <Outlet />
     </PageFrame>
   );
