@@ -188,7 +188,7 @@ test("tabs are kept and display four spaces wide", async () => {
     return range.getBoundingClientRect().width;
   });
   expect(tabbed).toBeGreaterThan(0);
-  expect(tabbed).toBeCloseTo(spaced, 1);
+  expect(tabbed).toBeCloseTo(spaced ?? Number.NaN, 1);
 });
 
 test("very long lines scroll sideways, and the gutter stays in view", async () => {
