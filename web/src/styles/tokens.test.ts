@@ -101,3 +101,23 @@ test.each([
     expect(contrast(text ?? "", panel ?? "")).toBeGreaterThanOrEqual(4.5);
   },
 );
+
+test.each([
+  ["Ink", ink],
+  ["Cream", cream],
+])("the code panel stays Ink with Cream text under %s", (_theme, block) => {
+  expect(
+    resolve(block, "--code-background") ?? resolve(ink, "--code-background"),
+  ).toBe("#0b0806");
+  expect(
+    resolve(block, "--code-foreground") ?? resolve(ink, "--code-foreground"),
+  ).toBe("#fffbf5");
+});
+
+test("the code panel's line numbers and placeholder keep AA contrast", () => {
+  const muted = resolve(ink, "--code-muted");
+  const panel = resolve(ink, "--code-background");
+  expect(muted).toMatch(/^#[0-9a-f]{6}$/);
+  expect(panel).toMatch(/^#[0-9a-f]{6}$/);
+  expect(contrast(muted ?? "", panel ?? "")).toBeGreaterThanOrEqual(4.5);
+});

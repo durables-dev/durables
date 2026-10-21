@@ -33,6 +33,11 @@
   --selected: #2a231c;
   --positive: var(--color-lagoon);
 
+  /* The code panel. It is Ink under both themes, so no theme block changes these. */
+  --code-background: var(--color-ink);
+  --code-foreground: var(--color-cream);
+  --code-muted: #8a7f71;
+
   /* Sign-in providers' own colours (DUR-2). They are the providers', so no theme changes them. */
   --provider-github-bg: #24292f;
   --provider-github-fg: #ffffff;
