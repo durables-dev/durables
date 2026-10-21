@@ -62,3 +62,18 @@ test.each([
     expect(contrast(text ?? "", band ?? "")).toBeGreaterThanOrEqual(4.5);
   },
 );
+
+test("the code panel stays Ink under both themes", () => {
+  expect(resolve(ink, "--code-background")).toBe("#0b0806");
+  expect(resolve(ink, "--code-foreground")).toBe("#fffbf5");
+  expect(declared(cream, "--code-background")).toBeUndefined();
+  expect(declared(cream, "--code-foreground")).toBeUndefined();
+  expect(declared(cream, "--code-muted")).toBeUndefined();
+});
+
+test("muted code text keeps AA contrast on the code panel", () => {
+  const text = resolve(ink, "--code-muted") ?? "";
+  const panel = resolve(ink, "--code-background") ?? "";
+  expect(text).toMatch(/^#[0-9a-f]{6}$/);
+  expect(contrast(text, panel)).toBeGreaterThanOrEqual(4.5);
+});
