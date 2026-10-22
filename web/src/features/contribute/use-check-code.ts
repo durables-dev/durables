@@ -3,6 +3,7 @@ import { problemFrom } from "@/lib/problem";
 import { sessionQuery, signedOut } from "@/lib/session";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { parseResponse } from "hono/client";
+import { useEffect, useRef } from "react";
 import { checkLine, isFileRefusal, type CheckLine } from "./check-line";
 import { factsSchema } from "./check-result";
 import { useContributeDraft } from "./use-contribute-draft";
@@ -18,8 +19,9 @@ export interface CheckCode {
  * Runs the detection check on the pasted code and keeps the outcome in the draft. A finished
  * check belongs to the code it checked, so one for older code is dropped. A refusal of the
  * file is kept with the code. A failure that says nothing about the file, such as too many
- * checks or a network error, is shown only while the code is unchanged. A signed-out answer
- * makes the session anonymous, which sends the publisher to the sign-in step.
+ * checks or a network error, is shown only while the code is unchanged. Code kept without a
+ * result, as after such a failure and a reload, is checked when the step opens. A signed-out
+ * answer makes the session anonymous, which sends the publisher to the sign-in step.
  */
 export function useCheckCode(): CheckCode {
   const queryClient = useQueryClient();
@@ -51,6 +53,17 @@ export function useCheckCode(): CheckCode {
       }
     },
   });
+
+  // Code the draft kept with no result, such as one whose check failed before a reload, is
+  // checked once when the step opens, so the publisher isn't left without a way to retry.
+  const { mutate } = mutation;
+  const unchecked = draft.check === undefined ? draft.code : undefined;
+  const checkedOnOpen = useRef(false);
+  useEffect(() => {
+    if (checkedOnOpen.current) return;
+    checkedOnOpen.current = true;
+    if (unchecked !== undefined && unchecked.trim() !== "") mutate(unchecked);
+  }, [mutate, unchecked]);
 
   // Only the latest check is followed, and only while the editor still holds its code.
   const current = mutation.variables === draft.code;

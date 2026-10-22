@@ -931,3 +931,72 @@ describe("the status region", () => {
       .toBeInTheDocument();
   });
 });
+
+describe("checking again", () => {
+  test.each([
+    [
+      "a failed check",
+      "The check couldn't run. Paste the file again to retry.",
+      () =>
+        problemResponse({
+          type: "about:blank",
+          title: "Internal Server Error",
+          status: 500,
+        }),
+    ],
+    [
+      "too many checks",
+      "Too many checks in a short time. Wait a minute and try again.",
+      () =>
+        problemResponse({
+          type: "about:blank",
+          title: "Too Many Requests",
+          status: 429,
+        }),
+    ],
+  ])(
+    "after %s, pasting the same file again checks it again",
+    async (_, message, firstAnswer) => {
+      const sent = answerChecks(() =>
+        sent.length === 1 ? firstAnswer() : HttpResponse.json(acceptedFacts),
+      );
+      const { screen } = await openToCheck();
+      await paste(screen, pastedCode);
+      await expect.element(checkStatus(screen)).toHaveTextContent(message);
+
+      await paste(screen, pastedCode);
+
+      await expect
+        .element(checkStatus(screen))
+        .toHaveTextContent(/Found post_slack_message \(Python\)/);
+      expect(sent).toEqual([pastedCode, pastedCode]);
+      await expect.element(continueButton(screen)).toBeEnabled();
+    },
+  );
+
+  test("a reload with code but no result checks the code when the step opens", async () => {
+    const sent = answerChecks(() => HttpResponse.json(acceptedFacts));
+    signIn();
+    keepDraft({ finished: ["profile"], code: pastedCode });
+
+    const { screen } = await openCodeStep();
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent(/Found post_slack_message \(Python\)/);
+    expect(sent).toEqual([pastedCode]);
+    await expect.element(continueButton(screen)).toBeEnabled();
+  });
+
+  test("a reload with a kept result checks nothing", async () => {
+    const sent = answerChecks(() => HttpResponse.json(acceptedFacts));
+    signIn();
+    keepDraft(acceptedDraft);
+
+    const { screen } = await openCodeStep();
+
+    await expect.element(continueButton(screen)).toBeEnabled();
+    await wait(checkPauseMs + 300);
+    expect(sent).toEqual([]);
+  });
+});

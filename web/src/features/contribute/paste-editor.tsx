@@ -2,6 +2,7 @@ import {
   useId,
   useRef,
   type ChangeEvent,
+  type ClipboardEvent,
   type CSSProperties,
   type KeyboardEvent,
   type UIEvent,
@@ -57,6 +58,17 @@ export function PasteEditor({ value, onChange, onCheck }: PasteEditorProps) {
     );
   }
 
+  // A paste that leaves the text as it was, such as the same file pasted again to retry a
+  // check, changes nothing, so the editor reports no change. It is still a paste, so once the
+  // browser has finished pasting it asks for a check of the unchanged text.
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const editor = event.currentTarget;
+    const before = editor.value;
+    window.setTimeout(() => {
+      if (editor.value === before) check.now(before);
+    }, 0);
+  }
+
   // Tab types four spaces in place of the selection. Shift+Tab still moves focus back out.
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (
@@ -104,6 +116,7 @@ export function PasteEditor({ value, onChange, onCheck }: PasteEditorProps) {
           name="code"
           value={value}
           onChange={handleChange}
+          onPaste={handlePaste}
           onKeyDown={handleKeyDown}
           onScroll={handleScroll}
           rows={Math.min(Math.max(lines, minRows), maxRows)}
