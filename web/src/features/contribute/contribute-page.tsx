@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Navigate, useParams } from "react-router";
 import { CodeStep } from "./code-step";
 import styles from "./contribute-page.module.css";
+import { DetectedStep } from "./detected-step";
 import { draftFinished } from "./draft";
 import { ProfileStep } from "./profile-step";
 import { StepList } from "./step-list";
@@ -55,6 +56,7 @@ export function ContributePage() {
           {current === "code" ? (
             <CodeStep returning={user?.accountExists === true} />
           ) : null}
+          {current === "detected" ? <DetectedStep /> : null}
         </div>
       </div>
     </ContributeFrame>
