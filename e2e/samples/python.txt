@@ -1,0 +1,56 @@
+"""Post a message to a Slack channel through the Slack Web API."""
+
+import os
+from dataclasses import dataclass
+
+import httpx
+from temporalio import activity
+from temporalio.exceptions import ApplicationError
+
+SLACK_API = "https://slack.com/api/chat.postMessage"
+
+# Slack answers these with ok=false. Asking again will not change the answer.
+PERMANENT_ERRORS = {"channel_not_found", "not_in_channel", "invalid_auth", "is_archived"}
+
+
+@dataclass
+class SlackMessage:
+    channel: str
+    text: str
+    thread_ts: str | None = None
+
+
+@dataclass
+class MessageRef:
+    channel: str
+    ts: str
+
+
+@activity.defn
+async def post_slack_message(message: SlackMessage) -> MessageRef:
+    token = os.environ["SLACK_TOKEN"]
+    payload = {"channel": message.channel, "text": message.text}
+    if message.thread_ts:
+        payload["thread_ts"] = message.thread_ts
+
+    activity.heartbeat("posting")
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.post(
+            SLACK_API,
+            json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    response.raise_for_status()
+    body = response.json()
+
+    if not body.get("ok"):
+        error = body.get("error", "unknown_error")
+        if error in PERMANENT_ERRORS:
+            raise ApplicationError(
+                f"Slack refused the message: {error}",
+                type="SlackPermanentError",
+                non_retryable=True,
+            )
+        raise ApplicationError(f"Slack returned an error: {error}")
+
+    return MessageRef(channel=body["channel"], ts=body["ts"])
