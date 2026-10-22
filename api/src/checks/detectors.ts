@@ -1,4 +1,5 @@
 import type { Detector } from "./detector";
+import { dotnetDetector } from "./dotnet-detector";
 import { pythonDetector } from "./python-detector";
 import { typescriptDetector } from "./typescript-detector";
 
@@ -9,4 +10,5 @@ import { typescriptDetector } from "./typescript-detector";
 export const detectors: readonly Detector[] = [
   pythonDetector,
   typescriptDetector,
+  dotnetDetector,
 ];
