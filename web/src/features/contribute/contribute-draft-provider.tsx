@@ -1,6 +1,12 @@
 import { useEffect, useReducer, type ReactNode } from "react";
 import { ContributeDraftContext } from "./contribute-draft-context";
-import { draftReducer, enterDraft, readDraft, writeDraft } from "./draft";
+import {
+  draftReducer,
+  enterDraft,
+  readDraft,
+  sessionStorageIfAvailable,
+  writeDraft,
+} from "./draft";
 
 export interface ContributeDraftProviderProps {
   children: ReactNode;
@@ -9,17 +15,18 @@ export interface ContributeDraftProviderProps {
 }
 
 // Holds the draft for the Contribute flow. It starts from the copy in sessionStorage and
-// mirrors every change back there, so a reload keeps it (web/CONVENTIONS.md, State).
+// mirrors every change back there, so a reload keeps it (web/CONVENTIONS.md, State). Without
+// storage, as when the browser refuses it, the draft still works for the life of the page.
 export function ContributeDraftProvider({
   children,
   entryOrigin,
 }: ContributeDraftProviderProps) {
   const [draft, dispatch] = useReducer(draftReducer, entryOrigin, (origin) =>
-    enterDraft(readDraft(sessionStorage), origin),
+    enterDraft(readDraft(sessionStorageIfAvailable()), origin),
   );
 
   useEffect(() => {
-    writeDraft(sessionStorage, draft);
+    writeDraft(sessionStorageIfAvailable(), draft);
   }, [draft]);
 
   return (
