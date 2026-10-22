@@ -215,6 +215,18 @@ describe("the paste editor", () => {
     expect(checks).toEqual(["xy"]);
   });
 
+  test("a paste that leaves the text as it was still requests a check", async () => {
+    const { element, checks } = await openEditor("import temporalio");
+
+    // Pasting the same text over itself changes nothing, so the browser fires the paste and
+    // no input. The clipboard is left alone, because other test files share it.
+    element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true }));
+
+    await expect.poll(() => checks).toEqual(["import temporalio"]);
+    await wait(checkPauseMs + 300);
+    expect(checks).toEqual(["import temporalio"]);
+  });
+
   test("typing then pausing 1.5 seconds requests one check", async () => {
     const { editor, checks } = await openEditor();
 
