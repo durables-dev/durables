@@ -49,3 +49,14 @@ describe("fieldMessage", () => {
     expect(fieldMessage(problem, "name")).toBeUndefined();
   });
 });
+
+test("problemFrom keeps a refusal's extension members", () => {
+  const body = {
+    type: "https://durables.dev/problems/unaccepted-sdk",
+    title: "SDK not accepted",
+    status: 422,
+    sdk: "Go",
+  };
+
+  expect(problemFrom(apiError(422, body))).toEqual(body);
+});

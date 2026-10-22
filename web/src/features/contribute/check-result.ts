@@ -8,7 +8,7 @@ const lineRefSchema = z.object({ line: z.number().int().positive() });
 
 const namedLineRefSchema = lineRefSchema.extend({ name: z.string() });
 
-const factsSchema = z.object({
+export const factsSchema = z.object({
   sdk: z.enum(["Python", "TypeScript", ".NET"]),
   activity: namedLineRefSchema,
   input: z.string().nullable(),
