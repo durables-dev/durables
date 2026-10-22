@@ -35,6 +35,8 @@
   /* The Gold tint behind a message that needs the reader's attention, such as a refused
      file. Never Ember. */
   --notice: rgb(255 183 0 / 14%);
+  /* The dimmed page behind a dialog. Ink at 60% under both themes. */
+  --scrim: rgb(11 8 6 / 60%);
 
   /* The code panel. It is Ink under both themes, so no theme block changes these. */
   --code-background: var(--color-ink);
