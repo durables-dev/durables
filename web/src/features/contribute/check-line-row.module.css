@@ -38,20 +38,3 @@
   background: var(--notice);
   color: var(--fg);
 }
-
-.view {
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--font-body);
-  font-size: var(--text-label);
-  font-weight: 600;
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}

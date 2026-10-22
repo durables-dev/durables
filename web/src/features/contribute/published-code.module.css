@@ -1,0 +1,94 @@
+.view {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* Laid out only while open, so the closed dialog keeps the browser's display: none. */
+.dialog {
+  width: min(860px, 100% - 40px);
+  max-width: none;
+  max-height: calc(100dvh - 88px);
+  margin: 64px auto auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dialog::backdrop {
+  background: var(--scrim);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--text-h3);
+  font-weight: 600;
+  letter-spacing: -0.017em;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+}
+
+.close {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* A long file scrolls here, inside the dialog, while the title and close button stay put. */
+.body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-caption);
+}

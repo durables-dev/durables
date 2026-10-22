@@ -45,7 +45,7 @@ export function CodeStep({ returning }: CodeStepProps) {
         }}
         onCheck={check}
       />
-      <CheckLineRow line={line} />
+      <CheckLineRow line={line} code={draft.code ?? ""} />
       <StepFooter
         onBack={() => {
           void navigate(
