@@ -5,6 +5,7 @@ import { checkCode } from "./pipeline";
 import { pythonDetector, pythonPatterns } from "./python-detector";
 import { pythonStandardLibrary } from "./python-stdlib";
 import { CheckRefusal, refusalTypes } from "./refusals";
+import { MAX_CODE_BYTES } from "./size-limit";
 import { toSource } from "./source";
 
 const detect = (code: string) => pythonDetector.detect(toSource(code));
@@ -298,6 +299,34 @@ describe("pythonDetector", () => {
       });
     });
 
+    it("counts a function under several activity decorators once", () => {
+      const code = lines(
+        "from temporalio import activity",
+        "",
+        "@activity.defn",
+        "# Kept for older workers.",
+        '@activity.defn(name="post")',
+        "async def post(input: In) -> Out:",
+        "    ...",
+      );
+      expect(onlyActivity(code).activity).toEqual({ name: "post", line: 6 });
+    });
+
+    it("reads a decorator whose arguments run over several lines after another decorator", () => {
+      const code = lines(
+        "from temporalio import activity",
+        "",
+        "@traced",
+        "@activity.defn",
+        "@activity.defn(",
+        '    name="post",',
+        ")",
+        "async def post(input: In) -> Out:",
+        "    ...",
+      );
+      expect(onlyActivity(code).activity).toEqual({ name: "post", line: 8 });
+    });
+
     it("ignores a commented-out activity and the decorator inside strings", () => {
       const code = lines(
         "from temporalio import activity",
@@ -584,5 +613,44 @@ describe("pythonDetector", () => {
         expect(onlyActivity(code)).toMatchObject({ input, output });
       },
     );
+  });
+
+  describe("files at the size limit", () => {
+    // Each input once made detection read the rest of the file again from every decorator, which
+    // took well over a second. Read once, each takes a few milliseconds, so the bound is tight
+    // enough to catch that coming back.
+    const atLimit = (prefix: string, unit: string) =>
+      prefix +
+      unit.repeat(Math.floor((MAX_CODE_BYTES - prefix.length) / unit.length));
+    const sdk = "from temporalio import activity\n";
+    const adversarial: [string, string][] = [
+      ["stacked decorators", atLimit(sdk, "@activity.defn\n")],
+      ["decorators with unclosed arguments", atLimit(sdk, "@activity.defn(\n")],
+      [
+        "decorators between comments and other decorators",
+        atLimit(sdk, "@activity.defn\n# note\n@traced\n\n"),
+      ],
+      [
+        "decorators with arguments over several lines",
+        atLimit(sdk, '@activity.defn(\n    name="post",\n)\n'),
+      ],
+    ];
+
+    it.each(adversarial)("detects %s in under 250 ms", (_, code) => {
+      const started = performance.now();
+      detect(code);
+      expect(performance.now() - started).toBeLessThan(250);
+    });
+
+    it("reads one function under a file of stacked decorators once", () => {
+      const def = "async def act(input: In) -> Out:\n    ...\n";
+      const decorator = "@activity.defn\n";
+      const stacked = decorator.repeat(
+        Math.floor(
+          (MAX_CODE_BYTES - sdk.length - def.length) / decorator.length,
+        ),
+      );
+      expect(detect(sdk + stacked + def)).toHaveLength(1);
+    });
   });
 });

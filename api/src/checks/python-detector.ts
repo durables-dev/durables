@@ -17,25 +17,41 @@ export const pythonSdkImport: Pattern = {
     /^[ \t]*(?:from[ \t]+temporalio(?:\.[\w.]+)?[ \t]+import\b|import[ \t]+temporalio\b)/m,
 };
 
-/** The `@activity.defn` decorator, with or without arguments. */
+/**
+ * The `@activity.defn` decorator, with or without arguments. The arguments stop at the next
+ * bracket, so an unclosed one is not read to the end of the file from every decorator.
+ */
 export const pythonActivityDecorator: Pattern = {
   name: "python-activity-decorator",
   description:
     'The @activity.defn decorator at the start of a line, with or without arguments, such as @activity.defn(name="charge"). It marks the function below it as a Temporal activity.',
-  regex: /^[ \t]*@(?:temporalio\.)?activity\.defn\b(?:[ \t]*\([^)]*\))?[^\n]*/m,
+  regex:
+    /^[ \t]*@(?:temporalio\.)?activity\.defn\b(?:[ \t]*\([^()]*\))?[^\n]*/m,
 };
 
 /**
- * The function an activity decorator applies to, read from the end of the decorator's line.
- * Blank lines, comments and other decorators may sit between them. Groups: 1 the lines before
- * the `def`, 2 `async` when present, 3 the name, 4 the parameters, 5 the return annotation.
+ * What may sit between an activity decorator and its function: blank lines, comments and other
+ * decorators. Read from the end of the decorator's line, it ends at the line break before the
+ * function's line.
+ */
+export const pythonBeforeFunction: Pattern = {
+  name: "python-before-function",
+  description:
+    "What may come between an @activity.defn decorator and its function: blank lines, comments and other decorators, such as @traced.",
+  regex: /(?:\n[ \t]*(?:@[^\n]*|#[^\n]*)?)*\n/,
+};
+
+/**
+ * The function an activity decorator applies to, read starting exactly where
+ * `pythonBeforeFunction` ends. Groups: 1 `async` when present, 2 the name, 3 the parameters,
+ * 4 the return annotation.
  */
 export const pythonActivityFunction: Pattern = {
   name: "python-activity-function",
   description:
-    "The function under an @activity.defn decorator: def or async def, its name, its parameters and its return annotation after ->. Blank lines, comments and other decorators may come between the decorator and the def.",
+    "The function under an @activity.defn decorator, after any blank lines, comments and other decorators: def or async def, its name, its parameters and its return annotation after ->.",
   regex:
-    /^((?:\n[ \t]*(?:@[^\n]*|#[^\n]*)?)*\n)[ \t]*(async[ \t]+)?def[ \t]+([A-Za-z_]\w*)[ \t]*\(((?:[^()]|\([^()]*\))*)\)[ \t]*(?:->[ \t]*([^:\n]+?)[ \t]*)?:/,
+    /[ \t]*(async[ \t]+)?def[ \t]+([A-Za-z_]\w*)[ \t]*\(((?:[^()]|\([^()]*\))*)\)[ \t]*(?:->[ \t]*([^:\n]+?)[ \t]*)?:/,
 };
 
 /** One parameter with a type annotation, such as `input: SlackMessage`. Groups: 1 name, 2 type. */
@@ -149,6 +165,7 @@ export const pythonFStringPrefix: Pattern = {
 export const pythonPatterns: readonly Pattern[] = [
   pythonSdkImport,
   pythonActivityDecorator,
+  pythonBeforeFunction,
   pythonActivityFunction,
   pythonAnnotatedParameter,
   pythonTypeName,
@@ -364,23 +381,27 @@ type ActivitySignature = Pick<
   "activity" | "input" | "output" | "runsAs"
 >;
 
+/** A pattern made sticky, so it is read exactly where `lastIndex` is placed. */
+const stickyCopy = (pattern: Pattern) =>
+  new RegExp(pattern.regex.source, `${pattern.regex.flags}y`);
+
 /**
- * Reads the function after an activity decorator. Null unless it has at least one parameter
- * with a type annotation and a return annotation.
+ * Reads the function starting at `start`, the line after an activity decorator and anything
+ * between them. Null unless it has at least one parameter with a type annotation and a return
+ * annotation.
  */
 const readActivity = (
   source: Source,
   lineOf: LineOf,
-  afterDecorator: number,
+  functionAt: RegExp,
+  start: number,
 ): ActivitySignature | null => {
-  const match = pythonActivityFunction.regex.exec(
-    source.text.slice(afterDecorator),
-  );
+  functionAt.lastIndex = start;
+  const match = functionAt.exec(source.text);
   if (match === null) {
     return null;
   }
-  const [, before = "", isAsync, name = "", parameterList = "", returns] =
-    match;
+  const [, isAsync, name = "", parameterList = "", returns] = match;
   const parameters = splitParameters(parameterList).filter(
     (parameter) => !notInput.has(parameter),
   );
@@ -393,7 +414,7 @@ const readActivity = (
   }
   const [onlyInput] = annotated;
   return {
-    activity: { name, line: lineOf(afterDecorator + before.length) },
+    activity: { name, line: lineOf(start) },
     input:
       parameters.length === 1 && onlyInput !== undefined
         ? typeName(onlyInput)
@@ -485,12 +506,23 @@ export const pythonDetector: Detector = {
       line: lineOf(match.index),
     }));
 
+    const beforeFunctionAt = stickyCopy(pythonBeforeFunction);
+    const functionAt = stickyCopy(pythonActivityFunction);
+    // A decorator wholly within what was read before the previous decorator's function leads to
+    // that same function, so stacked decorators are one activity and the lines between them are
+    // read once, however many there are. A decorator whose arguments run past it is read again.
+    let readUntil = -1;
     return found(pythonActivityDecorator).flatMap((decorator) => {
-      const signature = readActivity(
-        source,
-        lineOf,
-        decorator.index + decorator[0].length,
-      );
+      const decoratorEnd = decorator.index + decorator[0].length;
+      if (decoratorEnd < readUntil) {
+        return [];
+      }
+      beforeFunctionAt.lastIndex = decoratorEnd;
+      if (beforeFunctionAt.exec(text) === null) {
+        return [];
+      }
+      readUntil = beforeFunctionAt.lastIndex;
+      const signature = readActivity(source, lineOf, functionAt, readUntil);
       return signature === null
         ? []
         : [
