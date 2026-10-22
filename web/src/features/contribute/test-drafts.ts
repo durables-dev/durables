@@ -1,4 +1,4 @@
-import type { CheckResult } from "./check-result";
+import type { CheckedFacts, CheckResult } from "./check-result";
 import type { Draft } from "./draft";
 
 // Drafts for tests, as the Code step leaves them. Imported by tests only.
@@ -12,20 +12,23 @@ export const pastedCode = [
   "\treturn await send(message)",
 ].join("\n");
 
+/** The facts the check endpoint answers for `pastedCode`. */
+export const acceptedFacts: CheckedFacts = {
+  sdk: "Python",
+  activity: { name: "post_slack_message", line: 4 },
+  input: "SlackMessage",
+  output: "MessageRef",
+  runsAs: "async",
+  nonRetryableErrors: [],
+  configurationRead: [],
+  dependencies: [],
+  heartbeats: [],
+};
+
 /** What the check reports for `pastedCode`. */
 export const acceptedCheck: CheckResult = {
   outcome: "accepted",
-  facts: {
-    sdk: "Python",
-    activity: { name: "post_slack_message", line: 4 },
-    input: "SlackMessage",
-    output: "MessageRef",
-    runsAs: "async",
-    nonRetryableErrors: [],
-    configurationRead: [],
-    dependencies: [],
-    heartbeats: [],
-  },
+  facts: acceptedFacts,
 };
 
 /** A check that refused the file, as for a file with no activity in it. */

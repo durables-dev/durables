@@ -32,6 +32,9 @@
   --rule: #3a322a;
   --selected: #2a231c;
   --positive: var(--color-lagoon);
+  /* The Gold tint behind a message that needs the reader's attention, such as a refused
+     file. Never Ember. */
+  --notice: rgb(255 183 0 / 14%);
 
   /* The code panel. It is Ink under both themes, so no theme block changes these. */
   --code-background: var(--color-ink);
@@ -104,5 +107,6 @@
     --rule: #e3d8ca;
     --selected: var(--color-sand);
     --positive: var(--color-lagoon-deep);
+    --notice: rgb(255 183 0 / 16%);
   }
 }

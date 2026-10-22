@@ -1,10 +1,12 @@
 import { useNavigate } from "react-router";
+import { CheckLineRow } from "./check-line-row";
 import styles from "./code-step.module.css";
 import { isAccepted } from "./draft";
 import { PasteEditor } from "./paste-editor";
 import { StepFooter } from "./step-footer";
 import stepStyles from "./step.module.css";
 import { stepPath } from "./steps";
+import { useCheckCode } from "./use-check-code";
 import { useContributeDraft } from "./use-contribute-draft";
 import { useFocusOnAppear } from "./use-focus-on-appear";
 
@@ -15,14 +17,16 @@ export interface CodeStepProps {
 
 // The Code step: the publisher pastes the file that holds their activity. The editor shows at
 // once, with no choice between linking a file and pasting. The code is kept in the draft, and
-// changing it drops the last check. Continue opens Detected once a file is accepted. Back
-// returns to the handle step, or for a returning publisher to the page the flow was opened
-// from.
+// changing it drops the last check. A paste, or a pause in typing, checks the code; the row
+// under the editor says what the check found. Continue opens Detected once a file is
+// accepted, and stays disabled while a check runs. Back returns to the handle step, or for a
+// returning publisher to the page the flow was opened from.
 export function CodeStep({ returning }: CodeStepProps) {
   const navigate = useNavigate();
   const { draft, dispatch } = useContributeDraft();
   const heading = useFocusOnAppear<HTMLHeadingElement>();
-  const accepted = isAccepted(draft);
+  const { check, line } = useCheckCode();
+  const accepted = isAccepted(draft) && line.kind !== "checking";
 
   return (
     <section aria-label="Code" className={styles["step"]}>
@@ -39,9 +43,9 @@ export function CodeStep({ returning }: CodeStepProps) {
         onChange={(code) => {
           dispatch({ type: "codeEdited", code });
         }}
-        // Running the check, and showing what it found, come with the check call.
-        onCheck={() => undefined}
+        onCheck={check}
       />
+      <CheckLineRow line={line} />
       <StepFooter
         onBack={() => {
           void navigate(
