@@ -205,7 +205,9 @@ describe("generateSnippets", () => {
     it("installs the Temporal SDK and each detected dependency", () => {
       expect(
         snippet(generateSnippets(factsFor("Python"), address), installLabel),
-      ).toBe("pip install temporalio stripe");
+      ).toBe(
+        "pip install temporalio\n# Also install the PyPI packages that provide: stripe",
+      );
       expect(
         snippet(
           generateSnippets(factsFor("TypeScript"), address),
@@ -219,6 +221,31 @@ describe("generateSnippets", () => {
       ).toBe(
         "dotnet new console --output charge-card\ncd charge-card\ndotnet add package Temporalio\n# Also add the NuGet packages that provide: Stripe",
       );
+    });
+
+    it("never installs a Python import by its name, which PyPI may give to another package", () => {
+      expect(
+        snippet(
+          generateSnippets(
+            factsFor("Python", {
+              dependencies: [
+                { name: "yaml", line: 1 },
+                { name: "google", line: 2 },
+              ],
+            }),
+            address,
+          ),
+          installLabel,
+        ),
+      ).toBe(
+        "pip install temporalio\n# Also install the PyPI packages that provide: yaml, google",
+      );
+      expect(
+        snippet(
+          generateSnippets(factsFor("Python", { dependencies: [] }), address),
+          installLabel,
+        ),
+      ).toBe("pip install temporalio");
     });
 
     it("exports each environment variable the activity reads before running", () => {
@@ -581,7 +608,7 @@ describe("generateSnippets", () => {
         ].join("\n"),
       );
       expect(snippet(snippets, installLabel)).toBe(
-        "pip install temporalio stripe",
+        "pip install temporalio\n# Also install the PyPI packages that provide: stripe",
       );
     });
 

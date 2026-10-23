@@ -2,7 +2,7 @@ import type { Facts } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
-import { environmentLines, shellWord } from "./shell";
+import { environmentLines } from "./shell";
 import install from "./templates/python/install.txt";
 import run from "./templates/python/run.txt";
 import starterUnknownInput from "./templates/python/starter-unknown-input.txt";
@@ -74,6 +74,9 @@ export const pythonSnippets = (facts: Facts, address: Address): Snippet[] => {
     pythonBuiltIns,
   );
   const usesThreadPool = facts.runsAs !== "async";
+  // Detection reports import names, which often differ from PyPI's (yaml is PyYAML), and
+  // installing one by its import name can fetch someone else's package.
+  const modules = facts.dependencies.map(({ name }) => name);
   const values = {
     activity,
     workflowClass,
@@ -98,12 +101,10 @@ export const pythonSnippets = (facts: Facts, address: Address): Snippet[] => {
       : "",
     taskQueue: pythonString(address.name),
     workflowId: pythonIdWithUuid(address.name),
-    packages: unique([
-      "temporalio",
-      ...facts.dependencies.map(({ name }) => name),
-    ])
-      .map(shellWord)
-      .join(" "),
+    packagesNote:
+      modules.length === 0
+        ? ""
+        : `# Also install the PyPI packages that provide: ${modules.join(", ")}`,
     environment: environmentLines(facts.configurationRead),
   };
   const known = facts.input !== null;
