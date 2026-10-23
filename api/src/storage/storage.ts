@@ -7,8 +7,22 @@ import {
   retiredHandles,
   type Provider,
 } from "./schema";
+import {
+  DocumentWriteFailure,
+  versionDocumentKey,
+  type Address,
+  type VersionDocument,
+  type WriteVersionDocumentResult,
+} from "./version-document";
 
 export { providers, type Provider } from "./schema";
+export {
+  DocumentWriteFailure,
+  type Address,
+  type Snippet,
+  type VersionDocument,
+  type WriteVersionDocumentResult,
+} from "./version-document";
 
 /** A provider account: which provider, and the account's ID at that provider. */
 export interface ProviderIdentity {
@@ -23,14 +37,16 @@ export interface Account {
 }
 
 /**
- * The storage interface (ADR 0005). It is the only code that sees D1 and Drizzle. Handlers
- * reach it through c.var.storage and call its methods.
+ * The storage interface (ADR 0005). It is the only code that sees D1, R2 and Drizzle.
+ * Handlers reach it through c.var.storage and call its methods.
  */
 export class Storage {
   readonly #db: DrizzleD1Database;
+  readonly #documents: R2Bucket;
 
-  constructor(database: D1Database) {
+  constructor(database: D1Database, documents: R2Bucket) {
     this.#db = drizzle(database);
+    this.#documents = documents;
   }
 
   /** True when the database answers a query. */
@@ -75,5 +91,39 @@ export class Storage {
       )
       .limit(1);
     return taken.length === 0;
+  }
+
+  /**
+   * Writes a version's document, create-only. When a document already exists at the
+   * address, nothing is written and the outcome is already-exists. The conditional put this
+   * rests on is an accepted risk (ADR 0005, Notes).
+   *
+   * @throws {DocumentWriteFailure} when the write fails for any other reason.
+   */
+  async writeVersionDocument(
+    address: Address,
+    document: VersionDocument,
+  ): Promise<WriteVersionDocumentResult> {
+    const key = versionDocumentKey(address);
+    let written: R2Object | null;
+    try {
+      written = await this.#documents.put(key, JSON.stringify(document), {
+        onlyIf: { etagDoesNotMatch: "*" },
+        httpMetadata: { contentType: "application/json" },
+      });
+    } catch (error) {
+      throw new DocumentWriteFailure(key, error);
+    }
+    return written === null
+      ? { outcome: "already-exists" }
+      : { outcome: "created" };
+  }
+
+  /** The version document at an address, or undefined when there is none. */
+  async readVersionDocument(
+    address: Address,
+  ): Promise<VersionDocument | undefined> {
+    const stored = await this.#documents.get(versionDocumentKey(address));
+    return stored === null ? undefined : await stored.json<VersionDocument>();
   }
 }
