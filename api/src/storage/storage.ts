@@ -71,6 +71,21 @@ export interface Listing extends NewListing {
   publishedAt: Date;
 }
 
+/** A published version's own fields. None of them can change after publishing. */
+export interface Version extends Address {
+  title: string;
+  sdk: Sdk;
+  integrations: string[];
+  publishedAt: Date;
+}
+
+/** A listing's current one-line description, which can change after publishing (ADR 0006). */
+export interface ListingDescription {
+  handle: string;
+  name: string;
+  description: string;
+}
+
 /** The outcome of creating a listing. An address can be written once. */
 export type CreateListingResult =
   { outcome: "created"; listing: Listing } | { outcome: "address-taken" };
@@ -258,6 +273,55 @@ export class Storage {
           eq(versions.version, version),
         ),
       )
+      .get();
+  }
+
+  /**
+   * The version at an address, without the listing's description, or undefined when there
+   * is none. Addresses match exactly, so a wrong-case address finds nothing.
+   */
+  async findVersion({
+    handle,
+    name,
+    version,
+  }: Address): Promise<Version | undefined> {
+    return this.#db
+      .select({
+        handle: versions.handle,
+        name: versions.name,
+        version: versions.version,
+        title: versions.title,
+        sdk: versions.sdk,
+        integrations: versions.integrations,
+        publishedAt: versions.publishedAt,
+      })
+      .from(versions)
+      .where(
+        and(
+          eq(versions.handle, handle),
+          eq(versions.name, name),
+          eq(versions.version, version),
+        ),
+      )
+      .get();
+  }
+
+  /**
+   * The current description of the listing at a handle and name, or undefined when there is
+   * none. Handles and names match exactly, so a wrong-case one finds nothing.
+   */
+  async findListingDescription({
+    handle,
+    name,
+  }: Omit<Address, "version">): Promise<ListingDescription | undefined> {
+    return this.#db
+      .select({
+        handle: listings.handle,
+        name: listings.name,
+        description: listings.description,
+      })
+      .from(listings)
+      .where(and(eq(listings.handle, handle), eq(listings.name, name)))
       .get();
   }
 

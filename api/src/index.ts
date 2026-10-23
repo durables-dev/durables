@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { ApplyGlobalResponse } from "hono/client";
 import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
+import { activities } from "./activities/activities";
 import type { AppEnv } from "./app-env";
 import { auth } from "./auth/auth-middleware";
 import { checks } from "./checks/checks";
@@ -44,7 +45,8 @@ export const createProductionApp = () =>
     .route("/api/session", session)
     .route("/api/session/providers", signIn)
     .route("/api/handles", handles)
-    .route("/api/checks", checks);
+    .route("/api/checks", checks)
+    .route("/api/activities", activities);
 
 // Production entry point.
 const app = createProductionApp();
