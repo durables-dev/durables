@@ -3,7 +3,7 @@ import { describe, expect, inject, test } from "vitest";
 import { readAllRows, seedAccount, seedVersion } from "./seed";
 import { Storage, type NewListing } from "./storage";
 
-const storage = () => new Storage(env.DB);
+const storage = () => new Storage(env.DB, env.DOCUMENTS);
 
 /** A listing at a handle that exists, with a name no other test uses. */
 const newListing = async (
