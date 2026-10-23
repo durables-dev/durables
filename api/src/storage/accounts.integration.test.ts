@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { readAllRows, seedAccount, seedRetiredHandle } from "./seed";
 import { Storage, type NewAccount, type Provider } from "./storage";
 
-const storage = () => new Storage(env.DB);
+const storage = () => new Storage(env.DB, env.DOCUMENTS);
 
 /** A provider identity and handle that no other test uses. */
 const newAccount = (account: Partial<NewAccount> = {}): NewAccount => {

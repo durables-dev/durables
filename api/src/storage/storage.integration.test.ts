@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { seedAccount, seedProviderLink, seedRetiredHandle } from "./seed";
 import { Storage } from "./storage";
 
-const storage = () => new Storage(env.DB);
+const storage = () => new Storage(env.DB, env.DOCUMENTS);
 
 // The database's own message for a rejected write. Drizzle wraps some D1 errors, keeping
 // the original as the cause.
