@@ -39,6 +39,22 @@ export interface Account {
   handle: string | null;
 }
 
+/** What the first publish records for a new account: who signed in, and the chosen handle. */
+export interface NewAccount extends ProviderIdentity {
+  handle: string;
+}
+
+/**
+ * The outcome of creating an account. Created means this call wrote the account, its
+ * provider link and its handle. Existing means the provider identity already had an account,
+ * and nothing was written. Handle-taken means the handle is in use or retired, and nothing
+ * was written.
+ */
+export type CreateAccountResult =
+  | { outcome: "created"; account: Account & { handle: string } }
+  | { outcome: "existing"; account: Account }
+  | { outcome: "handle-taken" };
+
 /** What publishing records for a new listing and its first version. */
 export interface NewListing extends Address {
   title: string;
@@ -63,6 +79,16 @@ export type CreateListingResult =
 const isAddressConflict = (error: unknown): boolean => {
   for (let e = error; e instanceof Error; e = e.cause) {
     if (/UNIQUE constraint failed: (listings|versions)\./.test(e.message)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** True when the error, or one it wraps, is a constraint failure in the database. */
+const isConstraintFailure = (error: unknown): boolean => {
+  for (let e = error; e instanceof Error; e = e.cause) {
+    if (/(UNIQUE|FOREIGN KEY) constraint failed/.test(e.message)) {
       return true;
     }
   }
@@ -124,6 +150,50 @@ export class Storage {
       )
       .limit(1);
     return taken.length === 0;
+  }
+
+  /**
+   * Creates the account for a provider identity, with its provider link and its handle, in one
+   * database batch, so either all three rows are written or none are (ADR 0007). Reserved
+   * words and the format rule are checked by the handle schema, not here.
+   */
+  async createAccount(newAccount: NewAccount): Promise<CreateAccountResult> {
+    const { provider, providerAccountId, handle } = newAccount;
+    const existing = await this.findAccountByProviderIdentity(newAccount);
+    if (existing !== undefined) {
+      return { outcome: "existing", account: existing };
+    }
+    const id = crypto.randomUUID();
+    try {
+      await this.#db.batch([
+        // No constraint covers retired handles. The account row is skipped when the handle is
+        // retired, and the provider link's foreign key then fails the whole batch.
+        this.#db
+          .insert(accounts)
+          .select(
+            sql`select ${id}, unixepoch() where not exists (select 1 from ${retiredHandles} where ${retiredHandles.handle} = ${handle})`,
+          ),
+        this.#db
+          .insert(providerAccounts)
+          .values({ provider, providerAccountId, accountId: id }),
+        this.#db.insert(handles).values({ handle, accountId: id }),
+      ]);
+      return { outcome: "created", account: { id, handle } };
+    } catch (error) {
+      if (!isConstraintFailure(error)) {
+        throw error;
+      }
+      // The handle is in use or retired, or another request created this account since the
+      // read above. A batch that fails for any other reason is unexpected.
+      const raced = await this.findAccountByProviderIdentity(newAccount);
+      if (raced !== undefined) {
+        return { outcome: "existing", account: raced };
+      }
+      if (!(await this.isHandleAvailable(handle))) {
+        return { outcome: "handle-taken" };
+      }
+      throw error;
+    }
   }
 
   /**
