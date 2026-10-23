@@ -1,3 +1,4 @@
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import {
   accounts,
@@ -83,6 +84,22 @@ export const seedVersion = async (
   },
 ): Promise<void> => {
   await drizzle(database).insert(versions).values(version);
+};
+
+/**
+ * Changes a listing's current description. Editing a description is a later increment, so
+ * tests change it here.
+ */
+export const seedDescription = async (
+  database: D1Database,
+  listing: { handle: string; name: string; description: string },
+): Promise<void> => {
+  await drizzle(database)
+    .update(listings)
+    .set({ description: listing.description })
+    .where(
+      and(eq(listings.handle, listing.handle), eq(listings.name, listing.name)),
+    );
 };
 
 /** Every row in every table, so a test can check what was stored. */

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, inject, test } from "vitest";
-import { readAllRows, seedAccount, seedVersion } from "./seed";
+import { readAllRows, seedAccount, seedDescription, seedVersion } from "./seed";
 import { Storage, type NewListing } from "./storage";
 
 const storage = () => new Storage(env.DB, env.DOCUMENTS);
@@ -159,6 +159,102 @@ describe("finding a listing", () => {
 
     expect(
       await storage().findListing({ ...listing, version: "1.0.1" }),
+    ).toBeUndefined();
+  });
+});
+
+describe("finding a version", () => {
+  test("returns the version's own fields, without the description", async () => {
+    const listing = await newListing({ integrations: ["Slack"] });
+    await storage().createListing(listing);
+
+    expect(await storage().findVersion(listing)).toEqual({
+      handle: listing.handle,
+      name: listing.name,
+      version: "1.0.0",
+      title: "Post slack message",
+      sdk: "Python",
+      integrations: ["Slack"],
+      publishedAt: expect.any(Date) as Date,
+    });
+  });
+
+  test("returns nothing for an unknown version of a known listing", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+
+    expect(
+      await storage().findVersion({ ...listing, version: "1.0.1" }),
+    ).toBeUndefined();
+  });
+
+  test("returns nothing for a wrong-case handle or name", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+
+    expect(
+      await storage().findVersion({
+        ...listing,
+        handle: listing.handle.toUpperCase(),
+      }),
+    ).toBeUndefined();
+    expect(
+      await storage().findVersion({
+        ...listing,
+        name: listing.name.toUpperCase(),
+      }),
+    ).toBeUndefined();
+  });
+
+  test("is unchanged when the listing's description changes", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+    const before = await storage().findVersion(listing);
+
+    await seedDescription(env.DB, { ...listing, description: "Changed." });
+
+    expect(await storage().findVersion(listing)).toEqual(before);
+  });
+});
+
+describe("finding a listing's description", () => {
+  test("returns the current description", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+
+    expect(await storage().findListingDescription(listing)).toEqual({
+      handle: listing.handle,
+      name: listing.name,
+      description: "Posts a message to a Slack channel.",
+    });
+  });
+
+  test("returns the new description once it changes", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+
+    await seedDescription(env.DB, { ...listing, description: "Changed." });
+
+    expect(await storage().findListingDescription(listing)).toMatchObject({
+      description: "Changed.",
+    });
+  });
+
+  test("returns nothing for an unknown or wrong-case listing", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+
+    expect(
+      await storage().findListingDescription({
+        handle: listing.handle,
+        name: "never-published",
+      }),
+    ).toBeUndefined();
+    expect(
+      await storage().findListingDescription({
+        handle: listing.handle.toUpperCase(),
+        name: listing.name,
+      }),
     ).toBeUndefined();
   });
 });
