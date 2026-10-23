@@ -3,12 +3,15 @@ import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import {
   accounts,
   handles,
+  listings,
   providerAccounts,
   retiredHandles,
+  versions,
   type Provider,
+  type Sdk,
 } from "./schema";
 
-export { providers, type Provider } from "./schema";
+export { providers, sdks, type Provider, type Sdk } from "./schema";
 
 /** A provider account: which provider, and the account's ID at that provider. */
 export interface ProviderIdentity {
@@ -21,6 +24,43 @@ export interface Account {
   id: string;
   handle: string | null;
 }
+
+/** Where a published version lives: handle/name@version. */
+export interface Address {
+  handle: string;
+  name: string;
+  version: string;
+}
+
+/** What publishing records for a new listing and its first version. */
+export interface NewListing extends Address {
+  title: string;
+  /** The one-line description. It belongs to the listing and can change later. */
+  description: string;
+  sdk: Sdk;
+  /** The integrations implied by the code's imports. Empty when there are none. */
+  integrations: readonly string[];
+}
+
+/** A listing at one version's address, with every field search reads. */
+export interface Listing extends NewListing {
+  integrations: string[];
+  publishedAt: Date;
+}
+
+/** The outcome of creating a listing. An address can be written once. */
+export type CreateListingResult =
+  { outcome: "created"; listing: Listing } | { outcome: "address-taken" };
+
+/** True when the error, or one it wraps, is a unique-key failure on the listing tables. */
+const isAddressConflict = (error: unknown): boolean => {
+  for (let e = error; e instanceof Error; e = e.cause) {
+    if (/UNIQUE constraint failed: (listings|versions)\./.test(e.message)) {
+      return true;
+    }
+  }
+  return false;
+};
 
 /**
  * The storage interface (ADR 0005). It is the only code that sees D1 and Drizzle. Handlers
@@ -75,5 +115,70 @@ export class Storage {
       )
       .limit(1);
     return taken.length === 0;
+  }
+
+  /**
+   * Creates a listing and its first version in one database batch. When the listing or the
+   * version address already exists, nothing is written and the outcome is address-taken.
+   */
+  async createListing(listing: NewListing): Promise<CreateListingResult> {
+    const { handle, name, version, title, description, sdk } = listing;
+    const integrations = [...listing.integrations];
+    try {
+      const [, [created]] = await this.#db.batch([
+        this.#db.insert(listings).values({ handle, name, description }),
+        this.#db
+          .insert(versions)
+          .values({ handle, name, version, title, sdk, integrations })
+          .returning({ publishedAt: versions.publishedAt }),
+      ]);
+      if (created === undefined) {
+        throw new Error("The version insert returned no row.");
+      }
+      return {
+        outcome: "created",
+        listing: { ...listing, integrations, ...created },
+      };
+    } catch (error) {
+      if (isAddressConflict(error)) {
+        return { outcome: "address-taken" };
+      }
+      throw error;
+    }
+  }
+
+  /** The listing at an address, with its version's fields, or undefined when there is none. */
+  async findListing({
+    handle,
+    name,
+    version,
+  }: Address): Promise<Listing | undefined> {
+    return this.#db
+      .select({
+        handle: versions.handle,
+        name: versions.name,
+        version: versions.version,
+        title: versions.title,
+        description: listings.description,
+        sdk: versions.sdk,
+        integrations: versions.integrations,
+        publishedAt: versions.publishedAt,
+      })
+      .from(versions)
+      .innerJoin(
+        listings,
+        and(
+          eq(listings.handle, versions.handle),
+          eq(listings.name, versions.name),
+        ),
+      )
+      .where(
+        and(
+          eq(versions.handle, handle),
+          eq(versions.name, name),
+          eq(versions.version, version),
+        ),
+      )
+      .get();
   }
 }
