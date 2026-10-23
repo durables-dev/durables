@@ -2,9 +2,12 @@ import { drizzle } from "drizzle-orm/d1";
 import {
   accounts,
   handles,
+  listings,
   providerAccounts,
   retiredHandles,
+  versions,
   type Provider,
+  type Sdk,
 } from "./schema";
 
 // Test-only writes and reads. Accounts and handles are written at publish ("Epic: Describe and
@@ -64,22 +67,50 @@ export const seedRetiredHandle = async (
   await drizzle(database).insert(retiredHandles).values({ handle });
 };
 
+/**
+ * Adds a version under an existing listing. Publishing creates only a listing's first
+ * version; later versions are a later increment, so tests write them here.
+ */
+export const seedVersion = async (
+  database: D1Database,
+  version: {
+    handle: string;
+    name: string;
+    version: string;
+    title: string;
+    sdk: Sdk;
+    integrations: string[];
+  },
+): Promise<void> => {
+  await drizzle(database).insert(versions).values(version);
+};
+
 /** Every row in every table, so a test can check what was stored. */
 export const readAllRows = async (
   database: D1Database,
 ): Promise<Record<string, unknown[]>> => {
   const db = drizzle(database);
-  const [accountRows, providerAccountRows, handleRows, retiredHandleRows] =
-    await db.batch([
-      db.select().from(accounts),
-      db.select().from(providerAccounts),
-      db.select().from(handles),
-      db.select().from(retiredHandles),
-    ]);
+  const [
+    accountRows,
+    providerAccountRows,
+    handleRows,
+    retiredHandleRows,
+    listingRows,
+    versionRows,
+  ] = await db.batch([
+    db.select().from(accounts),
+    db.select().from(providerAccounts),
+    db.select().from(handles),
+    db.select().from(retiredHandles),
+    db.select().from(listings),
+    db.select().from(versions),
+  ]);
   return {
     accounts: accountRows,
     providerAccounts: providerAccountRows,
     handles: handleRows,
     retiredHandles: retiredHandleRows,
+    listings: listingRows,
+    versions: versionRows,
   };
 };
