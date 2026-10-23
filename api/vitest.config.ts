@@ -13,6 +13,19 @@ export default defineConfig({
     passWithNoTests: true,
     projects: [
       {
+        // The snippet templates are plain text files (src/snippets/templates/). Wrangler bundles
+        // .txt imports as text; here each one is imported as Vite's raw text instead.
+        plugins: [
+          {
+            name: "text-templates",
+            enforce: "pre",
+            resolveId(source, importer) {
+              return source.endsWith(".txt")
+                ? this.resolve(`${source}?raw`, importer, { skipSelf: true })
+                : undefined;
+            },
+          },
+        ],
         test: {
           name: "unit",
           include: ["src/**/*.test.ts"],

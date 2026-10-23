@@ -1,0 +1,23 @@
+from datetime import timedelta
+from typing import Any
+
+from temporalio import workflow
+from temporalio.common import RetryPolicy
+
+with workflow.unsafe.imports_passed_through():
+    from activities import {{imports}}
+
+
+@workflow.defn
+class {{workflowClass}}:
+    @workflow.run
+    async def run(self, args: list[Any]){{returns}}:
+        # Detection couldn't read what {{activity}} takes. Fill in its arguments,
+        # in order, in start.py.
+        return await workflow.execute_activity(
+            {{activity}},
+            args=args,
+            start_to_close_timeout=timedelta(seconds=30),
+            {{heartbeatTimeout}}
+            retry_policy=RetryPolicy(maximum_attempts=5),
+        )
