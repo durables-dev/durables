@@ -69,6 +69,17 @@ export const seedRetiredHandle = async (
 };
 
 /**
+ * Adds a listing with no version under it. Publishing never leaves one, so tests use it to make
+ * the database step of a publish fail after its document is written.
+ */
+export const seedListing = async (
+  database: D1Database,
+  listing: { handle: string; name: string; description: string },
+): Promise<void> => {
+  await drizzle(database).insert(listings).values(listing);
+};
+
+/**
  * Adds a version under an existing listing. Publishing creates only a listing's first
  * version; later versions are a later increment, so tests write them here.
  */

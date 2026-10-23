@@ -29,9 +29,36 @@ export interface ListingResponse {
   description: string;
 }
 
+/** A new version, as `POST /api/activities` answers a publish with 201. */
+export interface PublishResponse extends Address {
+  /** The full address: `handle/name@version`. */
+  address: string;
+  /** The version's API path, the same as the response's `Location` header. */
+  location: string;
+  /** True when this publish created the publisher's Durables account. */
+  accountCreated: boolean;
+}
+
 /** The address as the site shows it: `handle/name@version`. */
 export const formatAddress = ({ handle, name, version }: Address) =>
   `${handle}/${name}@${version}`;
+
+/** The API path a version is read at. Each part is percent-encoded. */
+export const versionLocation = ({ handle, name, version }: Address) =>
+  `/api/activities/${encodeURIComponent(handle)}/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}`;
+
+/** The publish response, from the address published and whether the account was created. */
+export const publishResponse = (
+  { handle, name, version }: Address,
+  accountCreated: boolean,
+): PublishResponse => ({
+  address: formatAddress({ handle, name, version }),
+  handle,
+  name,
+  version,
+  location: versionLocation({ handle, name, version }),
+  accountCreated,
+});
 
 /**
  * The version response, from the version's row and its document. The document's description

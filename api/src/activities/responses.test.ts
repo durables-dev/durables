@@ -1,6 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { Version, VersionDocument } from "../storage/storage";
-import { formatAddress, listingResponse, versionResponse } from "./responses";
+import {
+  formatAddress,
+  listingResponse,
+  publishResponse,
+  versionLocation,
+  versionResponse,
+} from "./responses";
 
 const version: Version = {
   handle: "acme",
@@ -79,5 +85,29 @@ describe("the listing response", () => {
       name: "charge-card",
       description: "Charges a card through Stripe.",
     });
+  });
+});
+
+describe("the publish response", () => {
+  test("carries the address, its parts, the version's location and whether the account was created", () => {
+    expect(
+      publishResponse(
+        { handle: "ada", name: "post-slack-message", version: "1.0.0" },
+        true,
+      ),
+    ).toEqual({
+      address: "ada/post-slack-message@1.0.0",
+      handle: "ada",
+      name: "post-slack-message",
+      version: "1.0.0",
+      location: "/api/activities/ada/post-slack-message/versions/1.0.0",
+      accountCreated: true,
+    });
+  });
+
+  test("points the location at the version endpoint, percent-encoding each part", () => {
+    expect(
+      versionLocation({ handle: "a b", name: "c/d", version: "1.0.0" }),
+    ).toBe("/api/activities/a%20b/c%2Fd/versions/1.0.0");
   });
 });
