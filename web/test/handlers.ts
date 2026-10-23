@@ -14,4 +14,15 @@ export const handlers = [
       message: `${handle} is available.`,
     });
   }),
+  // The detection check refuses whatever it is sent, so no test is accepted by accident.
+  http.post("/api/checks", () =>
+    HttpResponse.json(
+      {
+        type: "https://durables.dev/problems/not-a-temporal-activity",
+        title: "Not a Temporal activity",
+        status: 422,
+      },
+      { status: 422, headers: { "Content-Type": "application/problem+json" } },
+    ),
+  ),
 ];

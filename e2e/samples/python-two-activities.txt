@@ -1,0 +1,63 @@
+import os
+from dataclasses import dataclass
+
+import stripe
+from temporalio import activity
+from temporalio.exceptions import ApplicationError
+
+stripe.api_key = os.environ["STRIPE_API_KEY"]
+
+
+@dataclass
+class ChargeRequest:
+    request_id: str
+    amount_cents: int
+    currency: str
+    payment_method: str
+
+
+@dataclass
+class ChargeResult:
+    charge_id: str
+    status: str
+
+
+@dataclass
+class RefundRequest:
+    charge_id: str
+    amount_cents: int
+
+
+@dataclass
+class RefundResult:
+    refund_id: str
+    status: str
+
+
+@activity.defn
+def charge_card(input: ChargeRequest) -> ChargeResult:
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=input.amount_cents,
+            currency=input.currency,
+            payment_method=input.payment_method,
+            confirm=True,
+            idempotency_key=input.request_id,
+        )
+    except stripe.CardError as err:
+        raise ApplicationError(
+            f"Card declined: {err.user_message}",
+            type="CardDeclined",
+            non_retryable=True,
+        )
+    return ChargeResult(charge_id=intent.id, status=intent.status)
+
+
+@activity.defn
+def refund_charge(input: RefundRequest) -> RefundResult:
+    refund = stripe.Refund.create(
+        payment_intent=input.charge_id,
+        amount=input.amount_cents,
+        idempotency_key=f"refund-{input.charge_id}",
+    )
+    return RefundResult(refund_id=refund.id, status=refund.status)

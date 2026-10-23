@@ -1,0 +1,47 @@
+using System;
+using System.Threading.Tasks;
+using Stripe;
+using Temporalio.Activities;
+using Temporalio.Exceptions;
+
+namespace Acme.Payments;
+
+public record RefundRequest(string PaymentIntentId, long AmountCents, string RequestId);
+
+public record RefundResult(string RefundId, string Status);
+
+public class RefundActivities
+{
+	private readonly RefundService refunds;
+
+	public RefundActivities()
+	{
+		StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_API_KEY");
+		refunds = new RefundService();
+	}
+
+	[Activity]
+	public async Task<RefundResult> RefundPaymentAsync(RefundRequest request)
+	{
+		ActivityExecutionContext.Current.Heartbeat(request.PaymentIntentId);
+		try
+		{
+			var refund = await refunds.CreateAsync(
+				new RefundCreateOptions
+				{
+					PaymentIntent = request.PaymentIntentId,
+					Amount = request.AmountCents,
+				},
+				new RequestOptions { IdempotencyKey = request.RequestId },
+				ActivityExecutionContext.Current.CancellationToken);
+			return new RefundResult(refund.Id, refund.Status);
+		}
+		catch (StripeException err) when (err.StripeError?.Code == "charge_already_refunded")
+		{
+			throw new ApplicationFailureException(
+				$"Payment {request.PaymentIntentId} is already refunded.",
+				errorType: "AlreadyRefunded",
+				nonRetryable: true);
+		}
+	}
+}

@@ -32,6 +32,16 @@
   --rule: #3a322a;
   --selected: #2a231c;
   --positive: var(--color-lagoon);
+  /* The Gold tint behind a message that needs the reader's attention, such as a refused
+     file. Never Ember. */
+  --notice: rgb(255 183 0 / 14%);
+  /* The dimmed page behind a dialog. Ink at 60% under both themes. */
+  --scrim: rgb(11 8 6 / 60%);
+
+  /* The code panel. It is Ink under both themes, so no theme block changes these. */
+  --code-background: var(--color-ink);
+  --code-foreground: var(--color-cream);
+  --code-muted: #8a7f71;
 
   /* Sign-in providers' own colours (DUR-2). They are the providers', so no theme changes them. */
   --provider-github-bg: #24292f;
@@ -45,6 +55,21 @@
   --provider-microsoft-bg: #ffffff;
   --provider-microsoft-fg: #5e5e5e;
   --provider-microsoft-border: #8c8c8c;
+
+  /* Code panel and syntax colours. The panel is dark under both themes, so these are not
+     overridden for Cream. The highlighter's theme reads the --code-token-* names. */
+  --code-background: var(--color-ink);
+  --code-foreground: var(--color-cream);
+  --code-muted: #b0a597;
+  --code-token-keyword: var(--color-tangerine);
+  --code-token-string: var(--color-gold);
+  --code-token-string-expression: var(--color-gold);
+  --code-token-constant: var(--color-gold);
+  --code-token-comment: var(--code-muted);
+  --code-token-function: var(--color-cream);
+  --code-token-parameter: var(--color-cream);
+  --code-token-punctuation: var(--color-cream);
+  --code-token-link: var(--color-tangerine);
 
   /* Type */
   --font-display: "Space Grotesk Variable", sans-serif;
@@ -84,5 +109,6 @@
     --rule: #e3d8ca;
     --selected: var(--color-sand);
     --positive: var(--color-lagoon-deep);
+    --notice: rgb(255 183 0 / 16%);
   }
 }

@@ -1,0 +1,34 @@
+package com.acme.notifications;
+
+import com.twilio.Twilio;
+import com.twilio.rest.api.v2010.account.Message;
+import com.twilio.type.PhoneNumber;
+import io.temporal.activity.ActivityInterface;
+import io.temporal.activity.ActivityMethod;
+
+@ActivityInterface
+public interface SmsActivities {
+
+    @ActivityMethod
+    String sendSms(SmsRequest request);
+
+    record SmsRequest(String to, String body) {}
+
+    class Impl implements SmsActivities {
+
+        private final String from;
+
+        public Impl() {
+            Twilio.init(System.getenv("TWILIO_ACCOUNT_SID"), System.getenv("TWILIO_AUTH_TOKEN"));
+            this.from = System.getenv("TWILIO_FROM_NUMBER");
+        }
+
+        @Override
+        public String sendSms(SmsRequest request) {
+            Message message =
+                    Message.creator(new PhoneNumber(request.to()), new PhoneNumber(from), request.body())
+                            .create();
+            return message.getSid();
+        }
+    }
+}

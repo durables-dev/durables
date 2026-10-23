@@ -3,7 +3,10 @@ import { sessionQuery } from "@/lib/session";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { Navigate, useParams } from "react-router";
+import { CodeStep } from "./code-step";
 import styles from "./contribute-page.module.css";
+import { DetectedStep } from "./detected-step";
+import { draftFinished } from "./draft";
 import { ProfileStep } from "./profile-step";
 import { StepList } from "./step-list";
 import { finishedSteps, resolveStep, stepPath } from "./steps";
@@ -13,7 +16,9 @@ import { useContributeDraft } from "./use-contribute-draft";
 // names the step. A missing, unknown or locked step redirects to the earliest unfinished one.
 // A publisher who already has an account has finished Profile & Handle, so nothing is
 // resolved until the session has been read once: the flow shows as busy until then. A read
-// that failed counts as read. A later refetch does not hide the step again.
+// that failed counts as read. A later refetch does not hide the step again. Every step after
+// Profile & Handle is for signed-in publishers only, so a signed-out visitor has finished
+// nothing, whatever the draft holds, and lands on the sign-in step.
 export function ContributePage() {
   const { step: param } = useParams();
   const { draft } = useContributeDraft();
@@ -31,10 +36,11 @@ export function ContributePage() {
     );
   }
 
-  const finished = finishedSteps(
-    draft.finished,
-    session?.user?.accountExists === true,
-  );
+  const user = session?.user ?? null;
+  const finished =
+    user === null
+      ? []
+      : finishedSteps(draftFinished(draft), user.accountExists);
   const current = resolveStep(param, finished);
 
   if (current !== param) {
@@ -47,6 +53,10 @@ export function ContributePage() {
         <StepList current={current} finished={finished} />
         <div className={styles["content"]}>
           {current === "profile" ? <ProfileStep /> : null}
+          {current === "code" ? (
+            <CodeStep returning={user?.accountExists === true} />
+          ) : null}
+          {current === "detected" ? <DetectedStep /> : null}
         </div>
       </div>
     </ContributeFrame>

@@ -3,8 +3,9 @@ import { z } from "zod";
 
 // RFC 9457 Problem Details, the body of every API error response (api: http/problem.ts).
 // parseResponse throws DetailedError on a non-2xx status; problemFrom narrows it to this.
+// Extension members, such as a refusal's `sdk` or `count`, are kept.
 
-const problemDetailsSchema = z.object({
+const problemDetailsSchema = z.looseObject({
   type: z.string(),
   title: z.string(),
   status: z.number().int(),

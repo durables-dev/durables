@@ -4,6 +4,7 @@ import {
   expect,
   type APIRequestContext,
   type BrowserContextOptions,
+  type Locator,
   type Page,
 } from "@playwright/test";
 import { execFile } from "node:child_process";
@@ -57,6 +58,17 @@ interface Fixtures {
   seedAccount: (
     seed?: Partial<Pick<SeededAccount, "providerAccountId" | "handle">>,
   ) => Promise<SeededAccount>;
+  /**
+   * Seeds an account and signs the page's browser context in as its owner. The publisher has
+   * their own identity, and with it their own check rate limit, and the Contribute flow opens
+   * on the Code step.
+   */
+  signInWithAccount: () => Promise<SeededAccount>;
+  /**
+   * Pastes text into a field through the clipboard, replacing what it holds, as a publisher's
+   * paste does. The page sees a paste, not typing.
+   */
+  paste: (field: Locator, text: string) => Promise<void>;
 }
 
 interface WorkerFixtures {
@@ -188,6 +200,31 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         ].join(" "),
       );
     }
+  },
+
+  signInWithAccount: async ({ seedAccount, signIn }, use) => {
+    await use(async () => {
+      const account = await seedAccount();
+      await signIn({
+        name: publisherName,
+        provider: account.provider,
+        providerAccountId: account.providerAccountId,
+      });
+      return account;
+    });
+  },
+
+  paste: async ({ context, page }, use) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await use(async (field, text) => {
+      await page.evaluate(
+        async (copied) => navigator.clipboard.writeText(copied),
+        text,
+      );
+      await field.focus();
+      await field.press("ControlOrMeta+A");
+      await field.press("ControlOrMeta+V");
+    });
   },
 });
 

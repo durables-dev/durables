@@ -18,6 +18,30 @@ function resolve(block: string, name: string): string | undefined {
   return reference ? resolve(ink, reference) : value?.toLowerCase();
 }
 
+test.each([
+  "--code-foreground",
+  "--code-muted",
+  "--code-token-keyword",
+  "--code-token-string",
+  "--code-token-string-expression",
+  "--code-token-constant",
+  "--code-token-comment",
+  "--code-token-function",
+  "--code-token-parameter",
+  "--code-token-punctuation",
+  "--code-token-link",
+])("code text in %s keeps AA contrast on the code panel", (name) => {
+  const text = resolve(ink, name);
+  const panel = resolve(ink, "--code-background");
+  expect(text).toMatch(/^#[0-9a-f]{6}$/);
+  expect(contrast(text ?? "", panel ?? "")).toBeGreaterThanOrEqual(4.5);
+});
+
+test("the code panel stays dark under Cream", () => {
+  expect(declared(cream, "--code-background")).toBeUndefined();
+  expect(resolve(ink, "--code-background")).toBe("#0b0806");
+});
+
 test("the footer band is #17120D on Ink", () => {
   expect(resolve(ink, "--footer")).toBe("#17120d");
 });
@@ -77,3 +101,23 @@ test.each([
     expect(contrast(text ?? "", panel ?? "")).toBeGreaterThanOrEqual(4.5);
   },
 );
+
+test.each([
+  ["Ink", ink],
+  ["Cream", cream],
+])("the code panel stays Ink with Cream text under %s", (_theme, block) => {
+  expect(
+    resolve(block, "--code-background") ?? resolve(ink, "--code-background"),
+  ).toBe("#0b0806");
+  expect(
+    resolve(block, "--code-foreground") ?? resolve(ink, "--code-foreground"),
+  ).toBe("#fffbf5");
+});
+
+test("the code panel's line numbers and placeholder keep AA contrast", () => {
+  const muted = resolve(ink, "--code-muted");
+  const panel = resolve(ink, "--code-background");
+  expect(muted).toMatch(/^#[0-9a-f]{6}$/);
+  expect(panel).toMatch(/^#[0-9a-f]{6}$/);
+  expect(contrast(muted ?? "", panel ?? "")).toBeGreaterThanOrEqual(4.5);
+});
