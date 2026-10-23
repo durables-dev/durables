@@ -1,0 +1,32 @@
+using Temporalio.Client;
+using Temporalio.Worker;
+
+if (args.FirstOrDefault() == "start")
+{
+    await Starter.RunAsync();
+    return;
+}
+
+var client = await TemporalClient.ConnectAsync(new("localhost:7233"));
+// Activities stands in for the class that declares {{activity}}. Change it to your
+// class's name, and add a using directive if that class is in a namespace.
+var activities = new Activities();
+using var worker = new TemporalWorker(
+    client,
+    new TemporalWorkerOptions({{taskQueue}})
+        .AddActivity(activities.{{activity}})
+        .AddWorkflow<{{workflowClass}}>());
+
+using var cancellation = new CancellationTokenSource();
+Console.CancelKeyPress += (_, eventArgs) =>
+{
+    eventArgs.Cancel = true;
+    cancellation.Cancel();
+};
+try
+{
+    await worker.ExecuteAsync(cancellation.Token);
+}
+catch (OperationCanceledException)
+{
+}

@@ -1,0 +1,4 @@
+temporal server start-dev
+{{environment}}
+npx tsx worker.ts
+npx tsx start.ts

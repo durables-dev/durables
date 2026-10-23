@@ -1,0 +1,21 @@
+using Temporalio.Common;
+using Temporalio.Workflows;
+
+// Activities stands in for the class that declares {{activity}}. Change it to your
+// class's name, and add a using directive if that class is in a namespace.
+[Workflow]
+public class {{workflowClass}}
+{
+    [WorkflowRun]
+    public async {{returnType}} RunAsync({{inputType}} input)
+    {
+        {{returnKeyword}}await Workflow.ExecuteActivityAsync(
+            (Activities activities) => activities.{{activity}}(input),
+            new ActivityOptions
+            {
+                StartToCloseTimeout = TimeSpan.FromSeconds(30),
+                {{heartbeatTimeout}}
+                RetryPolicy = new RetryPolicy { MaximumAttempts = 5 },
+            });
+    }
+}
