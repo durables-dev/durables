@@ -143,3 +143,122 @@ describe.each(legalPages)("$path", ({ path, heading, title }) => {
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320);
   });
 });
+
+// Text with its runs of whitespace collapsed, as a reader sees it.
+function tidy(text: string | null) {
+  return (text ?? "").replace(/\s+/g, " ").trim();
+}
+
+// The Terms text, split at each second-level heading. Each section is its heading and the
+// text of its blocks in order: every paragraph, and every list item on its own. The text
+// before the first heading is the "Introduction".
+async function termsSections() {
+  const screen = await openAt("/terms");
+  const publishing = screen.getByRole("heading", {
+    level: 2,
+    name: "Publishing",
+  });
+  await expect.element(publishing).toBeVisible();
+
+  const body = publishing.element().parentElement;
+  if (!body) throw new Error("Expected the Terms headings inside a body");
+  const sections: { heading: string; blocks: string[] }[] = [
+    { heading: "Introduction", blocks: [] },
+  ];
+  for (const child of Array.from(body.children)) {
+    if (child.tagName === "H2") {
+      sections.push({ heading: tidy(child.textContent), blocks: [] });
+      continue;
+    }
+    const blocks =
+      child.tagName === "UL"
+        ? Array.from(child.querySelectorAll("li"))
+        : [child];
+    sections
+      .at(-1)
+      ?.blocks.push(...blocks.map((block) => tidy(block.textContent)));
+  }
+  return { screen, sections };
+}
+
+describe("/terms licence wording", () => {
+  test("the Publishing section says everything is published under MIT-0", async () => {
+    const { sections } = await termsSections();
+
+    const publishing = sections.find(({ heading }) => heading === "Publishing");
+    expect(publishing?.blocks).toContain(
+      "publish it under MIT-0, like everything on Durables: anyone may use, change and share it, with no attribution and no warranty.",
+    );
+  });
+
+  test('the page no longer says "unless the code states a licence"', async () => {
+    const { screen } = await termsSections();
+
+    const text = tidy(screen.getByRole("main").element().textContent);
+    expect(text).not.toMatch(/unless the code states a licen[cs]e/i);
+    expect(text).not.toMatch(/licen[cs]e of its own/i);
+  });
+
+  test("every other part of the Terms is unchanged", async () => {
+    const { sections } = await termsSections();
+
+    expect(sections).toEqual([
+      {
+        heading: "Introduction",
+        blocks: [
+          "Durables is a free community registry of Temporal activities. It is run by David Dieruf as an individual, not by a company, and it is not affiliated with or endorsed by Temporal Technologies. By using Durables, you agree to these terms.",
+        ],
+      },
+      {
+        heading: "Using the site",
+        blocks: [
+          "Anyone can browse, search and copy from Durables without an account. Please don't disrupt the site: no automated traffic that degrades it for others, no attempts to get around its limits, and no attempts to reach data that isn't yours.",
+        ],
+      },
+      {
+        heading: "Publishing",
+        blocks: [
+          "To publish, you sign in and choose a handle. When you publish, you:",
+          "confirm you wrote the code, or have the right to share it under these terms;",
+          "keep ownership of it;",
+          "let Durables store, analyse, display and distribute it;",
+          "publish it under MIT-0, like everything on Durables: anyone may use, change and share it, with no attribution and no warranty.",
+          "Handles and published versions are permanent. A handle can never be changed or given to someone else, and a published version can't be edited or replaced; you publish a new version instead. Check your code before you publish, and never include secrets, keys or anyone's personal data.",
+        ],
+      },
+      {
+        heading: "What you can't publish",
+        blocks: [
+          "Malicious code, or code that hides what it does.",
+          "Code you don't have the right to share.",
+          "Secrets, credentials or other people's personal data.",
+          "Anything that impersonates another person or project.",
+          "Anything unlawful.",
+          "Durables may hide or remove content, or suspend an account, that breaks these terms, without notice.",
+        ],
+      },
+      {
+        heading: "Using published code",
+        blocks: [
+          "Activities on Durables are written by the community. Durables never runs published code. Its checks are automated, read the code as text, and can be wrong. Review any code before you use it; you are responsible for what you run.",
+        ],
+      },
+      {
+        heading: "No warranty",
+        blocks: [
+          "Durables and everything on it are provided as is, without warranties of any kind. To the extent the law allows, the operator is not liable for any loss or damage arising from your use of the site or of code found on it. The site may change, pause or close at any time.",
+        ],
+      },
+      {
+        heading: "Changes",
+        blocks: [
+          "These terms may change. The date at the top shows when they last did. Continuing to use Durables after a change means you accept it.",
+        ],
+      },
+      {
+        heading: "Contact",
+        blocks: ["Questions about these terms: hello@durables.dev."],
+      },
+    ]);
+  });
+});
