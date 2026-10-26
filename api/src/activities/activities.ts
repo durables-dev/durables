@@ -31,7 +31,7 @@ import {
   acceptListing,
   MAX_PUBLISH_BODY_BYTES,
   publishBody,
-  publishedVersion,
+  FIRST_VERSION,
 } from "./publish-request";
 import { publishVersion } from "./publish-version";
 import {
@@ -108,7 +108,7 @@ export const activities = new Hono<AppEnv>()
       // The publish-time run is the only one stored (ADR 0008).
       const facts = checkCode(body.code, detectors);
       const { title, name, description } = acceptListing(body);
-      const address = { handle, name, version: publishedVersion };
+      const address = { handle, name, version: FIRST_VERSION };
       const integrations = integrationsFor(facts.dependencies);
 
       const result = await publishVersion(

@@ -134,10 +134,7 @@ describe("publishing a version", () => {
       context,
     );
 
-    expect(result).toMatchObject({
-      outcome: "published",
-      accountCreated: true,
-    });
+    expect(result).toEqual({ outcome: "published", accountCreated: true });
     expect(calls).toEqual([
       "isHandleAvailable",
       "findVersion",
@@ -155,10 +152,7 @@ describe("publishing a version", () => {
       context,
     );
 
-    expect(result).toMatchObject({
-      outcome: "published",
-      accountCreated: false,
-    });
+    expect(result).toEqual({ outcome: "published", accountCreated: false });
     expect(calls).toEqual([
       "findVersion",
       "writeVersionDocument",

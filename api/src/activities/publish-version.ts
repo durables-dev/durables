@@ -1,8 +1,7 @@
 import type {
   CreatePublicationResult,
-  Listing,
   NewListing,
-  ProviderIdentity,
+  NewPublication,
   Storage,
   VersionDocument,
 } from "../storage/storage";
@@ -23,14 +22,10 @@ export type PublishStorage = Pick<
   | "createPublication"
 >;
 
-/** What one publish writes. */
-export interface Publication {
-  /** The listing and its first version, at the address being published. */
-  listing: NewListing;
+/** What one publish writes: the database rows, and the version document for the same address. */
+export interface Publication extends NewPublication {
   /** The version document for the same address. */
   document: VersionDocument;
-  /** The provider identity to create the account for. Absent when the account exists. */
-  newAccount?: ProviderIdentity;
 }
 
 /**
@@ -38,7 +33,7 @@ export interface Publication {
  * handle-taken mean nothing this publish wrote is left in either store.
  */
 export type PublishOutcome =
-  | { outcome: "published"; listing: Listing; accountCreated: boolean }
+  | { outcome: "published"; accountCreated: boolean }
   | { outcome: "address-taken" }
   | { outcome: "handle-taken" };
 
@@ -77,16 +72,16 @@ const writeDocument = async (
   storage: PublishStorage,
   { listing, document }: Publication,
 ): Promise<boolean> => {
-  const first = await storage.writeVersionDocument(listing, document);
-  if (first.outcome === "created") {
+  const initialWrite = await storage.writeVersionDocument(listing, document);
+  if (initialWrite.outcome === "created") {
     return true;
   }
   if ((await storage.findVersion(listing)) !== undefined) {
     return false;
   }
   await storage.deleteVersionDocument(listing);
-  const second = await storage.writeVersionDocument(listing, document);
-  if (second.outcome !== "created") {
+  const retryWrite = await storage.writeVersionDocument(listing, document);
+  if (retryWrite.outcome !== "created") {
     throw new Error("The orphaned version document could not be replaced.");
   }
   return true;
@@ -142,9 +137,5 @@ export const publishVersion = async (
     }
     return result;
   }
-  return {
-    outcome: "published",
-    listing: result.listing,
-    accountCreated: result.accountCreated,
-  };
+  return { outcome: "published", accountCreated: result.accountCreated };
 };
