@@ -1,0 +1,53 @@
+.page {
+  max-width: var(--measure-prose);
+  padding: 48px 24px;
+  overflow-wrap: anywhere;
+}
+
+.title {
+  font-size: var(--text-h1);
+  font-weight: 600;
+  letter-spacing: -0.023em;
+  line-height: 1.1;
+}
+
+.address {
+  margin: 8px 0 0;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
+
+.description {
+  margin: 16px 0 0;
+  line-height: 1.5;
+}
+
+.loading {
+  margin: 0;
+  padding: 48px 24px;
+  color: var(--fg-muted);
+}
+
+.retry {
+  margin-top: 16px;
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retry:disabled {
+  cursor: default;
+  color: var(--fg-muted);
+}
+
+.failure {
+  margin: 0;
+}
