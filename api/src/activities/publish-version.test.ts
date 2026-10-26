@@ -274,6 +274,29 @@ describe("publishing a version", () => {
     expect(calls).not.toContain("deleteVersionDocument");
   });
 
+  test("leaves the document in place when the rows are refused as handle-taken and a version row now exists", async () => {
+    const { storage, calls } = fakeStorage({
+      versionAppears: true,
+      publication: { outcome: "handle-taken" },
+    });
+
+    const result = await publishVersion(
+      storage,
+      { listing, document, newAccount },
+      context,
+    );
+
+    expect(result).toEqual({ outcome: "handle-taken" });
+    expect(calls).toEqual([
+      "isHandleAvailable",
+      "findVersion",
+      "writeVersionDocument",
+      "createPublication+account",
+      "findVersion",
+    ]);
+    expect(calls).not.toContain("deleteVersionDocument");
+  });
+
   test("raises the database error, not the clean-up's, and logs the failed clean-up without the code", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { storage } = fakeStorage({

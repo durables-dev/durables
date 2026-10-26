@@ -31,6 +31,11 @@ export interface ProblemInit {
   title?: string;
   detail?: string;
   errors?: FieldError[];
+  /**
+   * Extension members of the problem type, such as the handle a handle-taken problem names.
+   * They are added to the body beside the standard members, which they never replace.
+   */
+  extensions?: Record<string, unknown>;
 }
 
 const titles: Partial<Record<ProblemStatus, string>> = {
@@ -52,7 +57,9 @@ export const problem = ({
   title,
   detail,
   errors,
+  extensions,
 }: ProblemInit): ProblemDetails => ({
+  ...extensions,
   type: type ?? "about:blank",
   title: title ?? titles[status] ?? "Error",
   status,

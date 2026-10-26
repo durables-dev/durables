@@ -7,7 +7,6 @@ import {
   MAX_PUBLISH_BODY_BYTES,
   publishBody,
   type PublishBody,
-  publishLimitKey,
 } from "./publish-request";
 
 const confirmations = {
@@ -150,13 +149,5 @@ describe("accepting the listing", () => {
       "description",
       "confirmations.mitZero",
     ]);
-  });
-});
-
-describe("the publish rate-limit key", () => {
-  test("is the provider identity, so it is the same for every session of a publisher", () => {
-    expect(
-      publishLimitKey({ provider: "gitlab", providerAccountId: "42" }),
-    ).toBe("gitlab:42");
   });
 });

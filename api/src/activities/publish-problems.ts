@@ -51,27 +51,18 @@ export const addressTaken = () =>
     errors: [{ field: "name", message: addressTakenMessage }],
   });
 
-/** A ProblemError whose body carries the extension members of its problem. */
-class ExtendedProblemError extends ProblemError {
-  constructor(details: ProblemDetails) {
-    super(details);
-    // ProblemError keeps only the standard members. Add the extensions too.
-    Object.assign(this.problem, details);
-  }
-}
-
 /** The handle was taken by another account since it was chosen. Nothing was written. */
 export const handleTaken = (handle: string) => {
   const message = handleTakenMessage(handle);
-  const details: HandleTakenProblem = {
+  const extensions: Pick<HandleTakenProblem, "handle"> = { handle };
+  return new ProblemError({
     type: publishProblemTypes.handleTaken,
     status: 409,
     title: "Handle taken",
     detail: message,
     errors: [{ field: "handle", message }],
-    handle,
-  };
-  return new ExtendedProblemError(details);
+    extensions,
+  });
 };
 
 /** A detail is invalid or a confirmation is not given. One error per failing field. */

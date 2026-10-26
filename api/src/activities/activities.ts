@@ -4,7 +4,10 @@ import { bodyLimit } from "hono/body-limit";
 import { cache } from "hono/cache";
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../app-env";
-import type { Session } from "../auth/auth";
+import {
+  type PublisherVariables,
+  requirePublisher,
+} from "../auth/require-publisher";
 import { detectors } from "../checks/detectors";
 import { integrationsFor } from "../checks/integrations";
 import { checkCode } from "../checks/pipeline";
@@ -15,6 +18,7 @@ import {
   versionCacheName,
 } from "../http/cache-control";
 import { ProblemError } from "../http/problem";
+import { publisherLimitKey } from "../http/rate-limits";
 import { problemOnInvalid } from "../http/validation";
 import { generateSnippets } from "../snippets/snippets";
 import {
@@ -28,7 +32,6 @@ import {
   MAX_PUBLISH_BODY_BYTES,
   publishBody,
   publishedVersion,
-  publishLimitKey,
 } from "./publish-request";
 import { publishVersion } from "./publish-version";
 import {
@@ -48,22 +51,6 @@ import {
 // is cached briefly. Publishing runs the checks again and never accepts detection results
 // from the client. Nothing here logs the code, and no error carries it.
 
-/** The signed-in publisher, set on c.var by requirePublisher. */
-interface PublisherVariables {
-  Variables: { publisher: Session };
-}
-
-/** Answers 401 when there is no signed-in session, and sets the publisher on c.var. */
-const requirePublisher = () =>
-  createMiddleware<AppEnv & PublisherVariables>(async (c, next) => {
-    const publisher = await c.var.auth.session();
-    if (publisher === undefined) {
-      throw new ProblemError({ status: 401, detail: "Sign in first." });
-    }
-    c.set("publisher", publisher);
-    await next();
-  });
-
 /** Answers 413 Problem Details, the same refusal as oversized code, when the body is too large. */
 const publishBodyLimit = () =>
   bodyLimit({
@@ -77,7 +64,7 @@ const publishBodyLimit = () =>
 const publishRateLimit = () =>
   createMiddleware<AppEnv & PublisherVariables>(async (c, next) => {
     const { success } = await c.var.publishLimit.limit({
-      key: publishLimitKey(c.var.publisher),
+      key: publisherLimitKey(c.var.publisher),
     });
     if (!success) {
       throw publishLimited();

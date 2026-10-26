@@ -134,12 +134,10 @@ export const publishVersion = async (
     throw error;
   }
   if (result.outcome !== "created") {
-    // When another publish of this address won, its document replaced ours in writeDocument.
-    // That document is the only one behind its version, so it is left in place.
-    if (
-      result.outcome !== "address-taken" ||
-      (await storage.findVersion(listing)) === undefined
-    ) {
+    // A document counts only once its version row exists. If a row exists now, another
+    // publish of this address won and its document replaced ours in writeDocument, so the
+    // document is theirs and is left in place. This holds for every refusal.
+    if ((await storage.findVersion(listing)) === undefined) {
       await cleanUp(storage, listing, context);
     }
     return result;
