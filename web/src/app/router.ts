@@ -40,6 +40,12 @@ export const routes: RouteObject[] = [
         path: "/security",
         lazy: () => import("@/features/legal/security-route"),
       },
+      {
+        // A listing's address, /<handle>/<name>@<version>. Every site page's path is a
+        // reserved handle, so it can never be read as a listing.
+        path: "/:handle/:nameAtVersion",
+        lazy: () => import("@/features/activity/listing-route"),
+      },
     ],
   },
 ];
