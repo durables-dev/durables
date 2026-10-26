@@ -106,15 +106,17 @@ export const publishVersion = async (
   context: PublishContext,
 ): Promise<PublishOutcome> => {
   const { listing, newAccount } = publication;
-  // The database is read first, so a published address never reaches the document store.
-  if ((await storage.findVersion(listing)) !== undefined) {
-    return { outcome: "address-taken" };
-  }
+  // The database is read first, so a published address never reaches the document store. On a
+  // first publish the handle is checked before the address: when another account owns the
+  // handle, any version at the address is theirs, and the answer is handle-taken.
   if (
     newAccount !== undefined &&
     !(await storage.isHandleAvailable(listing.handle))
   ) {
     return { outcome: "handle-taken" };
+  }
+  if ((await storage.findVersion(listing)) !== undefined) {
+    return { outcome: "address-taken" };
   }
 
   if (!(await writeDocument(storage, publication))) {
@@ -132,7 +134,14 @@ export const publishVersion = async (
     throw error;
   }
   if (result.outcome !== "created") {
-    await cleanUp(storage, listing, context);
+    // When another publish of this address won, its document replaced ours in writeDocument.
+    // That document is the only one behind its version, so it is left in place.
+    if (
+      result.outcome !== "address-taken" ||
+      (await storage.findVersion(listing)) === undefined
+    ) {
+      await cleanUp(storage, listing, context);
+    }
     return result;
   }
   return {

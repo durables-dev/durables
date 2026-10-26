@@ -139,8 +139,8 @@ describe("publishing a version", () => {
       accountCreated: true,
     });
     expect(calls).toEqual([
-      "findVersion",
       "isHandleAvailable",
+      "findVersion",
       "writeVersionDocument",
       "createPublication+account",
     ]);
@@ -176,7 +176,7 @@ describe("publishing a version", () => {
     );
 
     expect(result).toEqual({ outcome: "address-taken" });
-    expect(calls).toEqual(["findVersion"]);
+    expect(calls).toEqual(["isHandleAvailable", "findVersion"]);
   });
 
   test("writes nothing when the handle is taken before the document is written", async () => {
@@ -189,7 +189,23 @@ describe("publishing a version", () => {
     );
 
     expect(result).toEqual({ outcome: "handle-taken" });
-    expect(calls).toEqual(["findVersion", "isHandleAvailable"]);
+    expect(calls).toEqual(["isHandleAvailable"]);
+  });
+
+  test("answers handle-taken, not address-taken, on a first publish when another account owns the handle and the address", async () => {
+    const { storage, calls } = fakeStorage({
+      handleAvailable: false,
+      versionExists: true,
+    });
+
+    const result = await publishVersion(
+      storage,
+      { listing, document, newAccount },
+      context,
+    );
+
+    expect(result).toEqual({ outcome: "handle-taken" });
+    expect(calls).toEqual(["isHandleAvailable"]);
   });
 
   test("writes no rows when the document write fails", async () => {
@@ -235,6 +251,28 @@ describe("publishing a version", () => {
       expect(calls.at(-1)).toBe("deleteVersionDocument");
     },
   );
+
+  test("leaves the document in place when the rows are refused as address-taken and a version row now exists", async () => {
+    const { storage, calls } = fakeStorage({
+      versionAppears: true,
+      publication: { outcome: "address-taken" },
+    });
+
+    const result = await publishVersion(
+      storage,
+      { listing, document },
+      context,
+    );
+
+    expect(result).toEqual({ outcome: "address-taken" });
+    expect(calls).toEqual([
+      "findVersion",
+      "writeVersionDocument",
+      "createPublication",
+      "findVersion",
+    ]);
+    expect(calls).not.toContain("deleteVersionDocument");
+  });
 
   test("raises the database error, not the clean-up's, and logs the failed clean-up without the code", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);

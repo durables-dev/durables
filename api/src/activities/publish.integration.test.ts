@@ -11,6 +11,7 @@ import {
   seedAccount,
   seedListing,
   seedRetiredHandle,
+  seedVersion,
 } from "../storage/seed";
 import {
   Storage,
@@ -409,6 +410,35 @@ describe("POST /api/activities", () => {
           providerAccountId,
         }),
       ).toBeUndefined();
+    });
+
+    test("answers 409 handle-taken, not address-taken, when the handle's owner has published the same name", async () => {
+      const { cookie, handle } = await newPublisher();
+      await seedAccount(env.DB, { handle });
+      const body = publishBody();
+      await seedListing(env.DB, {
+        handle,
+        name: body.name,
+        description: "Published by the handle's owner",
+      });
+      await seedVersion(env.DB, {
+        handle,
+        name: body.name,
+        version: "1.0.0",
+        title: "Owner's activity",
+        sdk: "Python",
+        integrations: [],
+      });
+      const before = await snapshot();
+
+      const response = await publish(cookie, body);
+
+      await expectProblem(response, 409, {
+        type: publishProblemTypes.handleTaken,
+        handle,
+        errors: [{ field: "handle", message: `${handle} is taken.` }],
+      });
+      expect(await snapshot()).toEqual(before);
     });
 
     test("answers 409 handle-taken for a handle retired since it was chosen", async () => {
