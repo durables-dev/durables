@@ -29,10 +29,10 @@ export interface Draft {
    */
   details?: DraftDetailsEdits | undefined;
   /**
-   * Publish was refused because the publisher already has a listing at this address. The
-   * Details step says so under the name until the publisher edits the name.
+   * The name publish refused because the publisher already has a listing at that address.
+   * The Details step says so under the name while the name is this one.
    */
-  nameUsed?: boolean | undefined;
+  usedName?: string | undefined;
   /**
    * The Review step's confirmations the publisher has checked or unchecked. They vouch for the
    * code, so they are cleared whenever the code changes.
@@ -62,7 +62,7 @@ export type DraftAction =
   | { type: "codeEdited"; code: string }
   | { type: "checkFinished"; code: string; result: CheckResult }
   | { type: "detailsEdited"; field: keyof ListingDetails; value: string }
-  | { type: "nameUsedAtPublish" }
+  | { type: "nameUsedAtPublish"; name: string }
   | {
       type: "confirmationToggled";
       confirmation: PublishConfirmationKey;
@@ -95,8 +95,8 @@ const draftSchema = z.object({
     } satisfies Record<keyof ListingDetails, z.ZodType>)
     .optional()
     .catch(undefined),
-  // An unreadable flag is dropped, so the message under the name goes.
-  nameUsed: optionalBoolean,
+  // An unreadable refused name is dropped, so the message under the name goes.
+  usedName: optionalString,
   // An unreadable confirmation is dropped, so it reads as unchecked.
   confirmations: z
     .object({
@@ -134,10 +134,9 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
       return {
         ...draft,
         details: { ...draft.details, [action.field]: action.value },
-        ...(action.field === "name" ? { nameUsed: undefined } : {}),
       };
     case "nameUsedAtPublish":
-      return { ...draft, nameUsed: true };
+      return { ...draft, usedName: action.name };
     case "confirmationToggled":
       return {
         ...draft,

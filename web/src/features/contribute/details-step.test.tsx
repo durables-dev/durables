@@ -17,7 +17,7 @@ import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
 import { draftStorageKey, type Draft } from "./draft";
-import { acceptedDraft } from "./test-drafts";
+import { acceptedDraft, acceptedFacts } from "./test-drafts";
 
 // The real route tree, opened at an address as if typed into the browser.
 async function openAt(path: string) {
@@ -407,12 +407,14 @@ describe("Continue", () => {
 });
 
 describe("a name already used, as publish reports it", () => {
+  const usedName = "post-slack-message";
+
   test("shows the message under the name when the step opens", async () => {
     const { screen } = await openDetails({
       ...detectedDraft,
       finished: ["profile", "detected", "details"],
       details: { description },
-      nameUsed: true,
+      usedName,
     });
 
     expect(messageUnder(nameField(screen))).toBe(
@@ -421,20 +423,59 @@ describe("a name already used, as publish reports it", () => {
     await expect
       .element(nameField(screen))
       .toHaveAttribute("aria-invalid", "true");
-    await expect.element(nameField(screen)).toHaveValue("post-slack-message");
+    await expect.element(nameField(screen)).toHaveValue(usedName);
   });
 
   test("goes once the publisher edits the name", async () => {
     const { screen } = await openDetails({
       ...detectedDraft,
       details: { description },
-      nameUsed: true,
+      usedName,
     });
 
     await nameField(screen).fill("slack-poster");
 
     expect(messageUnder(nameField(screen))).toBe("");
     await expect.element(continueButton(screen)).toBeEnabled();
+  });
+
+  test("comes back when the publisher types the refused name again", async () => {
+    const { screen } = await openDetails({
+      ...detectedDraft,
+      details: { description },
+      usedName,
+    });
+
+    await nameField(screen).fill("slack-poster");
+    await nameField(screen).fill(usedName);
+
+    expect(messageUnder(nameField(screen))).toBe(
+      "You already have a listing at this address.",
+    );
+    await expect
+      .element(nameField(screen))
+      .toHaveAttribute("aria-invalid", "true");
+  });
+
+  test("does not show once a different activity is accepted", async () => {
+    const { screen } = await openDetails({
+      ...detectedDraft,
+      check: {
+        outcome: "accepted",
+        facts: {
+          ...acceptedFacts,
+          activity: { name: "send_email", line: 4 },
+        },
+      },
+      details: { description },
+      usedName,
+    });
+
+    await expect.element(nameField(screen)).not.toHaveValue(usedName);
+    expect(messageUnder(nameField(screen))).toBe("");
+    await expect
+      .element(nameField(screen))
+      .toHaveAttribute("aria-invalid", "false");
   });
 });
 

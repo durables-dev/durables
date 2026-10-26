@@ -721,53 +721,51 @@ describe("publishing", () => {
 });
 
 describe("a name already used, as publish reports it", () => {
-  test("is kept in the draft", () => {
-    expect(
-      draftReducer(acceptedDraft, { type: "nameUsedAtPublish" }).nameUsed,
-    ).toBe(true);
+  const refuse = (draft: Draft, name = "post-slack-message") =>
+    draftReducer(draft, { type: "nameUsedAtPublish", name });
+
+  test("keeps the name it was given", () => {
+    expect(refuse(acceptedDraft, "slack-poster").usedName).toBe("slack-poster");
   });
 
-  test("goes once the publisher edits the name", () => {
-    const refused = draftReducer(acceptedDraft, { type: "nameUsedAtPublish" });
+  test("is kept while the publisher edits the name", () => {
+    const edited = editDetails(refuse(acceptedDraft), { name: "slack-poster" });
 
-    const edited = editDetails(refused, { name: "slack-poster" });
-
-    expect(edited.nameUsed).toBeUndefined();
+    expect(edited.usedName).toBe("post-slack-message");
     expect(draftDetails(edited).name).toBe("slack-poster");
   });
 
-  test("stays while the publisher edits another field", () => {
-    const refused = draftReducer(acceptedDraft, { type: "nameUsedAtPublish" });
-
+  test("is kept while the publisher edits another field", () => {
     expect(
-      editDetails(refused, { title: "Slack poster", description: "Posts." })
-        .nameUsed,
-    ).toBe(true);
+      editDetails(refuse(acceptedDraft), {
+        title: "Slack poster",
+        description: "Posts.",
+      }).usedName,
+    ).toBe("post-slack-message");
   });
 
   test("is kept when the draft reloads, with the rest of the details", () => {
     const storage = memoryStorage();
-    const draft = draftReducer(
+    const draft = refuse(
       editDetails(acceptedDraft, { description: "Posts to Slack." }),
-      { type: "nameUsedAtPublish" },
     );
     writeDraft(storage, draft);
 
     expect(readDraft(storage)).toEqual(draft);
   });
 
-  test("an unreadable kept flag is dropped and the rest of the draft kept", () => {
+  test("an unreadable kept name is dropped and the rest of the draft kept", () => {
     const storage = memoryStorage({
-      [draftStorageKey]: JSON.stringify({ ...acceptedDraft, nameUsed: "yes" }),
+      [draftStorageKey]: JSON.stringify({ ...acceptedDraft, usedName: true }),
     });
 
     expect(readDraft(storage)).toEqual(acceptedDraft);
   });
 
   test("goes when the publisher publishes", () => {
-    const refused = draftReducer(acceptedDraft, { type: "nameUsedAtPublish" });
-
-    expect(draftReducer(refused, { type: "published" })).toEqual(emptyDraft);
+    expect(draftReducer(refuse(acceptedDraft), { type: "published" })).toEqual(
+      emptyDraft,
+    );
   });
 });
 

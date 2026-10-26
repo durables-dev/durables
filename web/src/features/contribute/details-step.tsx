@@ -1,5 +1,5 @@
 import { useSessionUser } from "@/lib/use-session-user";
-import { listingDetailsSchema, type ListingDetails } from "@durables/schemas";
+import type { ListingDetails } from "@durables/schemas";
 import { useId, type ChangeEvent } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -9,7 +9,8 @@ import {
   nameUsedMessage,
 } from "./details-rules";
 import styles from "./details-step.module.css";
-import { draftDetails } from "./draft";
+import { detailsValid, draftDetails } from "./draft";
+import { lowercaseAsTyped } from "./lowercase-as-typed";
 import { StepFooter } from "./step-footer";
 import stepStyles from "./step.module.css";
 import { stepPath } from "./steps";
@@ -22,7 +23,7 @@ import { useFocusOnAppear } from "./use-focus-on-appear";
 // defaults the draft makes from the activity's name; the description starts empty. A field
 // that breaks the shared rules says so underneath, and Continue waits until none does. There
 // is no live check of the name: a name already used fails at publish, which sends the
-// publisher back here with a message under the name.
+// publisher back here with a message under the name while the name is the one refused.
 export function DetailsStep() {
   const navigate = useNavigate();
   const { draft, dispatch } = useContributeDraft();
@@ -36,36 +37,24 @@ export function DetailsStep() {
   const details = draftDetails(draft);
   const messages = detailsMessages(details);
   const nameMessage =
-    messages.name ?? (draft.nameUsed === true ? nameUsedMessage : undefined);
-  const ready = Object.keys(messages).length === 0;
+    messages.name ??
+    (details.name === draft.usedName ? nameUsedMessage : undefined);
+  const ready = detailsValid(draft);
   const handle = user?.handle ?? "your-handle";
 
   function edit(field: keyof ListingDetails, value: string) {
     dispatch({ type: "detailsEdited", field, value });
   }
 
-  // Typing is lowercased as it goes. The field is changed in place first, so the caret stays
-  // where the publisher put it.
   function onNameChange(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget;
-    const lowered = input.value.toLowerCase();
-    if (lowered !== input.value) {
-      const { selectionStart, selectionEnd } = input;
-      input.value = lowered;
-      input.setSelectionRange(selectionStart, selectionEnd);
-    }
-    edit("name", lowered);
+    edit("name", lowercaseAsTyped(event.currentTarget));
   }
 
-  // Continue is only enabled once the details pass the rules. They are checked again here,
-  // from what the form holds, before the step counts as finished.
-  function continueToReview(form: FormData) {
-    const parsed = listingDetailsSchema.safeParse({
-      title: form.get("title"),
-      name: form.get("name"),
-      description: form.get("description"),
-    });
-    if (!parsed.success) return;
+  // Continue is only enabled once the details in the draft pass the rules. Enter in a field
+  // submits the form even so, so the draft is checked again before the step counts as
+  // finished.
+  function continueToReview() {
+    if (!detailsValid(draft)) return;
     dispatch({ type: "stepFinished", step: "details" });
     void navigate(stepPath("review"));
   }
