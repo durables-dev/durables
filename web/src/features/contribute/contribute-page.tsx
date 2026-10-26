@@ -8,6 +8,7 @@ import styles from "./contribute-page.module.css";
 import { DetectedStep } from "./detected-step";
 import { draftFinished } from "./draft";
 import { ProfileStep } from "./profile-step";
+import { ReviewStep } from "./review-step";
 import { StepList } from "./step-list";
 import { finishedSteps, resolveStep, stepPath } from "./steps";
 import { useContributeDraft } from "./use-contribute-draft";
@@ -57,6 +58,9 @@ export function ContributePage() {
             <CodeStep returning={user?.accountExists === true} />
           ) : null}
           {current === "detected" ? <DetectedStep /> : null}
+          {current === "review" ? (
+            <ReviewStep handle={user?.handle ?? ""} finished={finished} />
+          ) : null}
         </div>
       </div>
     </ContributeFrame>
