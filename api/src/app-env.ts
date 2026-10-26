@@ -10,5 +10,7 @@ export interface AppEnv {
     auth: Auth;
     /** The detection preview's rate limit (ADR 0006). */
     previewLimit: RateLimit;
+    /** Publishing's rate limit (ADR 0006). */
+    publishLimit: RateLimit;
   };
 }

@@ -32,6 +32,28 @@ describe("problem", () => {
     });
   });
 
+  test("adds extension members to the body beside the standard members", () => {
+    expect(
+      problem({
+        status: 409,
+        type: "https://durables.dev/x",
+        title: "Taken",
+        extensions: { handle: "ada" },
+      }),
+    ).toEqual({
+      type: "https://durables.dev/x",
+      title: "Taken",
+      status: 409,
+      handle: "ada",
+    });
+  });
+
+  test("never lets an extension member replace a standard member", () => {
+    expect(
+      problem({ status: 404, extensions: { status: 200, title: "OK" } }),
+    ).toEqual({ type: "about:blank", title: "Not Found", status: 404 });
+  });
+
   test("keeps a given type and title", () => {
     expect(
       problem({ status: 409, type: "https://durables.dev/x", title: "Taken" }),
