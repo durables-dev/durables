@@ -27,7 +27,10 @@ export interface Draft {
    * publisher cleared.
    */
   details?: DraftDetailsEdits | undefined;
-  /** The Review step's confirmations the publisher has checked or unchecked. */
+  /**
+   * The Review step's confirmations the publisher has checked or unchecked. They vouch for the
+   * code, so they are cleared whenever the code changes.
+   */
   confirmations?: DraftConfirmationEdits | undefined;
 }
 
@@ -52,7 +55,7 @@ export type DraftAction =
   | { type: "stepFinished"; step: StepId }
   | { type: "codeEdited"; code: string }
   | { type: "checkFinished"; code: string; result: CheckResult }
-  | { type: "detailsEdited"; details: DraftDetailsEdits }
+  | { type: "detailsEdited"; field: keyof ListingDetails; value: string }
   | {
       type: "confirmationToggled";
       confirmation: PublishConfirmationKey;
@@ -82,7 +85,7 @@ const draftSchema = z.object({
       title: optionalString,
       name: optionalString,
       description: optionalString,
-    })
+    } satisfies Record<keyof ListingDetails, z.ZodType>)
     .optional()
     .catch(undefined),
   // An unreadable confirmation is dropped, so it reads as unchecked.
@@ -108,13 +111,21 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
     case "codeEdited":
       return action.code === (draft.code ?? "")
         ? draft
-        : { ...draft, code: action.code, check: undefined };
+        : {
+            ...draft,
+            code: action.code,
+            check: undefined,
+            confirmations: undefined,
+          };
     case "checkFinished":
       return action.code === draft.code
         ? { ...draft, check: action.result }
         : draft;
     case "detailsEdited":
-      return { ...draft, details: { ...draft.details, ...action.details } };
+      return {
+        ...draft,
+        details: { ...draft.details, [action.field]: action.value },
+      };
     case "confirmationToggled":
       return {
         ...draft,

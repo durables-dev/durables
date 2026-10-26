@@ -13,6 +13,7 @@ import {
   writeDraft,
   type Draft,
 } from "./draft";
+import type { ListingDetails } from "@durables/schemas";
 import {
   acceptedCheck,
   acceptedDraft,
@@ -354,6 +355,15 @@ function recheck(draft: Draft, code: string, activityName: string): Draft {
   });
 }
 
+/** The draft after the publisher edits each of the given fields, one edit per field. */
+function editDetails(draft: Draft, edits: Partial<ListingDetails>): Draft {
+  return (Object.entries(edits) as [keyof ListingDetails, string][]).reduce(
+    (current, [field, value]) =>
+      draftReducer(current, { type: "detailsEdited", field, value }),
+    draft,
+  );
+}
+
 const allConfirmed = {
   rights: true,
   mitZero: true,
@@ -443,13 +453,10 @@ describe("the default title and name", () => {
 
 describe("the publisher's edits to the details", () => {
   test("are kept in the draft", () => {
-    const draft = draftReducer(acceptedDraft, {
-      type: "detailsEdited",
-      details: {
-        title: "Slack poster",
-        name: "slack-poster",
-        description: "Posts a message to a Slack channel.",
-      },
+    const draft = editDetails(acceptedDraft, {
+      title: "Slack poster",
+      name: "slack-poster",
+      description: "Posts a message to a Slack channel.",
     });
 
     expect(draftDetails(draft)).toEqual({
@@ -460,23 +467,25 @@ describe("the publisher's edits to the details", () => {
   });
 
   test("change only the fields edited", () => {
-    const draft = draftReducer(acceptedDraft, {
+    const described = editDetails(acceptedDraft, {
+      description: "Posts to Slack.",
+    });
+
+    const draft = draftReducer(described, {
       type: "detailsEdited",
-      details: { title: "Slack poster" },
+      field: "title",
+      value: "Slack poster",
     });
 
     expect(draftDetails(draft)).toEqual({
       title: "Slack poster",
       name: "post-slack-message",
-      description: "",
+      description: "Posts to Slack.",
     });
   });
 
   test("are not overwritten by the defaults when the check changes", () => {
-    const edited = draftReducer(acceptedDraft, {
-      type: "detailsEdited",
-      details: { title: "Slack poster" },
-    });
+    const edited = editDetails(acceptedDraft, { title: "Slack poster" });
 
     const draft = recheck(edited, "newer code", "chargeCard");
 
@@ -489,9 +498,9 @@ describe("the publisher's edits to the details", () => {
 
   test("are kept when the draft reloads", () => {
     const storage = memoryStorage();
-    const edited = draftReducer(acceptedDraft, {
-      type: "detailsEdited",
-      details: { name: "slack-poster", description: "Posts to Slack." },
+    const edited = editDetails(acceptedDraft, {
+      name: "slack-poster",
+      description: "Posts to Slack.",
     });
     writeDraft(storage, edited);
 
@@ -503,10 +512,7 @@ describe("the publisher's edits to the details", () => {
   });
 
   test("a field the publisher cleared stays empty", () => {
-    const cleared = draftReducer(acceptedDraft, {
-      type: "detailsEdited",
-      details: { title: "", name: "" },
-    });
+    const cleared = editDetails(acceptedDraft, { title: "", name: "" });
 
     expect(draftDetails(cleared)).toMatchObject({ title: "", name: "" });
     expect(
@@ -618,12 +624,28 @@ describe("the six confirmations", () => {
     });
   });
 
-  test("are kept when the check changes", () => {
+  test("are cleared when the code changes and is checked again", () => {
     const draft = recheck(
       confirmAll(acceptedDraft),
       "newer code",
       "chargeCard",
     );
+
+    expect(draftConfirmations(draft)).toEqual({
+      rights: false,
+      mitZero: false,
+      noSecrets: false,
+      notMalicious: false,
+      noResponsibility: false,
+      terms: false,
+    });
+  });
+
+  test("an edit that leaves the code as it was keeps them", () => {
+    const draft = draftReducer(confirmAll(acceptedDraft), {
+      type: "codeEdited",
+      code: pastedCode,
+    });
 
     expect(draftConfirmations(draft)).toEqual(allConfirmed);
   });
@@ -635,12 +657,9 @@ describe("a visit to the Terms page and back", () => {
     // it mirrored is all that comes back when the publisher returns.
     const storage = memoryStorage();
     const draft = confirmAll(
-      draftReducer(
+      editDetails(
         { ...acceptedDraft, finished: ["profile", "detected", "details"] },
-        {
-          type: "detailsEdited",
-          details: { title: "Slack poster", description: "Posts to Slack." },
-        },
+        { title: "Slack poster", description: "Posts to Slack." },
       ),
     );
     writeDraft(storage, draft);
@@ -660,13 +679,10 @@ describe("a visit to the Terms page and back", () => {
 describe("publishing", () => {
   test("empties every field, including the details and confirmations", () => {
     const draft = confirmAll(
-      draftReducer(acceptedDraft, {
-        type: "detailsEdited",
-        details: {
-          title: "Slack poster",
-          name: "slack-poster",
-          description: "Posts to Slack.",
-        },
+      editDetails(acceptedDraft, {
+        title: "Slack poster",
+        name: "slack-poster",
+        description: "Posts to Slack.",
       }),
     );
 
@@ -691,10 +707,7 @@ describe("publishing", () => {
   test("empties the kept details and confirmations", () => {
     const storage = memoryStorage();
     const draft = confirmAll(
-      draftReducer(acceptedDraft, {
-        type: "detailsEdited",
-        details: { title: "Slack poster" },
-      }),
+      editDetails(acceptedDraft, { title: "Slack poster" }),
     );
     writeDraft(storage, draft);
 
