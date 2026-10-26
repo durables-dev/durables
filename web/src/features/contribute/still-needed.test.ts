@@ -20,10 +20,7 @@ describe("stillNeeded", () => {
   });
 
   test("names every unfinished step, in step order", () => {
-    expect(stillNeeded(["details", "profile"])).toEqual([
-      "Code",
-      "Detected",
-    ]);
+    expect(stillNeeded(["details", "profile"])).toEqual(["Code", "Detected"]);
     expect(stillNeeded([])).toEqual([
       "Profile & Handle",
       "Code",
