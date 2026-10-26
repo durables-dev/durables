@@ -10,14 +10,15 @@ export type PublishRequest = InferRequestType<
 
 /**
  * Publishes the activity. The answer says the publisher's account now exists, so the cached
- * session says so at once, and is then read again.
+ * session says so at once. The session is then read again in the background; a successful
+ * publish does not wait for that read.
  */
 export function usePublish() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (request: PublishRequest) =>
       parseResponse(api.api.activities.$post({ json: request })),
-    onSuccess: async (published) => {
+    onSuccess: (published) => {
       queryClient.setQueryData(
         sessionQuery.queryKey,
         (cached): Session | undefined =>
@@ -31,7 +32,7 @@ export function usePublish() {
               }
             : cached,
       );
-      await queryClient.invalidateQueries({ queryKey: sessionQuery.queryKey });
+      void queryClient.invalidateQueries({ queryKey: sessionQuery.queryKey });
     },
   });
 }

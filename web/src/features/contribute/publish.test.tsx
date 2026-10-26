@@ -1,7 +1,10 @@
 import { routes } from "@/app/router";
+import { retryQuery } from "@/lib/query-retry";
 import type { SessionUser } from "@/lib/session";
 import "@/styles/global.css";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { delay, http, HttpResponse } from "msw";
+import { useState, type ReactNode } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -16,11 +19,20 @@ import { acceptedCheck, pastedCode } from "./test-drafts";
 
 type Entry = string | { pathname: string; state: unknown };
 
-async function openAt(entry: Entry) {
+type Providers = (props: { children: ReactNode }) => ReactNode;
+
+/** The providers with the app's own retry policy: a failed read is retried with backoff. */
+function RetryingProviders({ children }: { children: ReactNode }) {
+  const [client] = useState(
+    () =>
+      new QueryClient({ defaultOptions: { queries: { retry: retryQuery } } }),
+  );
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+async function openAt(entry: Entry, wrapper: Providers = TestProviders) {
   const router = createMemoryRouter(routes, { initialEntries: [entry] });
-  const screen = await render(<RouterProvider router={router} />, {
-    wrapper: TestProviders,
-  });
+  const screen = await render(<RouterProvider router={router} />, { wrapper });
   return { screen, router };
 }
 
@@ -133,10 +145,13 @@ function checkboxes(screen: Screen) {
     .all();
 }
 
-async function openReview(draft: Draft = readyDraft) {
+async function openReview(
+  draft: Draft = readyDraft,
+  wrapper: Providers = TestProviders,
+) {
   const session = signIn();
   keepDraft(draft);
-  const opened = await openAt("/contribute/review");
+  const opened = await openAt("/contribute/review", wrapper);
   await expect.element(reviewHeading(opened.screen)).toBeVisible();
   await expect.element(publishButton(opened.screen)).toBeEnabled();
   return { ...opened, session };
@@ -435,6 +450,30 @@ describe("the Published screen", () => {
       .toHaveValue("");
     expect(keptDraft()).toEqual({ finished: [] });
   });
+
+  test("opens promptly while the session read is failing, and Contribute still starts at Code", async () => {
+    const { screen, router } = await openReview(readyDraft, RetryingProviders);
+    answerPublish(() => HttpResponse.json(created, { status: 201 }));
+    worker.use(
+      http.get("/api/session", () =>
+        HttpResponse.json({ title: "Unavailable" }, { status: 500 }),
+      ),
+    );
+
+    await publishButton(screen).click();
+
+    // Retrying the failed read takes about seven seconds; the Published screen does not wait.
+    await expect
+      .element(publishedHeading(screen), { timeout: 2000 })
+      .toBeVisible();
+    await router.navigate("/contribute");
+    await expect
+      .element(
+        screen.getByRole("heading", { level: 2, name: "Paste your activity" }),
+      )
+      .toBeVisible();
+    expect(router.state.location.pathname).toBe("/contribute/code");
+  });
 });
 
 describe("a name already used", () => {
@@ -535,6 +574,52 @@ describe("a handle taken since it was chosen", () => {
     await expect
       .element(screen.getByRole("button", { name: "Continue" }))
       .toBeEnabled();
+  });
+  test("saving another handle returns to Review with the details and the boxes kept", async () => {
+    const { screen, router } = await openReview();
+    answerPublish(() =>
+      problem(409, "https://durables.dev/problems/handle-taken", {
+        handle: "ddieruf",
+      }),
+    );
+    const saved: unknown[] = [];
+    worker.use(
+      http.get("/api/handles/availability", ({ request }) => {
+        const handle = new URL(request.url).searchParams.get("handle") ?? "";
+        return HttpResponse.json({
+          handle,
+          availability: "available",
+          message: "",
+        });
+      }),
+      http.put("/api/session/handle", async ({ request }) => {
+        saved.push(await request.json());
+        return HttpResponse.json({
+          user: { ...publisher, handle: "dana-dieruf" },
+        });
+      }),
+    );
+
+    await publishButton(screen).click();
+    const field = screen.getByRole("textbox", { name: "Handle" });
+    await expect.element(field).toHaveValue("ddieruf");
+    await field.fill("dana-dieruf");
+    const continueButton = screen.getByRole("button", { name: "Continue" });
+    await expect.element(continueButton).toBeEnabled();
+    await continueButton.click();
+
+    await expect.element(reviewHeading(screen)).toBeVisible();
+    expect(router.state.location.pathname).toBe("/contribute/review");
+    expect(saved).toEqual([{ handle: "dana-dieruf" }]);
+    await expect.element(screen.getByText(description)).toBeVisible();
+    const boxes = checkboxes(screen);
+    expect(boxes).toHaveLength(6);
+    for (const box of boxes) await expect.element(box).toBeChecked();
+    expect(keptDraft()).toMatchObject({
+      finished: ["detected", "details", "profile"],
+      details: { description },
+      confirmations: allConfirmed,
+    });
   });
 });
 

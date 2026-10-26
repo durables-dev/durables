@@ -16,13 +16,14 @@ import {
   type HandleLookup,
   type HandleStatus,
 } from "./handle-status";
+import { draftFinished } from "./draft";
 import styles from "./handle-step.module.css";
 import { lowercaseAsTyped } from "./lowercase-as-typed";
 import { signInProviders } from "./sign-in-providers";
 import { signInAgainPath } from "./sign-in-view";
 import { StepFooter } from "./step-footer";
 import stepStyles from "./step.module.css";
-import { stepPath } from "./steps";
+import { earliestUnfinished, stepPath } from "./steps";
 import { useContributeDraft } from "./use-contribute-draft";
 import { useFocusOnAppear } from "./use-focus-on-appear";
 import { useSaveHandle } from "./use-save-handle";
@@ -44,8 +45,9 @@ const exampleActivity = "my-activity@1.0.0";
 // The handle step: the publisher chooses the permanent handle that starts every address they
 // publish. The field starts with the handle already chosen, or else the suggestion from the
 // provider account, and is checked as they type. Continue saves it to the session and opens
-// Code. Back returns to the sign-in step, still signed in. A publish that found the handle
-// taken sends the publisher back here, with a message while the field still holds it.
+// the first unfinished step: Code for a first-time publisher, Review after a publish that found
+// the handle taken. Back returns to the sign-in step, still signed in. A publish that found the
+// handle taken sends the publisher back here, with a message while the field still holds it.
 export function HandleStep({ user }: HandleStepProps) {
   const navigate = useNavigate();
   const { draft, dispatch } = useContributeDraft();
@@ -81,7 +83,9 @@ export function HandleStep({ user }: HandleStepProps) {
         return { handle: chosen, status: handleSaveRefusal(chosen, error) };
       }
       dispatch({ type: "stepFinished", step: "profile" });
-      await navigate(stepPath("code"));
+      await navigate(
+        stepPath(earliestUnfinished([...draftFinished(draft), "profile"])),
+      );
       return null;
     },
     null,
