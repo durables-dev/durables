@@ -1,0 +1,64 @@
+.screen {
+  max-width: 560px;
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The check mark: Lagoon on a Lagoon tint, as the contribute canvas shows. */
+.mark {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-pill);
+  background: var(--positive-tint);
+  color: var(--positive);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mark path {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.live {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.address {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.handle {
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* A Tangerine button that is a link, since it opens the listing's page. */
+.view {
+  height: 42px;
+  padding: 0 20px;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}
