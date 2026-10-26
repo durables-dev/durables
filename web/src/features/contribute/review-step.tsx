@@ -1,9 +1,11 @@
 import type { ListingDetails } from "@durables/schemas";
-import { useId } from "react";
+import { startTransition, useActionState, useId } from "react";
 import { Link, useNavigate } from "react-router";
 import type { CheckedFacts } from "./check-result";
 import { draftConfirmations, draftDetails } from "./draft";
 import { listingVersion } from "./listing-version";
+import { publishRefusal } from "./publish-refusal";
+import { publishedPath, publishedState } from "./published-listing";
 import { reviewConfirmations } from "./review-confirmations";
 import styles from "./review-step.module.css";
 import { StepFooter } from "./step-footer";
@@ -12,6 +14,7 @@ import { stepPath, type StepId } from "./steps";
 import { stillNeeded } from "./still-needed";
 import { useContributeDraft } from "./use-contribute-draft";
 import { useFocusOnAppear } from "./use-focus-on-appear";
+import { usePublish, type PublishRequest } from "./use-publish";
 
 export interface ReviewStepProps {
   /** The publisher's chosen handle, the first part of the listing's address. */
@@ -23,11 +26,17 @@ export interface ReviewStepProps {
 // The Review step: the listing as it will appear, the six confirmations, and Publish. Every
 // box starts unchecked and each one is kept in the draft as it is checked, so a visit to the
 // Terms page and Back returns to the step as it was. Publish stays disabled until all six are
-// checked and nothing earlier is still needed. Calling the publish endpoint is not part of
-// this step yet (DUR-53).
+// checked and nothing earlier is still needed.
+//
+// Publish sends the code, the details and the confirmations. While it is on its way the button
+// says so and can't be pressed again. Once published, the Published screen opens and the draft
+// is cleared. A name the publisher already used sends them back to Details, and a handle
+// taken since they chose it sends them to the handle step. The rest of the draft is kept
+// either way. Any other refusal shows a message above Publish and leaves the boxes as they are.
 export function ReviewStep({ handle, finished }: ReviewStepProps) {
   const navigate = useNavigate();
   const { draft, dispatch } = useContributeDraft();
+  const publish = usePublish();
   const heading = useFocusOnAppear<HTMLHeadingElement>();
   const details = draftDetails(draft);
   const confirmations = draftConfirmations(draft);
@@ -38,8 +47,59 @@ export function ReviewStep({ handle, finished }: ReviewStepProps) {
   const sdk =
     draft.check?.outcome === "accepted" ? draft.check.facts.sdk : undefined;
 
+  const [outcome, publishAction, isPublishing] = useActionState(
+    async (previous: PublishOutcome): Promise<PublishOutcome> => {
+      // A press queued behind one that published does nothing.
+      if (previous.kind === "published") return previous;
+      const request: PublishRequest = {
+        code: draft.code ?? "",
+        ...details,
+        confirmations,
+      };
+      try {
+        const published = await publish.mutateAsync(request);
+        await navigate(publishedPath, {
+          state: publishedState({
+            handle: published.handle,
+            name: published.name,
+            version: published.version,
+            accountCreated: published.accountCreated,
+          }),
+        });
+        // React Router commits a navigation in a transition. The draft changes in one too, so
+        // both land together and Review never shows with the draft already cleared.
+        startTransition(() => {
+          dispatch({ type: "published" });
+        });
+        return { kind: "published" };
+      } catch (error) {
+        const refusal = publishRefusal(error);
+        switch (refusal.kind) {
+          case "addressTaken":
+            await navigate(stepPath("details"));
+            startTransition(() => {
+              dispatch({ type: "nameUsedAtPublish", name: request.name });
+            });
+            return { kind: "idle" };
+          case "handleTaken":
+            await navigate(stepPath("profile"));
+            startTransition(() => {
+              dispatch({
+                type: "handleTakenAtPublish",
+                handle: refusal.handle ?? handle,
+              });
+            });
+            return { kind: "idle" };
+          case "failed":
+            return refusal;
+        }
+      }
+    },
+    { kind: "idle" },
+  );
+
   return (
-    <section aria-label="Review" className={styles["step"]}>
+    <form action={publishAction} aria-label="Review" className={styles["step"]}>
       <div className={styles["intro"]}>
         <h2 ref={heading} tabIndex={-1} className={stepStyles["heading"]}>
           Review and publish
@@ -83,20 +143,30 @@ export function ReviewStep({ handle, finished }: ReviewStepProps) {
           Still needed before publishing: {missing.join(", ")}
         </div>
       ) : null}
+      {outcome.kind === "failed" && !isPublishing ? (
+        <p role="alert" className={styles["failed"]}>
+          {outcome.message}
+        </p>
+      ) : null}
       <StepFooter
         onBack={() => {
           void navigate(stepPath("details"));
         }}
         hint={allConfirmed ? undefined : "Confirm each item above"}
-        continueLabel={`Publish ${listingVersion}`}
-        continueDisabled={!allConfirmed || missing.length > 0}
-        onContinue={() => {
-          // Publishing is the next story (DUR-53).
-        }}
+        continueLabel={
+          isPublishing ? "Publishing…" : `Publish ${listingVersion}`
+        }
+        continueDisabled={!allConfirmed || missing.length > 0 || isPublishing}
       />
-    </section>
+    </form>
   );
 }
+
+/** Where the latest press of Publish got to. A refusal that moved the publisher on is idle. */
+type PublishOutcome =
+  | { kind: "idle" }
+  | { kind: "published" }
+  | { kind: "failed"; message: string };
 
 interface PreviewCardProps {
   handle: string;

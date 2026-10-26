@@ -34,6 +34,11 @@ export interface Draft {
    */
   usedName?: string | undefined;
   /**
+   * The handle publish refused because another account took it after it was chosen. The
+   * handle step says so while the handle in its field is this one.
+   */
+  takenHandle?: string | undefined;
+  /**
    * The Review step's confirmations the publisher has checked or unchecked. They vouch for the
    * code, so they are cleared whenever the code changes.
    */
@@ -63,6 +68,7 @@ export type DraftAction =
   | { type: "checkFinished"; code: string; result: CheckResult }
   | { type: "detailsEdited"; field: keyof ListingDetails; value: string }
   | { type: "nameUsedAtPublish"; name: string }
+  | { type: "handleTakenAtPublish"; handle: string }
   | {
       type: "confirmationToggled";
       confirmation: PublishConfirmationKey;
@@ -97,6 +103,8 @@ const draftSchema = z.object({
     .catch(undefined),
   // An unreadable refused name is dropped, so the message under the name goes.
   usedName: optionalString,
+  // An unreadable taken handle is dropped, so the message on the handle step goes.
+  takenHandle: optionalString,
   // An unreadable confirmation is dropped, so it reads as unchecked.
   confirmations: z
     .object({
@@ -137,6 +145,13 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
       };
     case "nameUsedAtPublish":
       return { ...draft, usedName: action.name };
+    // The handle step is unfinished again until another handle is saved. The rest is kept.
+    case "handleTakenAtPublish":
+      return {
+        ...draft,
+        finished: draft.finished.filter((step) => step !== "profile"),
+        takenHandle: action.handle,
+      };
     case "confirmationToggled":
       return {
         ...draft,

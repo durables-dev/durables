@@ -818,3 +818,57 @@ describe("Details is finished", () => {
     expect(draftFinished(draft)).not.toContain("details");
   });
 });
+
+describe("a handle taken, as publish reports it", () => {
+  const reviewReady: Draft = {
+    ...acceptedDraft,
+    finished: ["profile", "detected", "details"],
+    details: { description: "Posts to Slack." },
+    confirmations: { rights: true, terms: true },
+  };
+  const refuse = (draft: Draft, handle = "ddieruf") =>
+    draftReducer(draft, { type: "handleTakenAtPublish", handle });
+
+  test("keeps the handle it was given", () => {
+    expect(refuse(reviewReady, "dana").takenHandle).toBe("dana");
+  });
+
+  test("makes Profile & Handle unfinished and keeps the other finished steps", () => {
+    expect(draftFinished(refuse(reviewReady))).toEqual([
+      "detected",
+      "details",
+      "code",
+    ]);
+  });
+
+  test("keeps the code, its check, the details and the confirmations", () => {
+    const refused = refuse(reviewReady);
+
+    expect(refused.code).toBe(reviewReady.code);
+    expect(refused.check).toEqual(reviewReady.check);
+    expect(refused.details).toEqual(reviewReady.details);
+    expect(refused.confirmations).toEqual(reviewReady.confirmations);
+  });
+
+  test("is kept when the draft reloads", () => {
+    const storage = memoryStorage();
+    const draft = refuse(reviewReady);
+    writeDraft(storage, draft);
+
+    expect(readDraft(storage)).toEqual(draft);
+  });
+
+  test("an unreadable kept handle is dropped and the rest of the draft kept", () => {
+    const storage = memoryStorage({
+      [draftStorageKey]: JSON.stringify({ ...acceptedDraft, takenHandle: 7 }),
+    });
+
+    expect(readDraft(storage)).toEqual(acceptedDraft);
+  });
+
+  test("goes when the publisher publishes", () => {
+    expect(draftReducer(refuse(reviewReady), { type: "published" })).toEqual(
+      emptyDraft,
+    );
+  });
+});

@@ -151,3 +151,14 @@
   font-size: var(--text-label);
   line-height: 1.6;
 }
+
+/* A publish that did not go through. Gold, never Ember. */
+.failed {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: var(--notice);
+  color: var(--fg);
+  font-size: var(--text-label);
+  line-height: 1.6;
+}

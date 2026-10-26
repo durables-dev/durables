@@ -73,6 +73,10 @@ function answered(
   }
 }
 
+/** The line shown when publish found the chosen handle taken by another account. */
+export const handleJustTakenMessage =
+  "That handle was just taken. Choose another.";
+
 /** The line shown when a save fails for a reason other than the handle itself. */
 export const handleUnsavedMessage = "Your handle wasn't saved. Try again.";
 
