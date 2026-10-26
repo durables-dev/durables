@@ -5,10 +5,10 @@ import { useNavigate } from "react-router";
 import {
   charactersLeft,
   detailsMessages,
-  firstVersion,
   nameUsedMessage,
 } from "./details-rules";
 import styles from "./details-step.module.css";
+import { listingVersion } from "./listing-version";
 import { detailsValid, draftDetails } from "./draft";
 import { lowercaseAsTyped } from "./lowercase-as-typed";
 import { StepFooter } from "./step-footer";
@@ -110,7 +110,7 @@ export function DetailsStep() {
           <input
             id={versionId}
             type="text"
-            value={firstVersion}
+            value={listingVersion}
             readOnly
             className={`${styles["input"]} ${styles["mono"]} ${styles["fixed"]}`}
           />
@@ -119,7 +119,7 @@ export function DetailsStep() {
       <p className={styles["address"]}>
         durables.dev/{handle}/
         <strong className={styles["addressName"]}>{details.name}</strong>@
-        {firstVersion}
+        {listingVersion}
       </p>
       <div className={styles["field"]}>
         <label htmlFor={descriptionId} className={styles["label"]}>

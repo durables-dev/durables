@@ -7,9 +7,6 @@ import {
 /** Said under the name when publish found a listing of the publisher's at this address. */
 export const nameUsedMessage = "You already have a listing at this address.";
 
-/** The version every listing is published at in the MVP. */
-export const firstVersion = "1.0.0";
-
 /** The message under each field that breaks the shared rules. A valid field has none. */
 export type DetailsMessages = Partial<Record<keyof ListingDetails, string>>;
 
