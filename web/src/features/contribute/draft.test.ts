@@ -719,3 +719,102 @@ describe("publishing", () => {
     expect(readDraft(storage)).toEqual(emptyDraft);
   });
 });
+
+describe("a name already used, as publish reports it", () => {
+  const refuse = (draft: Draft, name = "post-slack-message") =>
+    draftReducer(draft, { type: "nameUsedAtPublish", name });
+
+  test("keeps the name it was given", () => {
+    expect(refuse(acceptedDraft, "slack-poster").usedName).toBe("slack-poster");
+  });
+
+  test("is kept while the publisher edits the name", () => {
+    const edited = editDetails(refuse(acceptedDraft), { name: "slack-poster" });
+
+    expect(edited.usedName).toBe("post-slack-message");
+    expect(draftDetails(edited).name).toBe("slack-poster");
+  });
+
+  test("is kept while the publisher edits another field", () => {
+    expect(
+      editDetails(refuse(acceptedDraft), {
+        title: "Slack poster",
+        description: "Posts.",
+      }).usedName,
+    ).toBe("post-slack-message");
+  });
+
+  test("is kept when the draft reloads, with the rest of the details", () => {
+    const storage = memoryStorage();
+    const draft = refuse(
+      editDetails(acceptedDraft, { description: "Posts to Slack." }),
+    );
+    writeDraft(storage, draft);
+
+    expect(readDraft(storage)).toEqual(draft);
+  });
+
+  test("an unreadable kept name is dropped and the rest of the draft kept", () => {
+    const storage = memoryStorage({
+      [draftStorageKey]: JSON.stringify({ ...acceptedDraft, usedName: true }),
+    });
+
+    expect(readDraft(storage)).toEqual(acceptedDraft);
+  });
+
+  test("goes when the publisher publishes", () => {
+    expect(draftReducer(refuse(acceptedDraft), { type: "published" })).toEqual(
+      emptyDraft,
+    );
+  });
+});
+
+describe("Details is finished", () => {
+  const continued: Draft = {
+    ...acceptedDraft,
+    finished: ["profile", "detected", "details"],
+  };
+
+  test("once the publisher continued with valid details", () => {
+    const draft = editDetails(continued, { description: "Posts to Slack." });
+
+    expect(draftFinished(draft)).toEqual([
+      "profile",
+      "detected",
+      "details",
+      "code",
+    ]);
+  });
+
+  test("not on the word of the finished list alone, while a field is empty", () => {
+    // The description starts empty, so the defaults alone are not enough.
+    expect(draftFinished(continued)).toEqual(["profile", "detected", "code"]);
+  });
+
+  test("not once a field is cleared after continuing", () => {
+    const draft = editDetails(continued, {
+      description: "Posts to Slack.",
+      title: "",
+    });
+
+    expect(draftFinished(draft)).not.toContain("details");
+  });
+
+  test("not once the name breaks the name rule after continuing", () => {
+    const draft = editDetails(continued, {
+      description: "Posts to Slack.",
+      name: "post-slack-",
+    });
+
+    expect(draftFinished(draft)).not.toContain("details");
+  });
+
+  test("not before the publisher continued, however valid the details", () => {
+    const draft = editDetails(
+      { ...acceptedDraft, finished: ["profile", "detected"] },
+      { description: "Posts to Slack." },
+    );
+
+    expect(draftFinished(draft)).not.toContain("details");
+  });
+});
