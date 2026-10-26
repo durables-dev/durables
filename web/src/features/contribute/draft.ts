@@ -1,5 +1,6 @@
 import { contributeOriginSchema } from "@/lib/contribute-origin";
 import {
+  listingDetailsSchema,
   type ListingDetails,
   type PublishConfirmationKey,
 } from "@durables/schemas";
@@ -27,6 +28,11 @@ export interface Draft {
    * publisher cleared.
    */
   details?: DraftDetailsEdits | undefined;
+  /**
+   * The name publish refused because the publisher already has a listing at that address.
+   * The Details step says so under the name while the name is this one.
+   */
+  usedName?: string | undefined;
   /**
    * The Review step's confirmations the publisher has checked or unchecked. They vouch for the
    * code, so they are cleared whenever the code changes.
@@ -56,6 +62,7 @@ export type DraftAction =
   | { type: "codeEdited"; code: string }
   | { type: "checkFinished"; code: string; result: CheckResult }
   | { type: "detailsEdited"; field: keyof ListingDetails; value: string }
+  | { type: "nameUsedAtPublish"; name: string }
   | {
       type: "confirmationToggled";
       confirmation: PublishConfirmationKey;
@@ -88,6 +95,8 @@ const draftSchema = z.object({
     } satisfies Record<keyof ListingDetails, z.ZodType>)
     .optional()
     .catch(undefined),
+  // An unreadable refused name is dropped, so the message under the name goes.
+  usedName: optionalString,
   // An unreadable confirmation is dropped, so it reads as unchecked.
   confirmations: z
     .object({
@@ -126,6 +135,8 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
         ...draft,
         details: { ...draft.details, [action.field]: action.value },
       };
+    case "nameUsedAtPublish":
+      return { ...draft, usedName: action.name };
     case "confirmationToggled":
       return {
         ...draft,
@@ -171,12 +182,20 @@ export function isAccepted(draft: Draft): boolean {
   return draft.check?.outcome === "accepted";
 }
 
+/** The listing details pass the shared rules, as Continue on the Details step requires. */
+export function detailsValid(draft: Draft): boolean {
+  return listingDetailsSchema.safeParse(draftDetails(draft)).success;
+}
+
 /**
  * The steps the draft has finished. Code is finished while the pasted code is accepted, and
- * at no other time.
+ * at no other time. Details is finished once the publisher continued from it, and only while
+ * the details still pass the shared rules.
  */
 export function draftFinished(draft: Draft): StepId[] {
-  const others = draft.finished.filter((step) => step !== "code");
+  const others = draft.finished.filter(
+    (step) => step !== "code" && (step !== "details" || detailsValid(draft)),
+  );
   return isAccepted(draft) ? [...others, "code"] : others;
 }
 

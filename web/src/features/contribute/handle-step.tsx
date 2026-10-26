@@ -16,6 +16,7 @@ import {
   type HandleStatus,
 } from "./handle-status";
 import styles from "./handle-step.module.css";
+import { lowercaseAsTyped } from "./lowercase-as-typed";
 import { signInProviders } from "./sign-in-providers";
 import { signInAgainPath } from "./sign-in-view";
 import { StepFooter } from "./step-footer";
@@ -91,17 +92,8 @@ export function HandleStep({ user }: HandleStepProps) {
   const ready = canSaveHandle(status) && !isSaving;
   const provider = signInProviders.find(({ id }) => id === user.provider);
 
-  // Typing is lowercased as it goes. The field is changed in place first, so the caret stays
-  // where the publisher put it.
   function onHandleChange(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget;
-    const lowered = input.value.toLowerCase();
-    if (lowered !== input.value) {
-      const { selectionStart, selectionEnd } = input;
-      input.value = lowered;
-      input.setSelectionRange(selectionStart, selectionEnd);
-    }
-    setHandle(lowered);
+    setHandle(lowercaseAsTyped(event.currentTarget));
   }
 
   return (

@@ -34,7 +34,7 @@ export function ReviewStep({ handle, finished }: ReviewStepProps) {
   const allConfirmed = reviewConfirmations.every(
     ({ key }) => confirmations[key],
   );
-  const missing = stillNeeded(finished, details);
+  const missing = stillNeeded(finished);
   const sdk =
     draft.check?.outcome === "accepted" ? draft.check.facts.sdk : undefined;
 

@@ -351,17 +351,22 @@ describe("the still-needed alert", () => {
     await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
   });
 
-  test("lists Details when the publisher has since cleared a detail, and Publish stays disabled", async () => {
-    const { screen } = await openReview({
+  test("is never reached with a cleared detail: opening Review lands on Details", async () => {
+    signIn();
+    keepDraft({
       ...reviewDraft,
       details: { title: "", description },
       confirmations: allConfirmed,
     });
+    const { screen, router } = await openAt("/contribute/review");
 
     await expect
-      .element(screen.getByRole("alert"))
-      .toHaveTextContent("Still needed before publishing: Details");
-    await expect.element(publish(screen)).toBeDisabled();
+      .element(
+        screen.getByRole("heading", { level: 2, name: "Listing details" }),
+      )
+      .toBeVisible();
+    expect(router.state.location.pathname).toBe("/contribute/details");
+    await expect.element(heading(screen)).not.toBeInTheDocument();
   });
 
   test.each([
