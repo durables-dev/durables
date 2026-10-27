@@ -33,6 +33,10 @@ export interface ReviewStepProps {
 // is cleared. A name the publisher already used sends them back to Details, and a handle
 // taken since they chose it sends them to the handle step. The rest of the draft is kept
 // either way. Any other refusal shows a message above Publish and leaves the boxes as they are.
+//
+// The form submits through `onSubmit` rather than the `action` prop. React resets a form after
+// its `action` returns, which would put each box back to how it was when Review rendered while
+// the draft still has it checked.
 export function ReviewStep({ handle, finished }: ReviewStepProps) {
   const navigate = useNavigate();
   const { draft, dispatch } = useContributeDraft();
@@ -99,7 +103,16 @@ export function ReviewStep({ handle, finished }: ReviewStepProps) {
   );
 
   return (
-    <form action={publishAction} aria-label="Review" className={styles["step"]}>
+    <form
+      aria-label="Review"
+      className={styles["step"]}
+      onSubmit={(event) => {
+        event.preventDefault();
+        startTransition(() => {
+          publishAction();
+        });
+      }}
+    >
       <div className={styles["intro"]}>
         <h2 ref={heading} tabIndex={-1} className={stepStyles["heading"]}>
           Review and publish

@@ -157,6 +157,22 @@ async function openReview(
   return { ...opened, session };
 }
 
+/** Review with every box unchecked, then all six checked by clicking them. */
+async function openUnconfirmedReview() {
+  const session = signIn();
+  keepDraft({ ...readyDraft, confirmations: undefined });
+  const opened = await openAt("/contribute/review");
+  await expect.element(reviewHeading(opened.screen)).toBeVisible();
+  await expect.element(publishButton(opened.screen)).toBeDisabled();
+  for (const box of checkboxes(opened.screen)) {
+    await expect.element(box).not.toBeChecked();
+    await box.click();
+    await expect.element(box).toBeChecked();
+  }
+  await expect.element(publishButton(opened.screen)).toBeEnabled();
+  return { ...opened, session };
+}
+
 afterEach(() => {
   sessionStorage.clear();
 });
@@ -672,6 +688,67 @@ describe("a publish that did not go through", () => {
       expect(keptDraft()).toEqual(readyDraft);
     },
   );
+
+  test.each([
+    [
+      "a 429",
+      () => problem(429, "https://durables.dev/problems/publish-limited"),
+      "Too many publishes in a short time. Wait a minute and try again.",
+    ],
+    [
+      "a network failure",
+      () => HttpResponse.error(),
+      "Publishing didn't go through. Try again.",
+    ],
+  ])(
+    "after checking the boxes on Review, %s shows a message above Publish and the boxes stay checked",
+    async (_, respond, message) => {
+      const { screen, router } = await openUnconfirmedReview();
+      answerPublish(respond);
+
+      await publishButton(screen).click();
+
+      const alert = screen.getByRole("alert");
+      await expect.element(alert).toHaveTextContent(message);
+      expect(router.state.location.pathname).toBe("/contribute/review");
+      expect(
+        alert
+          .element()
+          .compareDocumentPosition(publishButton(screen).element()) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      const boxes = checkboxes(screen);
+      expect(boxes).toHaveLength(6);
+      for (const box of boxes) {
+        await expect.element(box).toBeChecked();
+      }
+      await expect.element(publishButton(screen)).toBeEnabled();
+      expect(keptDraft()).toEqual(readyDraft);
+    },
+  );
+
+  test("after checking the boxes on Review and a refusal, Publish succeeds when pressed again", async () => {
+    const { screen, session } = await openUnconfirmedReview();
+    let attempts = 0;
+    const bodies = answerPublish(() => {
+      attempts += 1;
+      return attempts === 1
+        ? problem(429, "https://durables.dev/problems/publish-limited")
+        : HttpResponse.json(created, { status: 201 });
+    }, session);
+
+    await publishButton(screen).click();
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("Too many publishes");
+    await publishButton(screen).click();
+
+    await expect.element(publishedHeading(screen)).toBeVisible();
+    expect(bodies).toEqual([
+      expect.objectContaining({ confirmations: allConfirmed }),
+      expect.objectContaining({ confirmations: allConfirmed }),
+    ]);
+  });
 
   test("a network failure shows the unexpected message and the boxes stay checked", async () => {
     const { screen } = await openReview();
