@@ -27,6 +27,22 @@ export interface FakeIdentity {
   providerAccountId?: string;
 }
 
+/** What a publish through the API sends besides the six confirmations, which are all true. */
+export interface PublishDetails {
+  code: string;
+  title: string;
+  name: string;
+  description: string;
+}
+
+/** What the API answers a publish with (api: activities/responses.ts). */
+export interface PublishResponse {
+  handle: string;
+  name: string;
+  version: string;
+  accountCreated: boolean;
+}
+
 /** An account seeded straight into local D1, as publishing will create one. */
 export interface SeededAccount {
   accountId: string;
@@ -69,6 +85,12 @@ interface Fixtures {
    * paste does. The page sees a paste, not typing.
    */
   paste: (field: Locator, text: string) => Promise<void>;
+  /**
+   * Publishes an activity through the API as the page's signed-in publisher, with all six
+   * confirmations given, the way the Review step does. The publisher needs a chosen handle.
+   * It counts towards their publish rate limit.
+   */
+  publishThroughApi: (details: PublishDetails) => Promise<PublishResponse>;
 }
 
 interface WorkerFixtures {
@@ -81,6 +103,17 @@ export const publisherName = "Ada Lovelace";
 export const publisherInitials = "AL";
 
 const fakeSignInPath = "/api/session/providers/fake";
+const publishPath = "/api/activities";
+
+/** The six confirmations a publish carries (packages/schemas: publishConfirmationKeys). */
+const allConfirmations = {
+  rights: true,
+  mitZero: true,
+  noSecrets: true,
+  notMalicious: true,
+  noResponsibility: true,
+  terms: true,
+};
 
 async function signInAs(
   request: APIRequestContext,
@@ -224,6 +257,17 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
       await field.focus();
       await field.press("ControlOrMeta+A");
       await field.press("ControlOrMeta+V");
+    });
+  },
+
+  publishThroughApi: async ({ page }, use) => {
+    await use(async (details) => {
+      const response = await page.request.post(publishPath, {
+        data: { ...details, confirmations: allConfirmations },
+        headers: { "Sec-Fetch-Site": "same-origin" },
+      });
+      expect(response.status(), await response.text()).toBe(201);
+      return (await response.json()) as PublishResponse;
     });
   },
 });
