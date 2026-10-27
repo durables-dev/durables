@@ -246,7 +246,7 @@ test(
 test(
   "a first-time publisher describes a checked activity, confirms the six terms, publishes it and opens the live listing",
   { tag: "@journey" },
-  async ({ context, page, expectAccessible, signIn, uniqueHandle }) => {
+  async ({ page, expectAccessible, signIn, uniqueHandle, paste }) => {
     const handle = uniqueHandle("first");
     const code = readFileSync(
       new URL("../samples/python.txt", import.meta.url),
@@ -282,13 +282,7 @@ test(
     });
 
     await test.step("paste the activity and go through Detected to Details", async () => {
-      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-      await page.evaluate(
-        async (copied) => navigator.clipboard.writeText(copied),
-        code,
-      );
-      await editor.focus();
-      await editor.press("ControlOrMeta+V");
+      await paste(editor, code);
       await expect(
         page.getByText(/^✓ Found post_slack_message \(Python\)/),
       ).toBeVisible();

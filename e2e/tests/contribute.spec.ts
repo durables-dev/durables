@@ -682,7 +682,7 @@ const reviewConfirmationTexts = [
   "It isn't malicious and doesn't knowingly harm the systems it runs on.",
   "I understand Durables doesn't review or warrant published code and takes no responsibility for it. I'm responsible for what I publish.",
   "I agree to the Durables Terms.",
-];
+] as const;
 
 const confirmHint = "Confirm each item above";
 const nameUsedMessage = "You already have a listing at this address.";
@@ -819,9 +819,7 @@ test.describe("Review and publish", () => {
     await expect(footerHint(page)).toHaveCount(0);
 
     const [first] = reviewConfirmationTexts;
-    await confirmationsBox(page)
-      .getByLabel(first ?? "", { exact: true })
-      .uncheck();
+    await confirmationsBox(page).getByLabel(first, { exact: true }).uncheck();
 
     await expect(publishButton(page)).toBeDisabled();
     await expect(footerHint(page)).toBeVisible();

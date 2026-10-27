@@ -28,7 +28,7 @@ export interface FakeIdentity {
 }
 
 /** What a publish through the API sends besides the six confirmations, which are all true. */
-export interface PublishedDetails {
+export interface PublishDetails {
   code: string;
   title: string;
   name: string;
@@ -36,7 +36,7 @@ export interface PublishedDetails {
 }
 
 /** What the API answers a publish with (api: activities/responses.ts). */
-export interface PublishAnswer {
+export interface PublishResponse {
   handle: string;
   name: string;
   version: string;
@@ -90,7 +90,7 @@ interface Fixtures {
    * confirmations given, the way the Review step does. The publisher needs a chosen handle.
    * It counts towards their publish rate limit.
    */
-  publishThroughApi: (details: PublishedDetails) => Promise<PublishAnswer>;
+  publishThroughApi: (details: PublishDetails) => Promise<PublishResponse>;
 }
 
 interface WorkerFixtures {
@@ -106,7 +106,7 @@ const fakeSignInPath = "/api/session/providers/fake";
 const publishPath = "/api/activities";
 
 /** The six confirmations a publish carries (packages/schemas: publishConfirmationKeys). */
-const allConfirmed = {
+const allConfirmations = {
   rights: true,
   mitZero: true,
   noSecrets: true,
@@ -263,11 +263,11 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
   publishThroughApi: async ({ page }, use) => {
     await use(async (details) => {
       const response = await page.request.post(publishPath, {
-        data: { ...details, confirmations: allConfirmed },
+        data: { ...details, confirmations: allConfirmations },
         headers: { "Sec-Fetch-Site": "same-origin" },
       });
       expect(response.status(), await response.text()).toBe(201);
-      return (await response.json()) as PublishAnswer;
+      return (await response.json()) as PublishResponse;
     });
   },
 });
