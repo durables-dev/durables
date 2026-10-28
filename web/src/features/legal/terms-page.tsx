@@ -27,10 +27,10 @@ export function TermsPage() {
           terms;
         </li>
         <li>keep ownership of it;</li>
+        <li>let Durables store, analyse, display and distribute it;</li>
         <li>
-          let Durables store, analyse, display and distribute it, and let anyone
-          view, copy and use it in their own projects, unless the code states a
-          licence of its own.
+          publish it under MIT-0, like everything on Durables: anyone may use,
+          change and share it, with no attribution and no warranty.
         </li>
       </ul>
       <p>

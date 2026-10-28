@@ -3,12 +3,29 @@ import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import {
   accounts,
   handles,
+  listings,
   providerAccounts,
   retiredHandles,
+  versions,
   type Provider,
+  type Sdk,
 } from "./schema";
+import {
+  DocumentWriteFailure,
+  versionDocumentKey,
+  type Address,
+  type VersionDocument,
+  type WriteVersionDocumentResult,
+} from "./version-document";
 
-export { providers, type Provider } from "./schema";
+export { providers, sdks, type Provider, type Sdk } from "./schema";
+export {
+  DocumentWriteFailure,
+  type Address,
+  type Snippet,
+  type VersionDocument,
+  type WriteVersionDocumentResult,
+} from "./version-document";
 
 /** A provider account: which provider, and the account's ID at that provider. */
 export interface ProviderIdentity {
@@ -22,15 +39,120 @@ export interface Account {
   handle: string | null;
 }
 
+/** What the first publish records for a new account: who signed in, and the chosen handle. */
+export interface NewAccount extends ProviderIdentity {
+  handle: string;
+}
+
 /**
- * The storage interface (ADR 0005). It is the only code that sees D1 and Drizzle. Handlers
- * reach it through c.var.storage and call its methods.
+ * The outcome of creating an account. Created means this call wrote the account, its
+ * provider link and its handle. Existing means the provider identity already had an account,
+ * and nothing was written. Handle-taken means the handle is in use or retired, and nothing
+ * was written.
+ */
+export type CreateAccountResult =
+  | { outcome: "created"; account: Account & { handle: string } }
+  | { outcome: "existing"; account: Account }
+  | { outcome: "handle-taken" };
+
+/** What publishing records for a new listing and its first version. */
+export interface NewListing extends Address {
+  title: string;
+  /** The one-line description. It belongs to the listing and can change later. */
+  description: string;
+  sdk: Sdk;
+  /** The integrations implied by the code's imports. Empty when there are none. */
+  integrations: readonly string[];
+}
+
+/** A listing at one version's address, with every field search reads. */
+export interface Listing extends NewListing {
+  integrations: string[];
+  publishedAt: Date;
+}
+
+/** A published version's own fields. None of them can change after publishing. */
+export interface Version extends Address {
+  title: string;
+  sdk: Sdk;
+  integrations: string[];
+  publishedAt: Date;
+}
+
+/** A listing's current one-line description, which can change after publishing (ADR 0006). */
+export interface ListingDescription {
+  handle: string;
+  name: string;
+  description: string;
+}
+
+/** The outcome of creating a listing. An address can be written once. */
+export type CreateListingResult =
+  { outcome: "created"; listing: Listing } | { outcome: "address-taken" };
+
+/**
+ * What publishing records in the database: the listing and its first version, and the
+ * account for a provider identity that has none yet. The new account's handle is the
+ * listing's handle.
+ */
+export interface NewPublication {
+  listing: NewListing;
+  /** The provider identity to create the account for. Absent when the account exists. */
+  newAccount?: ProviderIdentity;
+}
+
+/**
+ * The outcome of recording a publication. Created means every row was written, and
+ * accountCreated says whether the account was among them. Address-taken and handle-taken mean
+ * nothing was written.
+ */
+export type CreatePublicationResult =
+  | { outcome: "created"; listing: Listing; accountCreated: boolean }
+  | { outcome: "address-taken" }
+  | { outcome: "handle-taken" };
+
+/** True when the error, or one it wraps, is a unique-key failure on the listing tables. */
+const isAddressConflict = (error: unknown): boolean => {
+  for (let e = error; e instanceof Error; e = e.cause) {
+    if (/UNIQUE constraint failed: (listings|versions)\./.test(e.message)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** True when the error, or one it wraps, is a constraint failure in the database. */
+const isConstraintFailure = (error: unknown): boolean => {
+  for (let e = error; e instanceof Error; e = e.cause) {
+    if (/(UNIQUE|FOREIGN KEY) constraint failed/.test(e.message)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** The listing as created, from what was written and the version row the insert returned. */
+const createdListing = (
+  listing: NewListing,
+  created: { publishedAt: Date } | undefined,
+): Listing => {
+  if (created === undefined) {
+    throw new Error("The version insert returned no row.");
+  }
+  return { ...listing, integrations: [...listing.integrations], ...created };
+};
+
+/**
+ * The storage interface (ADR 0005). It is the only code that sees D1, R2 and Drizzle.
+ * Handlers reach it through c.var.storage and call its methods.
  */
 export class Storage {
   readonly #db: DrizzleD1Database;
+  readonly #documents: R2Bucket;
 
-  constructor(database: D1Database) {
+  constructor(database: D1Database, documents: R2Bucket) {
     this.#db = drizzle(database);
+    this.#documents = documents;
   }
 
   /** True when the database answers a query. */
@@ -75,5 +197,260 @@ export class Storage {
       )
       .limit(1);
     return taken.length === 0;
+  }
+
+  /**
+   * Creates the account for a provider identity, with its provider link and its handle, in one
+   * database batch, so either all three rows are written or none are (ADR 0007). Reserved
+   * words and the format rule are checked by the handle schema, not here.
+   */
+  async createAccount(newAccount: NewAccount): Promise<CreateAccountResult> {
+    const { provider, providerAccountId, handle } = newAccount;
+    const existing = await this.findAccountByProviderIdentity(newAccount);
+    if (existing !== undefined) {
+      return { outcome: "existing", account: existing };
+    }
+    const id = crypto.randomUUID();
+    try {
+      await this.#db.batch(
+        this.#accountInserts(id, { provider, providerAccountId, handle }),
+      );
+      return { outcome: "created", account: { id, handle } };
+    } catch (error) {
+      if (!isConstraintFailure(error)) {
+        throw error;
+      }
+      // The handle is in use or retired, or another request created this account since the
+      // read above. A batch that fails for any other reason is unexpected.
+      const raced = await this.findAccountByProviderIdentity(newAccount);
+      if (raced !== undefined) {
+        return { outcome: "existing", account: raced };
+      }
+      if (!(await this.isHandleAvailable(handle))) {
+        return { outcome: "handle-taken" };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Creates a listing and its first version in one database batch. When the listing or the
+   * version address already exists, nothing is written and the outcome is address-taken.
+   */
+  async createListing(listing: NewListing): Promise<CreateListingResult> {
+    try {
+      const [, [created]] = await this.#db.batch(this.#listingInserts(listing));
+      return { outcome: "created", listing: createdListing(listing, created) };
+    } catch (error) {
+      if (isAddressConflict(error)) {
+        return { outcome: "address-taken" };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Records a publication in one database batch, so either every row is written or none are:
+   * the account, its provider link and its handle when the identity has no account, then the
+   * listing and its first version. The account's handle is the listing's handle.
+   */
+  async createPublication({
+    listing,
+    newAccount,
+  }: NewPublication): Promise<CreatePublicationResult> {
+    if (newAccount === undefined) {
+      const result = await this.createListing(listing);
+      return result.outcome === "created"
+        ? { ...result, accountCreated: false }
+        : result;
+    }
+    const { handle } = listing;
+    const id = crypto.randomUUID();
+    try {
+      const [, , , , [created]] = await this.#db.batch([
+        ...this.#accountInserts(id, { ...newAccount, handle }),
+        ...this.#listingInserts(listing),
+      ]);
+      return {
+        outcome: "created",
+        listing: createdListing(listing, created),
+        accountCreated: true,
+      };
+    } catch (error) {
+      if (!isConstraintFailure(error)) {
+        throw error;
+      }
+      // Another publish created this identity's account since the caller looked. Its handle
+      // is permanent, so the listing goes under it only when it is the same handle.
+      const raced = await this.findAccountByProviderIdentity(newAccount);
+      if (raced !== undefined) {
+        return raced.handle === handle
+          ? this.createPublication({ listing })
+          : { outcome: "handle-taken" };
+      }
+      if (!(await this.isHandleAvailable(handle))) {
+        return { outcome: "handle-taken" };
+      }
+      throw error;
+    }
+  }
+
+  /** The inserts that create an account with its provider link and its handle. */
+  #accountInserts(
+    id: string,
+    { provider, providerAccountId, handle }: NewAccount,
+  ) {
+    return [
+      // No constraint covers retired handles. The account row is skipped when the handle is
+      // retired, and the provider link's foreign key then fails the whole batch.
+      this.#db
+        .insert(accounts)
+        .select(
+          sql`select ${id}, unixepoch() where not exists (select 1 from ${retiredHandles} where ${retiredHandles.handle} = ${handle})`,
+        ),
+      this.#db
+        .insert(providerAccounts)
+        .values({ provider, providerAccountId, accountId: id }),
+      this.#db.insert(handles).values({ handle, accountId: id }),
+    ] as const;
+  }
+
+  /** The inserts that create a listing and its first version. */
+  #listingInserts(listing: NewListing) {
+    const { handle, name, version, title, description, sdk } = listing;
+    const integrations = [...listing.integrations];
+    return [
+      this.#db.insert(listings).values({ handle, name, description }),
+      this.#db
+        .insert(versions)
+        .values({ handle, name, version, title, sdk, integrations })
+        .returning({ publishedAt: versions.publishedAt }),
+    ] as const;
+  }
+
+  /** The listing at an address, with its version's fields, or undefined when there is none. */
+  async findListing({
+    handle,
+    name,
+    version,
+  }: Address): Promise<Listing | undefined> {
+    return this.#db
+      .select({
+        handle: versions.handle,
+        name: versions.name,
+        version: versions.version,
+        title: versions.title,
+        description: listings.description,
+        sdk: versions.sdk,
+        integrations: versions.integrations,
+        publishedAt: versions.publishedAt,
+      })
+      .from(versions)
+      .innerJoin(
+        listings,
+        and(
+          eq(listings.handle, versions.handle),
+          eq(listings.name, versions.name),
+        ),
+      )
+      .where(
+        and(
+          eq(versions.handle, handle),
+          eq(versions.name, name),
+          eq(versions.version, version),
+        ),
+      )
+      .get();
+  }
+
+  /**
+   * The version at an address, without the listing's description, or undefined when there
+   * is none. Addresses match exactly, so a wrong-case address finds nothing.
+   */
+  async findVersion({
+    handle,
+    name,
+    version,
+  }: Address): Promise<Version | undefined> {
+    return this.#db
+      .select({
+        handle: versions.handle,
+        name: versions.name,
+        version: versions.version,
+        title: versions.title,
+        sdk: versions.sdk,
+        integrations: versions.integrations,
+        publishedAt: versions.publishedAt,
+      })
+      .from(versions)
+      .where(
+        and(
+          eq(versions.handle, handle),
+          eq(versions.name, name),
+          eq(versions.version, version),
+        ),
+      )
+      .get();
+  }
+
+  /**
+   * The current description of the listing at a handle and name, or undefined when there is
+   * none. Handles and names match exactly, so a wrong-case one finds nothing.
+   */
+  async findListingDescription({
+    handle,
+    name,
+  }: Omit<Address, "version">): Promise<ListingDescription | undefined> {
+    return this.#db
+      .select({
+        handle: listings.handle,
+        name: listings.name,
+        description: listings.description,
+      })
+      .from(listings)
+      .where(and(eq(listings.handle, handle), eq(listings.name, name)))
+      .get();
+  }
+
+  /**
+   * Writes a version's document, create-only. When a document already exists at the
+   * address, nothing is written and the outcome is already-exists. The conditional put this
+   * rests on is an accepted risk (ADR 0005, Notes).
+   *
+   * @throws {DocumentWriteFailure} when the write fails for any other reason.
+   */
+  async writeVersionDocument(
+    address: Address,
+    document: VersionDocument,
+  ): Promise<WriteVersionDocumentResult> {
+    const key = versionDocumentKey(address);
+    let written: R2Object | null;
+    try {
+      written = await this.#documents.put(key, JSON.stringify(document), {
+        onlyIf: { etagDoesNotMatch: "*" },
+        httpMetadata: { contentType: "application/json" },
+      });
+    } catch (error) {
+      throw new DocumentWriteFailure(key, error);
+    }
+    return written === null
+      ? { outcome: "already-exists" }
+      : { outcome: "created" };
+  }
+
+  /**
+   * Deletes the version document at an address. Publishing calls it to clean up a document
+   * whose database rows were never written (ADR 0005). Deleting a missing key is not an error.
+   */
+  async deleteVersionDocument(address: Address): Promise<void> {
+    await this.#documents.delete(versionDocumentKey(address));
+  }
+
+  /** The version document at an address, or undefined when there is none. */
+  async readVersionDocument(
+    address: Address,
+  ): Promise<VersionDocument | undefined> {
+    const stored = await this.#documents.get(versionDocumentKey(address));
+    return stored === null ? undefined : await stored.json<VersionDocument>();
   }
 }

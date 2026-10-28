@@ -1,11 +1,10 @@
-import { PageTitle } from "@/components/page-title";
+import { PageMessage } from "@/components/page-message";
 import {
   isRouteErrorResponse,
   Outlet,
   useMatches,
   useRouteError,
 } from "react-router";
-import styles from "./frame-route.module.css";
 import { PageFrame } from "./page-frame";
 import { showsContribute, showsFooter } from "./route-handle";
 
@@ -36,10 +35,7 @@ export function ErrorBoundary() {
 
   return (
     <PageFrame>
-      <PageTitle page={heading} />
-      <div className={styles["message"]}>
-        <h1 className={styles["heading"]}>{heading}</h1>
-      </div>
+      <PageMessage heading={heading} />
     </PageFrame>
   );
 }

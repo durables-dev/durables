@@ -1,10 +1,14 @@
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import {
   accounts,
   handles,
+  listings,
   providerAccounts,
   retiredHandles,
+  versions,
   type Provider,
+  type Sdk,
 } from "./schema";
 
 // Test-only writes and reads. Accounts and handles are written at publish ("Epic: Describe and
@@ -64,22 +68,77 @@ export const seedRetiredHandle = async (
   await drizzle(database).insert(retiredHandles).values({ handle });
 };
 
+/**
+ * Adds a listing with no version under it. Publishing never leaves one, so tests use it to make
+ * the database step of a publish fail after its document is written.
+ */
+export const seedListing = async (
+  database: D1Database,
+  listing: { handle: string; name: string; description: string },
+): Promise<void> => {
+  await drizzle(database).insert(listings).values(listing);
+};
+
+/**
+ * Adds a version under an existing listing. Publishing creates only a listing's first
+ * version; later versions are a later increment, so tests write them here.
+ */
+export const seedVersion = async (
+  database: D1Database,
+  version: {
+    handle: string;
+    name: string;
+    version: string;
+    title: string;
+    sdk: Sdk;
+    integrations: string[];
+  },
+): Promise<void> => {
+  await drizzle(database).insert(versions).values(version);
+};
+
+/**
+ * Changes a listing's current description. Editing a description is a later increment, so
+ * tests change it here.
+ */
+export const seedDescription = async (
+  database: D1Database,
+  listing: { handle: string; name: string; description: string },
+): Promise<void> => {
+  await drizzle(database)
+    .update(listings)
+    .set({ description: listing.description })
+    .where(
+      and(eq(listings.handle, listing.handle), eq(listings.name, listing.name)),
+    );
+};
+
 /** Every row in every table, so a test can check what was stored. */
 export const readAllRows = async (
   database: D1Database,
 ): Promise<Record<string, unknown[]>> => {
   const db = drizzle(database);
-  const [accountRows, providerAccountRows, handleRows, retiredHandleRows] =
-    await db.batch([
-      db.select().from(accounts),
-      db.select().from(providerAccounts),
-      db.select().from(handles),
-      db.select().from(retiredHandles),
-    ]);
+  const [
+    accountRows,
+    providerAccountRows,
+    handleRows,
+    retiredHandleRows,
+    listingRows,
+    versionRows,
+  ] = await db.batch([
+    db.select().from(accounts),
+    db.select().from(providerAccounts),
+    db.select().from(handles),
+    db.select().from(retiredHandles),
+    db.select().from(listings),
+    db.select().from(versions),
+  ]);
   return {
     accounts: accountRows,
     providerAccounts: providerAccountRows,
     handles: handleRows,
     retiredHandles: retiredHandleRows,
+    listings: listingRows,
+    versions: versionRows,
   };
 };

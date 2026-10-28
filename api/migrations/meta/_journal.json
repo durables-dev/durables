@@ -8,6 +8,13 @@
       "when": 1791995361346,
       "tag": "0000_accounts-and-handles",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792769466585,
+      "tag": "0001_listings-and-versions",
+      "breakpoints": true
     }
   ]
 }

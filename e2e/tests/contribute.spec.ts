@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures";
+import type { Locator, Page } from "@playwright/test";
+import { expect, publisherName, test, type FakeIdentity } from "../fixtures";
 
 const providers = ["GitHub", "GitLab", "Google", "Microsoft"] as const;
 
@@ -669,4 +669,435 @@ test.describe("as an anonymous visitor opening the Code step", () => {
       });
     },
   );
+});
+
+// The Details, Review and Published steps: describe the checked activity, confirm the six
+// terms and publish it. Every test here signs in a new publisher of its own, with a handle of
+// their own, because publishing creates their account and the listing rows hold its handle.
+
+const reviewConfirmationTexts = [
+  "I wrote this code, or I own the copyright or have permission to publish it.",
+  "I'm publishing it under MIT-0: anyone may use, change and share it, with no attribution and no warranty.",
+  "It contains no secrets, credentials, keys or personal data.",
+  "It isn't malicious and doesn't knowingly harm the systems it runs on.",
+  "I understand Durables doesn't review or warrant published code and takes no responsibility for it. I'm responsible for what I publish.",
+  "I agree to the Durables Terms.",
+] as const;
+
+const confirmHint = "Confirm each item above";
+const nameUsedMessage = "You already have a listing at this address.";
+const handleJustTakenMessage = "That handle was just taken. Choose another.";
+const publishLimitedMessage =
+  "Too many publishes in a short time. Wait a minute and try again.";
+
+/** The details the Python sample is published with, the title and name as Details fills them. */
+const pythonListing = {
+  title: "Post slack message",
+  name: "post-slack-message",
+  description: "Posts a message to a Slack channel and returns its reference.",
+};
+
+const pythonFile = accepted.find(({ sdk }) => sdk === "Python") ?? noSample();
+
+function noSample(): never {
+  throw new Error("No Python sample");
+}
+
+/** The publish limit per publisher per minute, locally (api: wrangler.toml PUBLISH_LIMIT). */
+const publishLimit = 10;
+
+function confirmationsBox(page: Page) {
+  return page.getByRole("group", {
+    name: "Before you publish, confirm each of these",
+  });
+}
+
+function publishButton(page: Page) {
+  return page.getByRole("button", { name: "Publish 1.0.0" });
+}
+
+function footerHint(page: Page) {
+  return page.getByRole("status").filter({ hasText: confirmHint });
+}
+
+function previewCard(page: Page) {
+  return page.getByRole("region", { name: "Listing preview" });
+}
+
+function publishedScreen(page: Page) {
+  return page.getByRole("region", { name: "Published" });
+}
+
+/**
+ * Signs a new publisher in, with no account yet, and chooses their handle on the handle step,
+ * which opens the Code step. The handle comes from the provider username.
+ */
+async function startAsNewPublisher(
+  page: Page,
+  signIn: (identity: FakeIdentity) => Promise<void>,
+  handle: string,
+) {
+  await signIn({ name: publisherName, provider: "github", username: handle });
+  await page.goto("/contribute");
+  const field = page.getByLabel("Handle", { exact: true });
+  await expect(field).toHaveValue(handle);
+  await expect(page.getByText(`${handle} is available.`)).toBeVisible();
+  await continueButton(page).click();
+  await expect(page).toHaveURL("/contribute/code");
+}
+
+/**
+ * From the Code step: pastes the Python sample, goes through Detected, fills Details and opens
+ * Review. The title and name stay as Details fills them unless a name is given.
+ */
+async function describeAndReview(
+  page: Page,
+  paste: (field: Locator, text: string) => Promise<void>,
+  { name, description }: { name?: string; description: string },
+) {
+  await paste(editor(page), python);
+  await expect(foundLine(page, pythonFile)).toBeVisible();
+  await continueButton(page).click();
+  await expect(page).toHaveURL("/contribute/detected");
+  await continueButton(page).click();
+
+  await expect(page).toHaveURL("/contribute/details");
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Listing details" }),
+  ).toBeVisible();
+  if (name !== undefined) {
+    await page.getByLabel("Name in the address", { exact: true }).fill(name);
+  }
+  await page
+    .getByLabel("One-line description", { exact: true })
+    .fill(description);
+  await expect(continueButton(page)).toBeEnabled();
+  await continueButton(page).click();
+
+  await expect(page).toHaveURL("/contribute/review");
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Review and publish" }),
+  ).toBeVisible();
+}
+
+async function confirmAll(page: Page) {
+  for (const text of reviewConfirmationTexts) {
+    await confirmationsBox(page).getByLabel(text, { exact: true }).check();
+  }
+  await expect(publishButton(page)).toBeEnabled();
+}
+
+test.describe("Review and publish", () => {
+  test("Publish stays disabled until all six confirmations are checked", async ({
+    page,
+    expectAccessible,
+    paste,
+    signIn,
+    uniqueHandle,
+  }) => {
+    await startAsNewPublisher(page, signIn, uniqueHandle("six"));
+    await describeAndReview(page, paste, pythonListing);
+    const boxes = confirmationsBox(page).getByRole("checkbox");
+
+    await expect(boxes).toHaveCount(reviewConfirmationTexts.length);
+    for (const box of await boxes.all()) {
+      await expect(box).not.toBeChecked();
+    }
+    await expect(publishButton(page)).toBeDisabled();
+    await expect(footerHint(page)).toBeVisible();
+    await expectAccessible();
+
+    for (const [index, text] of reviewConfirmationTexts.entries()) {
+      await confirmationsBox(page).getByLabel(text, { exact: true }).check();
+      if (index < reviewConfirmationTexts.length - 1) {
+        await expect(publishButton(page)).toBeDisabled();
+        await expect(footerHint(page)).toBeVisible();
+      }
+    }
+
+    await expect(publishButton(page)).toBeEnabled();
+    await expect(footerHint(page)).toHaveCount(0);
+
+    const [first] = reviewConfirmationTexts;
+    await confirmationsBox(page).getByLabel(first, { exact: true }).uncheck();
+
+    await expect(publishButton(page)).toBeDisabled();
+    await expect(footerHint(page)).toBeVisible();
+  });
+
+  test("the Terms link opens the Terms page, which says everything is published under MIT-0, and Back returns to Review as it was", async ({
+    page,
+    expectAccessible,
+    paste,
+    signIn,
+    uniqueHandle,
+  }) => {
+    const handle = uniqueHandle("terms");
+    const checked = reviewConfirmationTexts.slice(0, 3);
+    const unchecked = reviewConfirmationTexts.slice(3);
+    await startAsNewPublisher(page, signIn, handle);
+    await describeAndReview(page, paste, pythonListing);
+    for (const text of checked) {
+      await confirmationsBox(page).getByLabel(text, { exact: true }).check();
+    }
+
+    await test.step("follow the Terms link to the Terms page", async () => {
+      await confirmationsBox(page)
+        .getByRole("link", { name: "Terms", exact: true })
+        .click();
+
+      await expect(page).toHaveURL("/terms");
+      await expect(
+        page
+          .getByRole("main")
+          .getByRole("heading", { level: 1, name: "Terms" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("main").getByRole("listitem").filter({
+          hasText:
+            "publish it under MIT-0, like everything on Durables: anyone may use, change and share it, with no attribution and no warranty.",
+        }),
+      ).toBeVisible();
+      await expectAccessible();
+    });
+
+    await test.step("go Back and find Review as it was", async () => {
+      await page.goBack();
+
+      await expect(page).toHaveURL("/contribute/review");
+      await expect(
+        page.getByRole("heading", { level: 2, name: "Review and publish" }),
+      ).toBeVisible();
+      await expect(
+        previewCard(page).getByRole("heading", { name: pythonListing.title }),
+      ).toBeVisible();
+      await expect(previewCard(page)).toContainText(
+        `${handle}/${pythonListing.name}@1.0.0`,
+      );
+      await expect(previewCard(page)).toContainText(pythonListing.description);
+      for (const text of checked) {
+        await expect(
+          confirmationsBox(page).getByLabel(text, { exact: true }),
+        ).toBeChecked();
+      }
+      for (const text of unchecked) {
+        await expect(
+          confirmationsBox(page).getByLabel(text, { exact: true }),
+        ).not.toBeChecked();
+      }
+      await expect(publishButton(page)).toBeDisabled();
+    });
+  });
+
+  test("publishing a name the publisher already used returns to Details with the message under the name", async ({
+    page,
+    expectAccessible,
+    paste,
+    publishThroughApi,
+    signIn,
+    uniqueHandle,
+  }) => {
+    await startAsNewPublisher(page, signIn, uniqueHandle("again"));
+    await publishThroughApi({ code: python, ...pythonListing });
+    const description = "The same name, a second time.";
+    await describeAndReview(page, paste, { description });
+    await confirmAll(page);
+
+    await publishButton(page).click();
+
+    await expect(page).toHaveURL("/contribute/details");
+    const name = page.getByLabel("Name in the address", { exact: true });
+    await expect(name).toHaveValue(pythonListing.name);
+    await expect(name).toHaveAttribute("aria-invalid", "true");
+    await expect(name).toHaveAccessibleDescription(nameUsedMessage);
+    await expect(
+      page.getByText(nameUsedMessage, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("One-line description", { exact: true }),
+    ).toHaveValue(description);
+    await expectAccessible();
+  });
+
+  test("a refused publish shows its message above Publish and the boxes stay checked", async ({
+    page,
+    expectAccessible,
+    paste,
+    signIn,
+    uniqueHandle,
+  }) => {
+    await startAsNewPublisher(page, signIn, uniqueHandle("refused"));
+    await describeAndReview(page, paste, pythonListing);
+    await confirmAll(page);
+
+    // The publisher uses up their publishes for the minute. A body the API can't read still
+    // counts, and publishes nothing. The limit's window is the wall-clock minute, so this
+    // runs just before Publish is pressed.
+    await test.step("use up the publish limit", async () => {
+      for (let sent = 0; sent < publishLimit; sent += 1) {
+        const response = await page.request.post("/api/activities", {
+          data: {},
+          headers: { "Sec-Fetch-Site": "same-origin" },
+        });
+        expect(response.status()).toBe(400);
+      }
+      const limited = await page.request.post("/api/activities", {
+        data: {},
+        headers: { "Sec-Fetch-Site": "same-origin" },
+      });
+      expect(limited.status()).toBe(429);
+    });
+
+    await publishButton(page).click();
+
+    const alert = page.getByRole("alert");
+    await expect(alert).toHaveText(publishLimitedMessage);
+    await expect(page).toHaveURL("/contribute/review");
+    for (const text of reviewConfirmationTexts) {
+      await expect(
+        confirmationsBox(page).getByLabel(text, { exact: true }),
+      ).toBeChecked();
+    }
+    await expect(publishButton(page)).toBeEnabled();
+    const alertBox = await alert.boundingBox();
+    const publishBox = await publishButton(page).boundingBox();
+    expect(alertBox).not.toBeNull();
+    expect(publishBox).not.toBeNull();
+    expect((alertBox?.y ?? 0) + (alertBox?.height ?? 0)).toBeLessThanOrEqual(
+      publishBox?.y ?? 0,
+    );
+    await expectAccessible();
+  });
+
+  test("a handle taken between choosing it and publishing sends the publisher to the handle step with the draft kept", async ({
+    page,
+    expectAccessible,
+    paste,
+    seedAccount,
+    signIn,
+    uniqueHandle,
+  }) => {
+    const chosen = uniqueHandle("chosen");
+    const other = uniqueHandle("other");
+    await startAsNewPublisher(page, signIn, chosen);
+    await describeAndReview(page, paste, pythonListing);
+    await confirmAll(page);
+
+    await test.step("someone else takes the handle, and publishing sends the publisher to the handle step", async () => {
+      await seedAccount({ handle: chosen });
+
+      await publishButton(page).click();
+
+      await expect(page).toHaveURL("/contribute/profile");
+      await expect(
+        page.getByRole("heading", { level: 2, name: "Choose your handle" }),
+      ).toBeVisible();
+      await expect(page.getByLabel("Handle", { exact: true })).toHaveValue(
+        chosen,
+      );
+      await expect(
+        page.getByText(handleJustTakenMessage, { exact: true }),
+      ).toBeVisible();
+      await expectAccessible();
+    });
+
+    await test.step("choosing another handle returns to Review with the draft kept, and publishes", async () => {
+      const field = page.getByLabel("Handle", { exact: true });
+      await field.fill(other);
+      await expect(page.getByText(`${other} is available.`)).toBeVisible();
+      await continueButton(page).click();
+
+      await expect(page).toHaveURL("/contribute/review");
+      await expect(previewCard(page)).toContainText(
+        `${other}/${pythonListing.name}@1.0.0`,
+      );
+      await expect(previewCard(page)).toContainText(pythonListing.description);
+      for (const text of reviewConfirmationTexts) {
+        await expect(
+          confirmationsBox(page).getByLabel(text, { exact: true }),
+        ).toBeChecked();
+      }
+
+      await publishButton(page).click();
+
+      await expect(publishedScreen(page)).toContainText(
+        `${other}/${pythonListing.name}@1.0.0 is live.`,
+      );
+    });
+  });
+});
+
+test.describe("the Published screen", () => {
+  test("a later publish by the same account shows no account line", async ({
+    page,
+    expectAccessible,
+    paste,
+    publishThroughApi,
+    signIn,
+    uniqueHandle,
+  }) => {
+    const handle = uniqueHandle("later");
+    const name = "post-slack-message-again";
+    await startAsNewPublisher(page, signIn, handle);
+    const first = await publishThroughApi({ code: python, ...pythonListing });
+    expect(first.accountCreated).toBe(true);
+
+    // The account exists now, so Contribute opens on the Code step.
+    await page.goto("/contribute");
+    await expect(page).toHaveURL("/contribute/code");
+    await describeAndReview(page, paste, {
+      name,
+      description: pythonListing.description,
+    });
+    await confirmAll(page);
+
+    await publishButton(page).click();
+
+    await expect(page).toHaveURL("/contribute/published");
+    await expect(
+      publishedScreen(page).getByRole("heading", {
+        level: 2,
+        name: "Published",
+      }),
+    ).toBeVisible();
+    await expect(publishedScreen(page).getByText(/is live\./)).toHaveText(
+      `${handle}/${name}@1.0.0 is live.`,
+    );
+    await expect(publishedScreen(page)).not.toContainText(
+      "Your Durables account",
+    );
+    await expectAccessible();
+  });
+
+  test("opening Contribute after publishing starts a new activity at the Code step", async ({
+    page,
+    expectAccessible,
+    paste,
+    signIn,
+    uniqueHandle,
+  }) => {
+    const handle = uniqueHandle("fresh");
+    await startAsNewPublisher(page, signIn, handle);
+    await describeAndReview(page, paste, pythonListing);
+    await confirmAll(page);
+    await publishButton(page).click();
+    await expect(publishedScreen(page)).toContainText(
+      `${handle}/${pythonListing.name}@1.0.0 is live.`,
+    );
+
+    await page.goto("/contribute");
+
+    await expect(page).toHaveURL("/contribute/code");
+    await expect(
+      page.getByRole("heading", { level: 2, name: "Paste your activity" }),
+    ).toBeVisible();
+    await expect(editor(page)).toHaveValue("");
+    await expect(continueButton(page)).toBeDisabled();
+    await expect(
+      page
+        .getByRole("navigation", { name: "Steps" })
+        .getByRole("link", { name: "Code", exact: true }),
+    ).toHaveAttribute("aria-current", "step");
+    await expectAccessible();
+  });
 });

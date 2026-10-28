@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, publisherInitials, publisherName, test } from "../fixtures";
 
@@ -238,6 +239,142 @@ test(
       ).toBeEnabled();
       await expect(accountMenu(returning)).toHaveText(publisherInitials);
       await expectAccessible(returning);
+    });
+  },
+);
+
+test(
+  "a first-time publisher describes a checked activity, confirms the six terms, publishes it and opens the live listing",
+  { tag: "@journey" },
+  async ({ page, expectAccessible, signIn, uniqueHandle, paste }) => {
+    const handle = uniqueHandle("first");
+    const code = readFileSync(
+      new URL("../samples/python.txt", import.meta.url),
+      "utf8",
+    );
+    const title = "Post slack message";
+    const name = "post-slack-message";
+    const description =
+      "Posts a message to a Slack channel and returns its reference.";
+    const address = `${handle}/${name}@1.0.0`;
+    const editor = page.getByLabel("Paste your file", { exact: true });
+    const continueButton = page.getByRole("button", { name: "Continue" });
+    const publishButton = page.getByRole("button", { name: "Publish 1.0.0" });
+    const confirmations = page
+      .getByRole("group", { name: "Before you publish, confirm each of these" })
+      .getByRole("checkbox");
+    const published = page.getByRole("region", { name: "Published" });
+
+    await test.step("sign in as a new publisher, choose a handle and reach the Code step", async () => {
+      await signIn({
+        name: publisherName,
+        provider: "github",
+        username: handle,
+      });
+      await openContributeFromHome(page);
+      await expect(page.getByLabel("Handle", { exact: true })).toHaveValue(
+        handle,
+      );
+      await expect(page.getByText(`${handle} is available.`)).toBeVisible();
+      await continueButton.click();
+
+      await expectOnCodeStep(page);
+    });
+
+    await test.step("paste the activity and go through Detected to Details", async () => {
+      await paste(editor, code);
+      await expect(
+        page.getByText(/^✓ Found post_slack_message \(Python\)/),
+      ).toBeVisible();
+      await continueButton.click();
+      await expect(page).toHaveURL("/contribute/detected");
+      await continueButton.click();
+
+      await expect(page).toHaveURL("/contribute/details");
+      await expect(stepLink(page, "Details")).toHaveAttribute(
+        "aria-current",
+        "step",
+      );
+    });
+
+    await test.step("fill Details and see the address the listing will have", async () => {
+      await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+        title,
+      );
+      await expect(
+        page.getByLabel("Name in the address", { exact: true }),
+      ).toHaveValue(name);
+      await expect(page.getByLabel("Version", { exact: true })).toHaveValue(
+        "1.0.0",
+      );
+      await expect(page.getByText(`durables.dev/${address}`)).toBeVisible();
+      await expect(continueButton).toBeDisabled();
+
+      await page
+        .getByLabel("One-line description", { exact: true })
+        .fill(description);
+
+      await expect(continueButton).toBeEnabled();
+      await expectAccessible();
+      await continueButton.click();
+    });
+
+    await test.step("review the preview card and check all six confirmations", async () => {
+      await expect(page).toHaveURL("/contribute/review");
+      const card = page.getByRole("region", { name: "Listing preview" });
+      await expect(card.getByRole("heading", { name: title })).toBeVisible();
+      await expect(card).toContainText(address);
+      await expect(card).toContainText(description);
+      await expect(confirmations).toHaveCount(6);
+      await expect(publishButton).toBeDisabled();
+      await expectAccessible();
+
+      for (const box of await confirmations.all()) {
+        await box.check();
+      }
+
+      await expect(publishButton).toBeEnabled();
+    });
+
+    await test.step("publish and see the live address and the new account", async () => {
+      await publishButton.click();
+
+      await expect(page).toHaveURL("/contribute/published");
+      await expect(
+        published.getByRole("heading", { level: 2, name: "Published" }),
+      ).toBeVisible();
+      await expect(published.getByText(/is live\./)).toHaveText(
+        `${address} is live. Your Durables account, ${handle}, now exists.`,
+      );
+      await expect(page.getByRole("navigation", { name: "Steps" })).toHaveCount(
+        0,
+      );
+      await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0);
+      await expectAccessible();
+    });
+
+    await test.step("view the listing at its address", async () => {
+      await published.getByRole("link", { name: "View the listing" }).click();
+
+      await expect(page).toHaveURL(`/${address}`);
+      await expect(
+        page.getByRole("main").getByRole("heading", { level: 1, name: title }),
+      ).toBeVisible();
+      await expect(page.getByRole("main")).toContainText(address);
+      await expect(page.getByRole("main")).toContainText(description);
+      await expectAccessible();
+    });
+
+    await test.step("open Contribute again and start a new activity at the Code step", async () => {
+      await page
+        .getByRole("banner")
+        .getByRole("link", { name: "Contribute" })
+        .click();
+
+      await expectOnCodeStep(page);
+      await expect(editor).toHaveValue("");
+      await expect(continueButton).toBeDisabled();
+      await expectAccessible();
     });
   },
 );

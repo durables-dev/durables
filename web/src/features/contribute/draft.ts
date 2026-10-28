@@ -1,6 +1,12 @@
 import { contributeOriginSchema } from "@/lib/contribute-origin";
+import {
+  listingDetailsSchema,
+  type ListingDetails,
+  type PublishConfirmationKey,
+} from "@durables/schemas";
 import { z } from "zod";
 import { checkResultSchema, type CheckResult } from "./check-result";
+import { defaultName, defaultTitle } from "./listing-defaults";
 import { stepIdSchema, type StepId } from "./steps";
 
 /** The in-progress contribution. Later steps add what they collect. */
@@ -16,7 +22,41 @@ export interface Draft {
   code?: string | undefined;
   /** The latest check of `code`. It goes whenever the code changes. */
   check?: CheckResult | undefined;
+  /**
+   * The listing details as the publisher entered them. A field the publisher has not edited
+   * is absent, and reads as its default (see `draftDetails`). An empty string is a field the
+   * publisher cleared.
+   */
+  details?: DraftDetailsEdits | undefined;
+  /**
+   * The name publish refused because the publisher already has a listing at that address.
+   * The Details step says so under the name while the name is this one.
+   */
+  usedName?: string | undefined;
+  /**
+   * The handle publish refused because another account took it after it was chosen. The
+   * handle step says so while the handle in its field is this one.
+   */
+  takenHandle?: string | undefined;
+  /**
+   * The Review step's confirmations the publisher has checked or unchecked. They vouch for the
+   * code, so they are cleared whenever the code changes.
+   */
+  confirmations?: DraftConfirmationEdits | undefined;
 }
+
+/** The listing details the publisher has edited so far. */
+export type DraftDetailsEdits = Partial<
+  Record<keyof ListingDetails, string | undefined>
+>;
+
+/** The confirmations the publisher has checked or unchecked so far. */
+export type DraftConfirmationEdits = Partial<
+  Record<PublishConfirmationKey, boolean | undefined>
+>;
+
+/** The six confirmations as the Review step shows them. Unchecked unless checked. */
+export type DraftConfirmations = Record<PublishConfirmationKey, boolean>;
 
 /**
  * What the publisher did. A step's form dispatches once it validates. A finished check is
@@ -26,12 +66,24 @@ export type DraftAction =
   | { type: "stepFinished"; step: StepId }
   | { type: "codeEdited"; code: string }
   | { type: "checkFinished"; code: string; result: CheckResult }
+  | { type: "detailsEdited"; field: keyof ListingDetails; value: string }
+  | { type: "nameUsedAtPublish"; name: string }
+  | { type: "handleTakenAtPublish"; handle: string }
+  | {
+      type: "confirmationToggled";
+      confirmation: PublishConfirmationKey;
+      checked: boolean;
+    }
   | { type: "published" };
 
 export const emptyDraft: Draft = { finished: [] };
 
 /** The sessionStorage key the draft is mirrored to, so a reload keeps it. */
 export const draftStorageKey = "durables.contribute.draft";
+
+const optionalString = z.string().optional().catch(undefined);
+
+const optionalBoolean = z.boolean().optional().catch(undefined);
 
 const draftSchema = z.object({
   finished: z.array(stepIdSchema),
@@ -40,6 +92,31 @@ const draftSchema = z.object({
   code: z.string().optional(),
   // An unreadable check is dropped and the code kept, so the check can run again.
   check: checkResultSchema.optional().catch(undefined),
+  // An unreadable field is dropped, so it reads as its default again.
+  details: z
+    .object({
+      title: optionalString,
+      name: optionalString,
+      description: optionalString,
+    } satisfies Record<keyof ListingDetails, z.ZodType>)
+    .optional()
+    .catch(undefined),
+  // An unreadable refused name is dropped, so the message under the name goes.
+  usedName: optionalString,
+  // An unreadable taken handle is dropped, so the message on the handle step goes.
+  takenHandle: optionalString,
+  // An unreadable confirmation is dropped, so it reads as unchecked.
+  confirmations: z
+    .object({
+      rights: optionalBoolean,
+      mitZero: optionalBoolean,
+      noSecrets: optionalBoolean,
+      notMalicious: optionalBoolean,
+      noResponsibility: optionalBoolean,
+      terms: optionalBoolean,
+    } satisfies Record<PublishConfirmationKey, z.ZodType>)
+    .optional()
+    .catch(undefined),
 });
 
 export function draftReducer(draft: Draft, action: DraftAction): Draft {
@@ -51,14 +128,68 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
     case "codeEdited":
       return action.code === (draft.code ?? "")
         ? draft
-        : { ...draft, code: action.code, check: undefined };
+        : {
+            ...draft,
+            code: action.code,
+            check: undefined,
+            confirmations: undefined,
+          };
     case "checkFinished":
       return action.code === draft.code
         ? { ...draft, check: action.result }
         : draft;
+    case "detailsEdited":
+      return {
+        ...draft,
+        details: { ...draft.details, [action.field]: action.value },
+      };
+    case "nameUsedAtPublish":
+      return { ...draft, usedName: action.name };
+    // The handle step is unfinished again until another handle is saved. The rest is kept.
+    case "handleTakenAtPublish":
+      return {
+        ...draft,
+        finished: draft.finished.filter((step) => step !== "profile"),
+        takenHandle: action.handle,
+      };
+    case "confirmationToggled":
+      return {
+        ...draft,
+        confirmations: {
+          ...draft.confirmations,
+          [action.confirmation]: action.checked,
+        },
+      };
     case "published":
       return emptyDraft;
   }
+}
+
+/**
+ * The listing details to show. A field the publisher has edited keeps their edit, even when
+ * they cleared it. Otherwise the title and name default from the accepted activity's name,
+ * and follow it when the check changes. The description starts empty.
+ */
+export function draftDetails(draft: Draft): ListingDetails {
+  const activityName =
+    draft.check?.outcome === "accepted" ? draft.check.facts.activity.name : "";
+  return {
+    title: draft.details?.title ?? defaultTitle(activityName),
+    name: draft.details?.name ?? defaultName(activityName),
+    description: draft.details?.description ?? "",
+  };
+}
+
+/** The six confirmations, each unchecked until the publisher checks it. */
+export function draftConfirmations(draft: Draft): DraftConfirmations {
+  return {
+    rights: draft.confirmations?.rights ?? false,
+    mitZero: draft.confirmations?.mitZero ?? false,
+    noSecrets: draft.confirmations?.noSecrets ?? false,
+    notMalicious: draft.confirmations?.notMalicious ?? false,
+    noResponsibility: draft.confirmations?.noResponsibility ?? false,
+    terms: draft.confirmations?.terms ?? false,
+  };
 }
 
 /** The pasted code has been checked and accepted. */
@@ -66,12 +197,20 @@ export function isAccepted(draft: Draft): boolean {
   return draft.check?.outcome === "accepted";
 }
 
+/** The listing details pass the shared rules, as Continue on the Details step requires. */
+export function detailsValid(draft: Draft): boolean {
+  return listingDetailsSchema.safeParse(draftDetails(draft)).success;
+}
+
 /**
  * The steps the draft has finished. Code is finished while the pasted code is accepted, and
- * at no other time.
+ * at no other time. Details is finished once the publisher continued from it, and only while
+ * the details still pass the shared rules.
  */
 export function draftFinished(draft: Draft): StepId[] {
-  const others = draft.finished.filter((step) => step !== "code");
+  const others = draft.finished.filter(
+    (step) => step !== "code" && (step !== "details" || detailsValid(draft)),
+  );
   return isAccepted(draft) ? [...others, "code"] : others;
 }
 

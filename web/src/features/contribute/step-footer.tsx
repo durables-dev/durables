@@ -7,6 +7,8 @@ export interface StepFooterProps {
   continueDisabled: boolean;
   /** Without it, Continue submits the form the footer sits in. */
   onContinue?: (() => void) | undefined;
+  /** The forward button's label. "Continue" unless given, as on Review's "Publish 1.0.0". */
+  continueLabel?: string | undefined;
 }
 
 // The foot of a step: Back at the left; at the right, the hint and Continue. The hint is a
@@ -16,6 +18,7 @@ export function StepFooter({
   hint,
   continueDisabled,
   onContinue,
+  continueLabel = "Continue",
 }: StepFooterProps) {
   return (
     <div className={styles["footer"]}>
@@ -32,7 +35,7 @@ export function StepFooter({
           disabled={continueDisabled}
           onClick={onContinue}
         >
-          Continue
+          {continueLabel}
         </button>
       </div>
     </div>

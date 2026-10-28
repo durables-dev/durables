@@ -1,0 +1,4 @@
+dotnet new console --output {{project}}
+cd {{project}}
+dotnet add package Temporalio
+{{packagesNote}}

@@ -5,13 +5,14 @@ import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import type { AppEnv } from "../app-env";
 import type { Session } from "../auth/auth";
+import { requirePublisher } from "../auth/require-publisher";
 import { ProblemError } from "../http/problem";
+import { publisherLimitKey } from "../http/rate-limits";
 import { problemOnInvalid } from "../http/validation";
 import type { Detector } from "./detector";
 import { detectors as registeredDetectors } from "./detectors";
 import type { Facts } from "./facts";
 import { checkCode } from "./pipeline";
-import { previewLimitKey } from "./preview-limit-key";
 import { codeTooLarge } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
 
@@ -28,17 +29,6 @@ interface ChecksEnv {
 /** The body of a check. Any other field, such as facts sent by the client, is dropped. */
 const checkBody = z.object({ code: z.string() });
 
-/** Answers 401 when there is no signed-in session, and sets the publisher on c.var. */
-const requirePublisher = () =>
-  createMiddleware<ChecksEnv>(async (c, next) => {
-    const publisher = await c.var.auth.session();
-    if (publisher === undefined) {
-      throw new ProblemError({ status: 401, detail: "Sign in first." });
-    }
-    c.set("publisher", publisher);
-    await next();
-  });
-
 /** Answers 413 Problem Details, the same refusal as oversized code, when the body is too large. */
 const checkBodyLimit = () =>
   bodyLimit({
@@ -52,7 +42,7 @@ const checkBodyLimit = () =>
 const previewRateLimit = () =>
   createMiddleware<ChecksEnv>(async (c, next) => {
     const { success } = await c.var.previewLimit.limit({
-      key: previewLimitKey(c.var.publisher),
+      key: publisherLimitKey(c.var.publisher),
     });
     if (!success) {
       throw new ProblemError({

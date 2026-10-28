@@ -1,0 +1,23 @@
+import asyncio
+import uuid
+
+from temporalio.client import Client
+
+{{inputImport}}
+from workflows import {{workflowClass}}
+
+
+async def main():
+    client = await Client.connect("localhost:7233")
+    # Fill in the input to pass to {{activity}}.
+    input: {{inputType}} = ...
+    result = await client.execute_workflow(
+        {{workflowClass}}.run,
+        input,
+        id={{workflowId}},
+        task_queue={{taskQueue}},
+    )
+    print(result)
+
+
+asyncio.run(main())
