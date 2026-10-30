@@ -3,6 +3,7 @@ import { PageTitle } from "@/components/page-title";
 import { problemFrom } from "@/lib/problem";
 import { useQuery } from "@tanstack/react-query";
 import { ConfigureSection } from "./configure-section";
+import { ImplementSection } from "./implement-section";
 import type { ListingAddress } from "./listing-address";
 import { ListingLayout } from "./listing-layout";
 import styles from "./listing-page.module.css";
@@ -70,6 +71,9 @@ export function ListingPage({ address }: ListingPageProps) {
             handle={version.data.handle}
             publishedAt={version.data.publishedAt}
           />
+        }
+        implement={
+          <ImplementSection version={version.data} sdk={version.data.sdk} />
         }
         configure={
           <ConfigureSection

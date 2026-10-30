@@ -7,6 +7,7 @@ import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
+import { python } from "./test-versions";
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
 const listingPath = "/api/activities/:handle/:name";
@@ -31,9 +32,9 @@ const chargeCard = {
     dependencies: [{ name: "stripe", line: 4 }],
     heartbeats: [],
   },
-  code: "from temporalio import activity\n",
+  code: python.code,
   activityFileName: "activities.py",
-  snippets: [],
+  snippets: python.snippets,
   integrations: [],
   publishedAt: twoDaysAgo.toISOString(),
 };
@@ -455,7 +456,8 @@ test('copying the address puts it on the clipboard and shows "Copied" beside it'
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
   const copy = screen.getByRole("button", { name: "Copy address" });
-  const status = screen.getByRole("main").getByRole("status");
+  // The address's status region is the first on the page; each code block below has its own.
+  const status = screen.getByRole("main").getByRole("status").first();
   await expect.element(status).toHaveTextContent("");
 
   await copy.click();
@@ -480,7 +482,8 @@ test('a copy the clipboard refuses does not show "Copied" and says it failed', a
 
   await screen.getByRole("button", { name: "Copy address" }).click();
 
-  const status = screen.getByRole("main").getByRole("status");
+  // The address's status region is the first on the page; each code block below has its own.
+  const status = screen.getByRole("main").getByRole("status").first();
   await expect.element(status).toHaveTextContent("Couldn't copy the address.");
   await expect.element(status).not.toHaveTextContent("Copied");
 });
@@ -593,7 +596,12 @@ test("the page shows no popularity signal, no Start a workflow and no version pi
       .getByRole("button")
       .elements()
       .map((button) => button.getAttribute("aria-label") ?? button.textContent),
-  ).toEqual(["Copy address"]);
+  ).toEqual([
+    "Copy address",
+    "Copy install command",
+    "Copy activities.py",
+    "Copy run commands",
+  ]);
 });
 
 test("Configure shows the version's detected variables, type names and worker requirements", async () => {
@@ -622,4 +630,36 @@ test("Configure shows the version's detected variables, type names and worker re
     .element(configure.getByRole("heading", { name: "Worker requirements" }))
     .toBeVisible();
   await expect.element(configure.getByText(/thread pool/)).toBeVisible();
+});
+
+test("Implement fills its anchor with the install command, the four file tabs and the run commands", async () => {
+  publishChargeCard();
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const main = screen.getByRole("main");
+  const heading = main.getByRole("heading", { level: 2, name: "Implement" });
+  await expect.element(heading).toBeVisible();
+  expect(heading.element().closest("section")?.id).toBe("implement");
+  await expect
+    .element(main.getByRole("region", { name: "install command" }))
+    .toHaveTextContent("pip install temporalio");
+  expect(
+    main
+      .getByRole("tab")
+      .elements()
+      .map((tab) => tab.textContent),
+  ).toEqual(["activities.py", "workflows.py", "worker.py", "start.py"]);
+  await expect
+    .element(main.getByRole("tab", { name: "activities.py" }))
+    .toHaveAttribute("aria-selected", "true");
+  expect(
+    main
+      .getByRole("region", { name: "activities.py" })
+      .element()
+      .querySelector("code")?.textContent,
+  ).toBe(python.code);
+  await expect
+    .element(main.getByRole("region", { name: "run commands" }))
+    .toHaveTextContent("python start.py");
 });

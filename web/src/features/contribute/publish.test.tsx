@@ -362,7 +362,7 @@ describe("the Published screen", () => {
             name: "post-slack-message",
             version: "1.0.0",
             title: "Post slack message",
-            sdk: "python",
+            sdk: "Python",
             facts: {
               activity: { name: "post_slack_message", line: 1 },
               input: null,
@@ -373,6 +373,29 @@ describe("the Published screen", () => {
               dependencies: [],
               heartbeats: [],
             },
+            code: "from temporalio import activity\n",
+            activityFileName: "activities.py",
+            snippets: [
+              { label: "Install", code: "pip install temporalio" },
+              {
+                label: "workflows.py",
+                code: "from temporalio import workflow",
+              },
+              {
+                label: "worker.py",
+                code: "from temporalio.worker import Worker",
+              },
+              {
+                label: "start.py",
+                code: "from temporalio.client import Client",
+              },
+              {
+                label: "Run",
+                code: "temporal server start-dev\npython worker.py\npython start.py",
+              },
+            ],
+            integrations: [],
+            publishedAt: new Date().toISOString(),
           }),
       ),
       http.get("/api/activities/ddieruf/post-slack-message", () =>
