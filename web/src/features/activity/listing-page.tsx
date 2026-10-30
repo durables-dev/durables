@@ -2,6 +2,7 @@ import { PageMessage } from "@/components/page-message";
 import { PageTitle } from "@/components/page-title";
 import { problemFrom } from "@/lib/problem";
 import { useQuery } from "@tanstack/react-query";
+import { ConfigureSection } from "./configure-section";
 import type { ListingAddress } from "./listing-address";
 import { ListingLayout } from "./listing-layout";
 import styles from "./listing-page.module.css";
@@ -68,6 +69,17 @@ export function ListingPage({ address }: ListingPageProps) {
             description={listing.data.description}
             handle={version.data.handle}
             publishedAt={version.data.publishedAt}
+          />
+        }
+        configure={
+          <ConfigureSection
+            environmentVariables={version.data.facts.configurationRead.map(
+              ({ name }) => name,
+            )}
+            input={version.data.facts.input}
+            output={version.data.facts.output}
+            runsAs={version.data.facts.runsAs}
+            sdk={version.data.sdk}
           />
         }
       />
