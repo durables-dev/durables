@@ -46,7 +46,7 @@ describe("formatting an address", () => {
 });
 
 describe("the version response", () => {
-  test("holds the address, title, SDK and detected facts", () => {
+  test("holds the code, Implement snippets, integrations and published date alongside the existing fields", () => {
     expect(versionResponse(version, document)).toEqual({
       address: "acme/charge-card@1.0.0",
       handle: "acme",
@@ -55,6 +55,33 @@ describe("the version response", () => {
       title: "Charge card",
       sdk: "Python",
       facts: document.facts,
+      code: "import stripe\n",
+      activityFileName: "activities.py",
+      snippets: [{ label: "Register", code: "worker = Worker()\n" }],
+      integrations: ["Stripe"],
+      publishedAt: "2026-10-23T12:00:00.000Z",
+    });
+  });
+
+  test("keeps the existing address, title, SDK and facts fields unchanged", () => {
+    expect(versionResponse(version, document)).toMatchObject({
+      address: "acme/charge-card@1.0.0",
+      handle: "acme",
+      name: "charge-card",
+      version: "1.0.0",
+      title: "Charge card",
+      sdk: "Python",
+      facts: {
+        sdk: "Python",
+        activity: { name: "charge_card", line: 7 },
+        input: "ChargeRequest",
+        output: "ChargeResult",
+        runsAs: "async",
+        nonRetryableErrors: [{ line: 12 }],
+        configurationRead: [{ name: "STRIPE_API_KEY", line: 9 }],
+        dependencies: [{ name: "stripe", line: 1 }],
+        heartbeats: [{ line: 8 }],
+      },
     });
   });
 
@@ -64,12 +91,47 @@ describe("the version response", () => {
     );
   });
 
-  test("leaves out the code and snippets", () => {
-    const response = versionResponse(version, document);
+  test("answers an empty integrations list when the version has none", () => {
+    const response = versionResponse(
+      { ...version, integrations: [] },
+      { ...document, integrations: [] },
+    );
 
-    expect(response).not.toHaveProperty("code");
-    expect(response).not.toHaveProperty("snippets");
+    expect(response.integrations).toEqual([]);
   });
+
+  test("answers the published code byte for byte, with tabs, odd indentation and trailing whitespace", () => {
+    const code =
+      "import stripe\r\n\n\tdef  charge():  \n   \t  return 1\t\n  \n\n\n";
+
+    expect(versionResponse(version, { ...document, code }).code).toBe(code);
+  });
+
+  test("passes unreadable input type, output type and run mode through as stored", () => {
+    const facts = {
+      ...document.facts,
+      input: null,
+      output: null,
+      runsAs: null,
+    };
+
+    expect(versionResponse(version, { ...document, facts }).facts).toEqual(
+      facts,
+    );
+  });
+
+  test.each([
+    ["Python", "activities.py"],
+    ["TypeScript", "activities.ts"],
+    [".NET", "Activities.cs"],
+  ] as const)(
+    "names the activity file for a %s version %s",
+    (sdk, fileName) => {
+      expect(
+        versionResponse({ ...version, sdk }, document).activityFileName,
+      ).toBe(fileName);
+    },
+  );
 });
 
 describe("the listing response", () => {
