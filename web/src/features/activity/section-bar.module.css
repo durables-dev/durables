@@ -1,0 +1,32 @@
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg);
+}
+
+.links {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 20px;
+  list-style: none;
+  display: flex;
+  gap: 26px;
+  overflow-x: auto;
+}
+
+.link {
+  height: 46px;
+  display: flex;
+  align-items: center;
+  color: var(--fg);
+  font-size: var(--text-small);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.link:hover {
+  color: var(--link);
+}

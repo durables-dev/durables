@@ -1,0 +1,57 @@
+.page {
+  overflow-wrap: anywhere;
+}
+
+.band {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.columns {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+}
+
+.sections {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 52px;
+}
+
+/* The bar is 46px tall and stuck to the top, so a section scrolled to stops just under it. */
+.section {
+  scroll-margin-top: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sidebar {
+  width: 300px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Below about 960px the sidebar moves under the main column. */
+@media (max-width: 960px) {
+  .columns {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sidebar {
+    width: auto;
+    position: static;
+  }
+}
