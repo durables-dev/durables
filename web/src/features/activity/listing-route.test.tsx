@@ -21,7 +21,16 @@ const chargeCard = {
   version: "1.0.0",
   title: "Charge card",
   sdk: "Python",
-  facts: {},
+  facts: {
+    activity: { name: "charge_card", line: 26 },
+    input: "ChargeRequest",
+    output: "ChargeResult",
+    runsAs: "sync",
+    nonRetryableErrors: [],
+    configurationRead: [{ name: "STRIPE_API_KEY", line: 8 }],
+    dependencies: [{ name: "stripe", line: 4 }],
+    heartbeats: [],
+  },
   code: "from temporalio import activity\n",
   activityFileName: "activities.py",
   snippets: [],
@@ -585,4 +594,32 @@ test("the page shows no popularity signal, no Start a workflow and no version pi
       .elements()
       .map((button) => button.getAttribute("aria-label") ?? button.textContent),
   ).toEqual(["Copy address"]);
+});
+
+test("Configure shows the version's detected variables, type names and worker requirements", async () => {
+  publishChargeCard();
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const configure = screen.getByRole("main");
+  const heading = configure.getByRole("heading", {
+    level: 2,
+    name: "Configure",
+  });
+  await expect.element(heading).toBeVisible();
+  expect(heading.element().closest("section")?.id).toBe("configure");
+  await expect
+    .element(
+      configure
+        .getByRole("list", { name: "Environment variables" })
+        .getByRole("listitem"),
+    )
+    .toHaveTextContent("STRIPE_API_KEY");
+  const types = configure.getByRole("list", { name: "Input and output types" });
+  await expect.element(types.getByText("ChargeRequest")).toBeVisible();
+  await expect.element(types.getByText("ChargeResult")).toBeVisible();
+  await expect
+    .element(configure.getByRole("heading", { name: "Worker requirements" }))
+    .toBeVisible();
+  await expect.element(configure.getByText(/thread pool/)).toBeVisible();
 });
