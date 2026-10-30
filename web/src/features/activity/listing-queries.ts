@@ -1,10 +1,16 @@
 import { api } from "@/lib/api-client";
 import { queryOptions } from "@tanstack/react-query";
-import { parseResponse } from "hono/client";
+import { parseResponse, type InferResponseType } from "hono/client";
 import type { ListingAddress } from "./listing-address";
 
 // The page is two queries (web/CONVENTIONS.md, ADR 0006): the version, whose fields never
 // change, and the listing, whose description can. They are never merged into one request.
+
+/** What the version read answers: its address, title, SDK and detected facts. */
+export type VersionResponse = InferResponseType<
+  (typeof api.api.activities)[":handle"][":name"]["versions"][":version"]["$get"],
+  200
+>;
 
 /** One published version: its address, title, SDK and detected facts. */
 export function versionQuery({ handle, name, version }: ListingAddress) {

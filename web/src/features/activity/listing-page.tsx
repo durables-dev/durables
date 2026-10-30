@@ -79,6 +79,7 @@ export function ListingPage({ address }: ListingPageProps) {
             input={version.data.facts.input}
             output={version.data.facts.output}
             runsAs={version.data.facts.runsAs}
+            sdk={version.data.sdk}
           />
         }
       />

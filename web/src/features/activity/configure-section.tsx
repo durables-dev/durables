@@ -1,7 +1,11 @@
 import styles from "./configure-section.module.css";
+import type { VersionResponse } from "./listing-queries";
 
 /** How the activity runs, as detection found it. Null when detection couldn't tell. */
-export type RunsAs = "sync" | "async" | null;
+export type RunsAs = VersionResponse["facts"]["runsAs"];
+
+/** The Temporal SDK the activity is written for. */
+export type Sdk = VersionResponse["sdk"];
 
 export interface ConfigureSectionProps {
   /** The environment variable names detection found in the code. Empty when it found none. */
@@ -11,6 +15,7 @@ export interface ConfigureSectionProps {
   /** The output type's name. Null when it couldn't be read from the code. */
   output: string | null;
   runsAs: RunsAs;
+  sdk: Sdk;
 }
 
 // The Configure section: the environment variable names, the input and output type names,
@@ -20,6 +25,7 @@ export function ConfigureSection({
   input,
   output,
   runsAs,
+  sdk,
 }: ConfigureSectionProps) {
   return (
     <>
@@ -32,7 +38,9 @@ export function ConfigureSection({
           <TypeCard kind="Output" name={output} />
         </ul>
       </div>
-      {runsAs === null ? null : <WorkerRequirements runsAs={runsAs} />}
+      {runsAs === null ? null : (
+        <WorkerRequirements runsAs={runsAs} sdk={sdk} />
+      )}
     </>
   );
 }
@@ -83,18 +91,27 @@ function TypeCard({ kind, name }: TypeCardProps) {
 }
 
 interface WorkerRequirementsProps {
-  runsAs: "sync" | "async";
+  runsAs: Exclude<RunsAs, null>;
+  sdk: Sdk;
 }
 
-function WorkerRequirements({ runsAs }: WorkerRequirementsProps) {
+function WorkerRequirements({ runsAs, sdk }: WorkerRequirementsProps) {
   return (
     <div className={styles["group"]}>
       <h3 className={styles["heading"]}>Worker requirements</h3>
-      <p className={styles["prose"]}>
-        {runsAs === "sync"
-          ? "This is a synchronous activity. Your worker needs a thread pool to run it, which the worker file in Implement already sets up."
-          : "This is an async activity. Your worker needs no special setup to run it."}
-      </p>
+      <p className={styles["prose"]}>{workerRequirementsText(runsAs, sdk)}</p>
     </div>
   );
+}
+
+// TypeScript activities are always detected as async, so only Python and .NET reach the
+// sync branch. The .NET worker file sets up no thread pool, so its sentence names none.
+function workerRequirementsText(runsAs: Exclude<RunsAs, null>, sdk: Sdk) {
+  if (runsAs === "async") {
+    return "This is an async activity. Your worker needs no special setup to run it.";
+  }
+  if (sdk === ".NET") {
+    return "This is a synchronous activity. The .NET SDK runs it for you, so your worker needs no special setup.";
+  }
+  return "This is a synchronous activity. Your worker needs a thread pool to run it, which the worker file in Implement already sets up.";
 }

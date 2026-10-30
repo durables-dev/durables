@@ -11,6 +11,7 @@ const chargeCard: ConfigureSectionProps = {
   input: "ChargeRequest",
   output: "ChargeResult",
   runsAs: "sync",
+  sdk: "Python",
 };
 
 function renderConfigure(props: Partial<ConfigureSectionProps> = {}) {
@@ -140,7 +141,7 @@ test('both types unreadable show two "couldn\'t be read" cards', async () => {
 });
 
 test("a synchronous activity's worker requirements mention the thread pool the worker file sets up", async () => {
-  const screen = await renderConfigure({ runsAs: "sync" });
+  const screen = await renderConfigure({ runsAs: "sync", sdk: "Python" });
 
   await expect
     .element(
@@ -154,6 +155,24 @@ test("a synchronous activity's worker requirements mention the thread pool the w
       ),
     )
     .toBeVisible();
+});
+
+test("a synchronous .NET activity's worker requirements say the SDK runs it, with no thread pool", async () => {
+  const screen = await renderConfigure({ runsAs: "sync", sdk: ".NET" });
+
+  await expect
+    .element(
+      screen.getByRole("heading", { level: 3, name: "Worker requirements" }),
+    )
+    .toBeVisible();
+  await expect
+    .element(
+      screen.getByText(
+        "This is a synchronous activity. The .NET SDK runs it for you, so your worker needs no special setup.",
+      ),
+    )
+    .toBeVisible();
+  await expect.element(screen.getByText(/thread pool/)).not.toBeInTheDocument();
 });
 
 test("an async activity's worker requirements say no special setup is needed", async () => {
