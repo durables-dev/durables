@@ -6,6 +6,7 @@ import {
   type HighlightedToken,
   type Highlighter,
 } from "@/lib/highlighter";
+import { codeLines } from "@/lib/code-lines";
 import styles from "./code-block.module.css";
 
 export const COPY_FAILED_MESSAGE =
@@ -21,6 +22,11 @@ export interface CodeBlockProps {
    * ("Copy install command") and the scrolling code region.
    */
   label: string;
+  /**
+   * A line of text at the top of the block, left of Copy, such as the file name and its
+   * line count. None shows only Copy.
+   */
+  caption?: string | undefined;
   /** Defaults to the app's shared highlighter. Tests pass their own. */
   highlighter?: Highlighter;
 }
@@ -38,10 +44,11 @@ export function CodeBlock({
   code,
   language,
   label,
+  caption,
   highlighter = sharedHighlighter,
 }: CodeBlockProps) {
   const [copy, setCopy] = useState<CopyResult | null>(null);
-  const lines = code.split("\n");
+  const lines = codeLines(code);
   const known = codeLanguage(language);
   const outcome = copy?.code === code ? copy.outcome : undefined;
 
@@ -59,6 +66,9 @@ export function CodeBlock({
   return (
     <div className={styles["block"]}>
       <div className={styles["toolbar"]}>
+        {caption === undefined ? null : (
+          <p className={styles["caption"]}>{caption}</p>
+        )}
         <p role="status" className={styles["status"]}>
           {outcome === "copied" && "Copied"}
           {outcome === "failed" && COPY_FAILED_MESSAGE}

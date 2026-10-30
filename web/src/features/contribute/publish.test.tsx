@@ -362,7 +362,7 @@ describe("the Published screen", () => {
             name: "post-slack-message",
             version: "1.0.0",
             title: "Post slack message",
-            sdk: "python",
+            sdk: "Python",
             facts: {
               activity: { name: "post_slack_message", line: 1 },
               input: null,
@@ -373,6 +373,11 @@ describe("the Published screen", () => {
               dependencies: [],
               heartbeats: [],
             },
+            code: pastedCode,
+            activityFileName: "activities.py",
+            snippets: [],
+            integrations: [],
+            publishedAt: new Date().toISOString(),
           }),
       ),
       http.get("/api/activities/ddieruf/post-slack-message", () =>

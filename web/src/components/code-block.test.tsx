@@ -205,3 +205,45 @@ test("very long lines scroll sideways, and the gutter stays in view", async () =
   expect(gutter?.getBoundingClientRect().left).toBe(before);
   expect(block.code()).toBe(long);
 });
+
+test("a caption shows at the top of the block, left of Copy", async () => {
+  const { screen } = await renderBlock({ caption: "activities.py · 7 lines" });
+
+  const caption = screen.getByText("activities.py · 7 lines");
+  await expect.element(caption).toBeVisible();
+  const captionBox = caption.element().getBoundingClientRect();
+  const copyBox = screen
+    .getByRole("button", { name: "Copy activity source" })
+    .element()
+    .getBoundingClientRect();
+  expect(captionBox.right).toBeLessThanOrEqual(copyBox.left);
+  expect(captionBox.bottom).toBeLessThanOrEqual(
+    screen
+      .getByRole("region", { name: "activity source" })
+      .element()
+      .getBoundingClientRect().top,
+  );
+});
+
+test("the caption is not part of the code or what Copy copies", async () => {
+  const writeText = vi
+    .spyOn(navigator.clipboard, "writeText")
+    .mockResolvedValue(undefined);
+  const block = await renderBlock({ caption: "activities.py · 7 lines" });
+
+  await block.screen
+    .getByRole("button", { name: "Copy activity source" })
+    .click();
+
+  expect(block.code()).toBe(PYTHON);
+  expect(writeText).toHaveBeenCalledWith(PYTHON);
+});
+
+test("with no caption, the toolbar holds only the status and Copy", async () => {
+  const { screen } = await renderBlock();
+
+  const copy = screen.getByRole("button", { name: "Copy activity source" });
+  await expect.element(copy).toBeVisible();
+  const toolbar = copy.element().parentElement;
+  expect(toolbar?.children).toHaveLength(2);
+});

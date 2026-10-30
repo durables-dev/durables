@@ -8,6 +8,7 @@ import { ListingLayout } from "./listing-layout";
 import styles from "./listing-page.module.css";
 import { listingQuery, versionQuery } from "./listing-queries";
 import { ListingTop } from "./listing-top";
+import { SourceSection } from "./source-section";
 
 export interface ListingPageProps {
   address: ListingAddress;
@@ -79,6 +80,13 @@ export function ListingPage({ address }: ListingPageProps) {
             input={version.data.facts.input}
             output={version.data.facts.output}
             runsAs={version.data.facts.runsAs}
+            sdk={version.data.sdk}
+          />
+        }
+        source={
+          <SourceSection
+            code={version.data.code}
+            activityFileName={version.data.activityFileName}
             sdk={version.data.sdk}
           />
         }
