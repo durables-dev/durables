@@ -1,4 +1,3 @@
-using Temporalio.Common;
 using Temporalio.Workflows;
 
 // Activities stands in for the class that declares {{activity}}. Change it to your
@@ -15,9 +14,8 @@ public class {{workflowClass}}
             (Activities activities) => activities.{{activity}}(input),
             new ActivityOptions
             {
+                // Temporal requires a start-to-close timeout. Set it for your activity.
                 StartToCloseTimeout = TimeSpan.FromSeconds(30),
-                {{heartbeatTimeout}}
-                RetryPolicy = new RetryPolicy { MaximumAttempts = 5 },
             });
     }
 }
