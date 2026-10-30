@@ -1,5 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { generateSnippets } from "../snippets/snippets";
 import { seedAccount, seedDescription } from "../storage/seed";
 import {
   Storage,
@@ -38,23 +39,48 @@ const newAddress = async (): Promise<Address> => ({
   version: "1.0.0",
 });
 
-/** Publishes the way publishing does: the document first, then the rows (ADR 0005). */
-const publish = async (address: Address): Promise<void> => {
-  await storage().writeVersionDocument(address, {
-    code: "import stripe\n",
+const code = "import stripe\n";
+
+const snippets: VersionDocument["snippets"] = [
+  { label: "Install", code: "pip install temporalio\n" },
+  { label: "workflows.py", code: "from temporalio import workflow\n" },
+];
+
+/**
+ * Publishes the way publishing does: the document first, then the rows (ADR 0005). Any
+ * document field can be replaced; the row takes the SDK and integrations from the document.
+ */
+const publish = async (
+  address: Address,
+  document: Partial<VersionDocument> = {},
+): Promise<VersionDocument> => {
+  const stored: VersionDocument = {
+    code,
     facts,
     integrations: ["Stripe"],
-    snippets: [],
+    snippets,
     title: "Charge card",
     description,
-  });
+    ...document,
+  };
+  await storage().writeVersionDocument(address, stored);
   await storage().createListing({
     ...address,
-    title: "Charge card",
+    title: stored.title,
     description,
-    sdk: "Python",
-    integrations: ["Stripe"],
+    sdk: stored.facts.sdk,
+    integrations: stored.integrations,
   });
+  return stored;
+};
+
+/** The published date the version row was stored with, as the version response answers it. */
+const storedPublishedAt = async (address: Address): Promise<string> => {
+  const version = await storage().findVersion(address);
+  if (version === undefined) {
+    throw new Error("The version was not published.");
+  }
+  return version.publishedAt.toISOString();
 };
 
 const versionPath = ({ handle, name, version }: Address) =>
@@ -80,7 +106,7 @@ afterEach(() => {
 });
 
 describe("reading a published activity", () => {
-  test("answers the version's address, title, SDK and detected facts", async () => {
+  test("answers the version's address, title, SDK, facts, code, Implement snippets, integrations and published date", async () => {
     const address = await newAddress();
     await publish(address);
 
@@ -95,8 +121,128 @@ describe("reading a published activity", () => {
       title: "Charge card",
       sdk: "Python",
       facts,
+      code,
+      activityFileName: "activities.py",
+      snippets,
+      integrations: ["Stripe"],
+      publishedAt: await storedPublishedAt(address),
     });
   });
+
+  test("answers a published date that is an ISO 8601 timestamp", async () => {
+    const address = await newAddress();
+    await publish(address);
+
+    const body = await (
+      await get(versionPath(address))
+    ).json<VersionResponse>();
+
+    expect(new Date(body.publishedAt).toISOString()).toBe(body.publishedAt);
+  });
+
+  test("answers an empty integrations list when the version has none", async () => {
+    const address = await newAddress();
+    await publish(address, { integrations: [] });
+
+    const body = await (
+      await get(versionPath(address))
+    ).json<VersionResponse>();
+
+    expect(body.integrations).toEqual([]);
+  });
+
+  test("answers the published code byte for byte, with tabs, odd indentation and trailing whitespace", async () => {
+    const address = await newAddress();
+    const unusual =
+      "import stripe\r\n\n\tdef  charge(request):  \n   \t  return stripe.Charge()\t\n  \n\n\n";
+    await publish(address, { code: unusual });
+
+    const body = await (
+      await get(versionPath(address))
+    ).json<VersionResponse>();
+
+    expect(body.code).toBe(unusual);
+  });
+
+  test("answers unreadable input type, output type and run mode as stored", async () => {
+    const address = await newAddress();
+    const unreadable = { ...facts, input: null, output: null, runsAs: null };
+    await publish(address, { facts: unreadable });
+
+    const body = await (
+      await get(versionPath(address))
+    ).json<VersionResponse>();
+
+    expect(body.facts).toEqual(unreadable);
+    expect(body.facts).toMatchObject({
+      input: null,
+      output: null,
+      runsAs: null,
+    });
+  });
+
+  test("answers every detected fact: environment variables, types, how it runs and dependencies", async () => {
+    const address = await newAddress();
+    await publish(address);
+
+    const body = await (
+      await get(versionPath(address))
+    ).json<VersionResponse>();
+
+    expect(body.facts).toMatchObject({
+      configurationRead: [{ name: "STRIPE_API_KEY", line: 9 }],
+      input: "ChargeRequest",
+      output: "ChargeResult",
+      runsAs: "async",
+      dependencies: [{ name: "stripe", line: 2 }],
+    });
+  });
+
+  test.each([
+    {
+      sdk: "Python",
+      activityFileName: "activities.py",
+      files: ["workflows.py", "worker.py", "start.py"],
+    },
+    {
+      sdk: "TypeScript",
+      activityFileName: "activities.ts",
+      files: ["workflows.ts", "worker.ts", "start.ts"],
+    },
+    {
+      sdk: ".NET",
+      activityFileName: "Activities.cs",
+      files: ["ChargeCardWorkflow.cs", "Program.cs", "Starter.cs"],
+    },
+  ] as const)(
+    "a $sdk version answers its own Implement file set",
+    async ({ sdk, activityFileName, files }) => {
+      const address = await newAddress();
+      const sdkFacts = {
+        ...facts,
+        sdk,
+        activity: {
+          name: sdk === ".NET" ? "ChargeCard" : "chargeCard",
+          line: 7,
+        },
+      };
+      const generated = generateSnippets(sdkFacts, address);
+      await publish(address, { facts: sdkFacts, snippets: generated });
+
+      const body = await (
+        await get(versionPath(address))
+      ).json<VersionResponse>();
+
+      expect(body.sdk).toBe(sdk);
+      expect(body.activityFileName).toBe(activityFileName);
+      expect(body.snippets).toEqual(generated);
+      expect(body.snippets.map(({ label }) => label)).toEqual([
+        "Install",
+        ...files,
+        "Run",
+      ]);
+    },
+  );
 
   test("answers the listing's description", async () => {
     const address = await newAddress();
@@ -293,6 +439,11 @@ describe("a description changed after publishing", () => {
       title: "Charge card",
       sdk: "Python",
       facts,
+      code,
+      activityFileName: "activities.py",
+      snippets,
+      integrations: ["Stripe"],
+      publishedAt: await storedPublishedAt(address),
     });
   });
 });

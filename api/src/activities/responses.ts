@@ -1,5 +1,7 @@
 import type { Facts } from "../checks/facts";
+import { activityFileName } from "../snippets/labels";
 import type {
+  Snippet,
   Address,
   ListingDescription,
   Sdk,
@@ -19,6 +21,19 @@ export interface VersionResponse extends Address {
   sdk: Sdk;
   /** The facts the publish-time checks detected. */
   facts: Facts;
+  /** The code exactly as published, byte for byte. Never reindented. */
+  code: string;
+  /** The file the published code is saved as, which names the Implement activity file. */
+  activityFileName: string;
+  /**
+   * The Implement snippets generated at publish, in the order the Activity page shows them:
+   * the install command, the workflow, worker and starter files, then the run commands.
+   */
+  snippets: readonly Snippet[];
+  /** The integrations implied by the code's imports. Empty when there are none. */
+  integrations: readonly string[];
+  /** When the version was published, as an ISO 8601 timestamp. */
+  publishedAt: string;
 }
 
 /** A listing, as `GET /api/activities/:handle/:name` answers it. */
@@ -61,8 +76,9 @@ export const publishResponse = (
 });
 
 /**
- * The version response, from the version's row and its document. The document's description
- * is the one it was published with and is left out, since the listing's can change.
+ * The version response, from the version's row and its document. Every field is fixed at
+ * publish. The document's description is the one it was published with and is left out,
+ * since the listing's can change.
  */
 export const versionResponse = (
   version: Version,
@@ -75,6 +91,11 @@ export const versionResponse = (
   title: version.title,
   sdk: version.sdk,
   facts: document.facts,
+  code: document.code,
+  activityFileName: activityFileName[version.sdk],
+  snippets: document.snippets,
+  integrations: document.integrations,
+  publishedAt: version.publishedAt.toISOString(),
 });
 
 /** The listing response, from the listing's current description. */

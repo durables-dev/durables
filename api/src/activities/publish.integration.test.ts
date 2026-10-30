@@ -214,6 +214,9 @@ describe("POST /api/activities", () => {
 
       const version = await get(location);
       expect(version.status).toBe(200);
+      const address = { handle, name: body.name, version: "1.0.0" };
+      const facts = checkCode(postSlackMessage, detectors);
+      const row = await storage().findVersion(address);
       expect(await version.json<VersionResponse>()).toEqual({
         address: `${handle}/${body.name}@1.0.0`,
         handle,
@@ -221,7 +224,12 @@ describe("POST /api/activities", () => {
         version: "1.0.0",
         title: "Post slack message",
         sdk: "Python",
-        facts: checkCode(postSlackMessage, detectors),
+        facts,
+        code: postSlackMessage,
+        activityFileName: "activities.py",
+        snippets: generateSnippets(facts, address),
+        integrations: integrationsFor(facts.dependencies),
+        publishedAt: row?.publishedAt.toISOString(),
       });
       const listing = await get(`/api/activities/${handle}/${body.name}`);
       expect(listing.status).toBe(200);
