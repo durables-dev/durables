@@ -89,10 +89,6 @@ export const pythonSnippets = (facts: Facts, address: Address): Snippet[] => {
       inputNames.length === 0
         ? ""
         : `from activities import ${sortedNames(inputNames).join(", ")}`,
-    heartbeatTimeout:
-      facts.heartbeats.length === 0
-        ? ""
-        : "heartbeat_timeout=timedelta(seconds=10),",
     executorImport: usesThreadPool
       ? "from concurrent.futures import ThreadPoolExecutor"
       : "",

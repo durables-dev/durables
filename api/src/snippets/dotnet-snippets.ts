@@ -45,10 +45,6 @@ export const dotnetSnippets = (facts: Facts, address: Address): Snippet[] => {
     returnKeyword: hasOutput ? "return " : "",
     resultAssignment: hasOutput ? "var result = " : "",
     printResult: hasOutput ? "Console.WriteLine(result);" : "",
-    heartbeatTimeout:
-      facts.heartbeats.length === 0
-        ? ""
-        : "HeartbeatTimeout = TimeSpan.FromSeconds(10),",
     taskQueue: csharpString(address.name),
     workflowId: csharpIdWithGuid(address.name),
     project: shellWord(address.name),
