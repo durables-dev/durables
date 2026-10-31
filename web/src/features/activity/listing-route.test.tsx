@@ -666,7 +666,7 @@ test("Source shows the published code, headed with the activity file name and li
   expect(section?.id).toBe("source");
   const source = page.elementLocator(section ?? document.body);
   await expect
-    .element(source.getByText("activities.py · 2 lines"))
+    .element(source.getByText("activities.py · 1 line"))
     .toBeVisible();
   const code = source.getByRole("region", { name: "published code" });
   expect(code.element().querySelector("code")?.textContent).toBe(

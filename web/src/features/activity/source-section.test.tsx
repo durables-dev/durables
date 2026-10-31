@@ -129,14 +129,14 @@ test("highlighted code is still exactly the published code", async () => {
   expect(block.code()).toBe(CHARGE_CARD);
 });
 
-test("tabs and odd indentation are shown unchanged, and the count matches the line numbers", async () => {
+test("tabs and odd indentation are shown unchanged, and a final line break is not counted as a line", async () => {
   const block = await renderSource({ code: ODD_INDENTATION });
 
   await expect.poll(block.coloured).toBeGreaterThan(0);
   expect(block.code()).toBe(ODD_INDENTATION);
   expect(block.numbers()).toHaveLength(9);
   await expect
-    .element(block.screen.getByText("activities.py · 9 lines"))
+    .element(block.screen.getByText("activities.py · 8 lines"))
     .toBeVisible();
 });
 

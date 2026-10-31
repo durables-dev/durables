@@ -1,6 +1,6 @@
 import { CodeBlock } from "@/components/code-block";
+import { sdkLanguage } from "@/lib/sdk-language";
 import type { VersionResponse } from "./listing-queries";
-import { sdkLanguage } from "./sdk-language";
 import { sourceCaption } from "./source-caption";
 import styles from "./source-section.module.css";
 

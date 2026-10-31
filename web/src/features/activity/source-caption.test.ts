@@ -15,8 +15,20 @@ test('a one-line file says "1 line"', () => {
   );
 });
 
-test("the count matches the line numbers, so a trailing line break counts one more", () => {
+test("a line break at the end of the file does not add a line", () => {
   expect(sourceCaption("activities.py", "a\nb\n")).toBe(
-    "activities.py · 3 lines",
+    "activities.py · 2 lines",
+  );
+});
+
+test('a one-line file ending in a line break says "1 line"', () => {
+  expect(sourceCaption("activities.py", "print('hi')\n")).toBe(
+    "activities.py · 1 line",
+  );
+});
+
+test("a CRLF at the end of the file does not add a line", () => {
+  expect(sourceCaption("activities.py", "a\r\nb\r\n")).toBe(
+    "activities.py · 2 lines",
   );
 });
