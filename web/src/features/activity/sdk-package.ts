@@ -1,4 +1,4 @@
-import type { Sdk } from "./configure-section";
+import type { Sdk } from "@/lib/sdk-language";
 
 /**
  * The package each Temporal SDK is installed as, shown beside the SDK in the About card.

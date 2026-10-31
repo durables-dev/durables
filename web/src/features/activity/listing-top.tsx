@@ -1,6 +1,7 @@
 import { AddressCopy } from "./address-copy";
 import styles from "./listing-top.module.css";
 import { publishedAgo } from "./published-ago";
+import { PublisherInitial } from "./publisher-initial";
 import { scrollToSection } from "./scroll-to-section";
 import { sectionHref } from "./listing-sections";
 
@@ -45,9 +46,7 @@ export function ListingTop({
           )}
           <p className={styles["publisher"]}>
             <span className={styles["handle"]}>
-              <span className={styles["initial"]} aria-hidden="true">
-                {handle.charAt(0).toUpperCase()}
-              </span>
+              <PublisherInitial handle={handle} size="small" />
               <span>{handle}</span>
             </span>
             <span>

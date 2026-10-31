@@ -54,20 +54,6 @@
   min-width: 0;
 }
 
-.initial {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: var(--radius-pill);
-  background: var(--publisher-badge);
-  color: var(--on-publisher-badge);
-  font-size: var(--text-label);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .handle {
   font-weight: 600;
   overflow-wrap: anywhere;
