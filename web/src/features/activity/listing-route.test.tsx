@@ -102,6 +102,20 @@ function countActivityReads() {
   return reads;
 }
 
+/**
+ * The address copy's status region, in the top of the page. The code blocks lower down
+ * each have their own status region.
+ */
+async function addressStatus(
+  screen: Awaited<ReturnType<typeof openAt>>["screen"],
+) {
+  const title = screen.getByRole("heading", { level: 1 });
+  await expect.element(title).toBeVisible();
+  const top = title.element().closest("header");
+  if (top === null) throw new Error("The title is not in the top of the page.");
+  return page.elementLocator(top).getByRole("status");
+}
+
 // The real route tree, opened at an address as if typed into the browser.
 async function openAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
@@ -466,7 +480,7 @@ test('copying the address puts it on the clipboard and shows "Copied" beside it'
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
   const copy = screen.getByRole("button", { name: "Copy address" });
-  const status = screen.getByRole("main").getByRole("status");
+  const status = await addressStatus(screen);
   await expect.element(status).toHaveTextContent("");
 
   await copy.click();
@@ -491,7 +505,7 @@ test('a copy the clipboard refuses does not show "Copied" and says it failed', a
 
   await screen.getByRole("button", { name: "Copy address" }).click();
 
-  const status = screen.getByRole("main").getByRole("status");
+  const status = await addressStatus(screen);
   await expect.element(status).toHaveTextContent("Couldn't copy the address.");
   await expect.element(status).not.toHaveTextContent("Copied");
 });
@@ -606,7 +620,7 @@ test("the page shows no popularity signal, no Start a workflow and no version pi
       .getByRole("button")
       .elements()
       .map((button) => button.getAttribute("aria-label") ?? button.textContent),
-  ).toEqual(["Copy address"]);
+  ).toEqual(["Copy address", "Copy published code"]);
 });
 
 test("Configure shows the version's detected variables, type names and worker requirements", async () => {
@@ -635,6 +649,34 @@ test("Configure shows the version's detected variables, type names and worker re
     .element(configure.getByRole("heading", { name: "Worker requirements" }))
     .toBeVisible();
   await expect.element(configure.getByText(/thread pool/)).toBeVisible();
+});
+
+test("Source shows the published code, headed with the activity file name and line count", async () => {
+  const writeText = vi
+    .spyOn(navigator.clipboard, "writeText")
+    .mockResolvedValue(undefined);
+  publishChargeCard();
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const main = screen.getByRole("main");
+  const heading = main.getByRole("heading", { level: 2, name: "Source" });
+  await expect.element(heading).toBeVisible();
+  const section = heading.element().closest("section");
+  expect(section?.id).toBe("source");
+  const source = page.elementLocator(section ?? document.body);
+  await expect
+    .element(source.getByText("activities.py · 1 line"))
+    .toBeVisible();
+  const code = source.getByRole("region", { name: "published code" });
+  expect(code.element().querySelector("code")?.textContent).toBe(
+    chargeCard.code,
+  );
+
+  await source.getByRole("button", { name: "Copy published code" }).click();
+
+  await expect.element(source.getByRole("status")).toHaveTextContent("Copied");
+  expect(writeText).toHaveBeenCalledWith(chargeCard.code);
 });
 
 test("the sidebar shows the version's About and Publisher cards and the no-review note", async () => {

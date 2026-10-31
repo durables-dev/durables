@@ -373,7 +373,7 @@ describe("the Published screen", () => {
               dependencies: [],
               heartbeats: [],
             },
-            code: "from temporalio import activity\n",
+            code: pastedCode,
             activityFileName: "activities.py",
             snippets: [],
             integrations: [],
