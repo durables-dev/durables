@@ -1,7 +1,8 @@
 import { useId, type ReactNode } from "react";
-import type { Sdk } from "./configure-section";
+import type { Sdk } from "@/lib/sdk-language";
 import styles from "./listing-sidebar.module.css";
 import { publishedAgo } from "./published-ago";
+import { PublisherInitial } from "./publisher-initial";
 import { sdkPackage } from "./sdk-package";
 
 export interface ListingSidebarProps {
@@ -33,23 +34,25 @@ export function ListingSidebar({
           About
         </h2>
         <dl className={styles["rows"]}>
-          <Row term="SDK">
+          <AboutRow term="SDK">
             {sdk}, <span className={styles["mono"]}>{sdkPackage[sdk]}</span>
-          </Row>
+          </AboutRow>
           {integrations.length === 0 ? null : (
-            <Row term="Integrates with">{integrations.join(", ")}</Row>
+            <AboutRow term="Integrates with">
+              {integrations.join(", ")}
+            </AboutRow>
           )}
-          <Row term="Dependencies">
+          <AboutRow term="Dependencies">
             {dependencies.length === 0 ? (
               "None beyond the SDK"
             ) : (
               <span className={styles["mono"]}>{dependencies.join(", ")}</span>
             )}
-          </Row>
-          <Row term="Published">
+          </AboutRow>
+          <AboutRow term="Published">
             <time dateTime={publishedAt}>{publishedAgo(publishedAt)}</time>
-          </Row>
-          <Row term="License">MIT-0</Row>
+          </AboutRow>
+          <AboutRow term="License">MIT-0</AboutRow>
         </dl>
       </section>
       <section className={styles["card"]} aria-labelledby={publisherId}>
@@ -57,9 +60,7 @@ export function ListingSidebar({
           Publisher
         </h2>
         <p className={styles["publisher"]}>
-          <span className={styles["initial"]} aria-hidden="true">
-            {handle.charAt(0).toUpperCase()}
-          </span>
+          <PublisherInitial handle={handle} size="large" />
           <span className={styles["handle"]}>{handle}</span>
         </p>
       </section>
@@ -71,12 +72,12 @@ export function ListingSidebar({
   );
 }
 
-interface RowProps {
+interface AboutRowProps {
   term: string;
   children: ReactNode;
 }
 
-function Row({ term, children }: RowProps) {
+function AboutRow({ term, children }: AboutRowProps) {
   return (
     <div className={styles["row"]}>
       <dt className={styles["term"]}>{term}</dt>
