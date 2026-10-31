@@ -7,6 +7,7 @@ import type { ListingAddress } from "./listing-address";
 import { ListingLayout } from "./listing-layout";
 import styles from "./listing-page.module.css";
 import { listingQuery, versionQuery } from "./listing-queries";
+import { ListingSidebar } from "./listing-sidebar";
 import { ListingTop } from "./listing-top";
 import { SourceSection } from "./source-section";
 
@@ -88,6 +89,17 @@ export function ListingPage({ address }: ListingPageProps) {
             code={version.data.code}
             activityFileName={version.data.activityFileName}
             sdk={version.data.sdk}
+          />
+        }
+        sidebar={
+          <ListingSidebar
+            sdk={version.data.sdk}
+            integrations={version.data.integrations}
+            dependencies={version.data.facts.dependencies.map(
+              ({ name }) => name,
+            )}
+            publishedAt={version.data.publishedAt}
+            handle={version.data.handle}
           />
         }
       />

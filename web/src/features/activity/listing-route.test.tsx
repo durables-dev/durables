@@ -125,6 +125,16 @@ async function openAt(path: string) {
   return { screen, router };
 }
 
+// The top of the page, once the title shows. The sidebar repeats the handle, the published
+// time and MIT-0, so assertions about the top look only inside it.
+async function topOfPage(screen: Awaited<ReturnType<typeof openAt>>["screen"]) {
+  const title = screen.getByRole("heading", { level: 1 });
+  await expect.element(title).toBeVisible();
+  const header = title.element().closest("header");
+  if (header === null) throw new Error("The title is not inside a header.");
+  return page.elementLocator(header);
+}
+
 test("a published listing shows its title, address and description", async () => {
   publishChargeCard();
 
@@ -389,13 +399,12 @@ test("the top of the page shows the icon, title, SDK, address, description, publ
     .element(main.getByRole("button", { name: "Copy address" }))
     .toBeVisible();
   await expect.element(main.getByText(chargeCardDescription)).toBeVisible();
+  const top = await topOfPage(screen);
+  await expect.element(top.getByText("ddieruf", { exact: true })).toBeVisible();
   await expect
-    .element(main.getByText("ddieruf", { exact: true }))
+    .element(top.getByText("Published 2 days ago", { exact: true }))
     .toBeVisible();
-  await expect
-    .element(main.getByText("Published 2 days ago", { exact: true }))
-    .toBeVisible();
-  await expect.element(main.getByText("MIT-0", { exact: true })).toBeVisible();
+  await expect.element(top.getByText("MIT-0", { exact: true })).toBeVisible();
 
   // The square icon sits to the left of the title.
   const icon = title.element().closest("header")?.querySelector("svg");
@@ -412,7 +421,8 @@ test("the publisher line shows the initial in a circle and the handle as plain t
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
-  const handle = screen.getByRole("main").getByText("ddieruf", { exact: true });
+  const top = await topOfPage(screen);
+  const handle = top.getByText("ddieruf", { exact: true });
   await expect.element(handle).toBeVisible();
   expect(handle.element().closest("a")).toBeNull();
   const initial = handle.element().previousElementSibling;
@@ -431,7 +441,8 @@ test("the published time is the version's own timestamp", async () => {
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
-  const time = screen.getByText("2 days ago", { exact: true });
+  const top = await topOfPage(screen);
+  const time = top.getByText("2 days ago", { exact: true });
   await expect.element(time).toBeVisible();
   expect(time.element().getAttribute("datetime")).toBe(chargeCard.publishedAt);
 });
@@ -575,7 +586,9 @@ test("below about 960px the sidebar moves under the main column and the top stac
   );
   expect(sidebarBox?.left).toBe(sectionsBox?.left);
 
-  const publisher = screen.getByText("MIT-0", { exact: true });
+  const publisher = (await topOfPage(screen)).getByText("MIT-0", {
+    exact: true,
+  });
   const quickstart = screen.getByRole("link", { name: "Quickstart" });
   expect(
     quickstart.element().getBoundingClientRect().top,
@@ -664,4 +677,49 @@ test("Source shows the published code, headed with the activity file name and li
 
   await expect.element(source.getByRole("status")).toHaveTextContent("Copied");
   expect(writeText).toHaveBeenCalledWith(chargeCard.code);
+});
+
+test("the sidebar shows the version's About and Publisher cards and the no-review note", async () => {
+  publishChargeCard();
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({ ...chargeCard, integrations: ["Stripe"] }),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const sidebar = screen.getByRole("complementary");
+  const about = sidebar.getByRole("region", { name: "About" });
+  await expect.element(about).toBeVisible();
+  expect(
+    [...about.element().querySelectorAll("dt")].map((term) => [
+      term.textContent,
+      term.nextElementSibling?.textContent,
+    ]),
+  ).toEqual([
+    ["SDK", "Python, temporalio"],
+    ["Integrates with", "Stripe"],
+    ["Dependencies", "stripe"],
+    ["Published", "2 days ago"],
+    ["License", "MIT-0"],
+  ]);
+  const publisher = sidebar.getByRole("region", { name: "Publisher" });
+  await expect
+    .element(publisher.getByText("ddieruf", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(
+      sidebar.getByText(
+        "Durables doesn't review published code. You are responsible for what you run.",
+      ),
+    )
+    .toBeVisible();
+  await expect.element(sidebar.getByRole("link")).not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("main").getByText(/report this activity/i))
+    .not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("main").getByText(/provenance/i))
+    .not.toBeInTheDocument();
 });
