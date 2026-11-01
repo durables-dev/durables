@@ -1,4 +1,3 @@
-import type { CodeLanguage } from "@/lib/highlighter";
 import type { VersionResponse } from "./listing-queries";
 
 /** What a file in Implement is for. The activity file is the published code. */
@@ -16,10 +15,10 @@ export interface ImplementFile {
 }
 
 /** What Implement shows: the install command, the four files and the run commands. */
-export interface Implement {
-  install: string | undefined;
+export interface ImplementSteps {
+  installCommand: string | undefined;
   files: ImplementFile[];
-  run: string | undefined;
+  runCommands: string | undefined;
 }
 
 export type ImplementVersion = Pick<
@@ -27,16 +26,7 @@ export type ImplementVersion = Pick<
   "address" | "code" | "activityFileName" | "snippets"
 >;
 
-const languages: Record<VersionResponse["sdk"], CodeLanguage> = {
-  Python: "python",
-  TypeScript: "typescript",
-  ".NET": "csharp",
-};
-
-/** The language the activity and generated files are highlighted in. */
-export function sdkLanguage(sdk: VersionResponse["sdk"]): CodeLanguage {
-  return languages[sdk];
-}
+type Snippet = VersionResponse["snippets"][number];
 
 /**
  * Splits a version into what Implement shows. The API sends the snippets in the order the page
@@ -44,30 +34,43 @@ export function sdkLanguage(sdk: VersionResponse["sdk"]): CodeLanguage {
  * commands. The activity file is the published code, under the activity file name, and comes
  * first. Nothing is reindented or rewritten.
  */
-export function implementFiles({
+export function implementSteps({
   address,
   code,
   activityFileName,
   snippets,
-}: ImplementVersion): Implement {
-  const [install, workflow, worker, starter, run] = snippets;
+}: ImplementVersion): ImplementSteps {
+  const [installCommand, workflow, worker, starter, runCommands] = snippets;
   const activity: ImplementFile = {
     role: "activity",
     name: activityFileName,
     code,
     description: `The activity itself, exactly as published in ${address}.`,
   };
-  const generated: [ImplementFileRole, string, typeof workflow][] = [
-    ["workflow", "A minimal workflow that calls the activity.", workflow],
-    [
-      "worker",
-      "Runs a worker that registers the workflow and the activity.",
-      worker,
-    ],
-    ["starter", "Starts one run of the workflow.", starter],
+  const generated: {
+    role: ImplementFileRole;
+    description: string;
+    snippet: Snippet | undefined;
+  }[] = [
+    {
+      role: "workflow",
+      description: "A minimal workflow that calls the activity.",
+      snippet: workflow,
+    },
+    {
+      role: "worker",
+      description:
+        "Runs a worker that registers the workflow and the activity.",
+      snippet: worker,
+    },
+    {
+      role: "starter",
+      description: "Starts one run of the workflow.",
+      snippet: starter,
+    },
   ];
   const files = [activity];
-  for (const [role, description, snippet] of generated) {
+  for (const { role, description, snippet } of generated) {
     if (snippet !== undefined) {
       files.push({
         role,
@@ -77,5 +80,9 @@ export function implementFiles({
       });
     }
   }
-  return { install: install?.code, files, run: run?.code };
+  return {
+    installCommand: installCommand?.code,
+    files,
+    runCommands: runCommands?.code,
+  };
 }

@@ -1,4 +1,4 @@
-import type { ImplementVersion } from "./implement-files";
+import type { ImplementVersion } from "./implement-steps";
 import type { VersionResponse } from "./listing-queries";
 
 // Versions as the API answers them, one per SDK, for the Implement tests. The snippets follow

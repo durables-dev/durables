@@ -1,11 +1,12 @@
 import { CodeBlock } from "@/components/code-block";
+import type { CodeLanguage } from "@/lib/highlighter";
+import { sdkLanguage } from "@/lib/sdk-language";
 import { useId, useState, type KeyboardEvent } from "react";
 import {
-  implementFiles,
-  sdkLanguage,
+  implementSteps,
   type ImplementFile,
   type ImplementVersion,
-} from "./implement-files";
+} from "./implement-steps";
 import styles from "./implement-section.module.css";
 import type { VersionResponse } from "./listing-queries";
 
@@ -18,7 +19,7 @@ export interface ImplementSectionProps {
 // The Implement section: install the dependencies, add the four files, then run them. Every
 // block is the shared code block, so each has line numbers and Copy, and none is reindented.
 export function ImplementSection({ version, sdk }: ImplementSectionProps) {
-  const { install, files, run } = implementFiles(version);
+  const { installCommand, files, runCommands } = implementSteps(version);
   const language = sdkLanguage(sdk);
 
   return (
@@ -26,8 +27,8 @@ export function ImplementSection({ version, sdk }: ImplementSectionProps) {
       <h2 className={styles["title"]}>Implement</h2>
       <div className={styles["step"]}>
         <h3 className={styles["heading"]}>1. Install the dependencies</h3>
-        {install === undefined ? null : (
-          <CodeBlock code={install} label="install command" />
+        {installCommand === undefined ? null : (
+          <CodeBlock code={installCommand} label="install command" />
         )}
       </div>
       <div className={styles["step"]}>
@@ -38,8 +39,8 @@ export function ImplementSection({ version, sdk }: ImplementSectionProps) {
       </div>
       <div className={styles["step"]}>
         <h3 className={styles["heading"]}>3. Run it</h3>
-        {run === undefined ? null : (
-          <CodeBlock code={run} label="run commands" />
+        {runCommands === undefined ? null : (
+          <CodeBlock code={runCommands} label="run commands" />
         )}
       </div>
     </>
@@ -48,7 +49,7 @@ export function ImplementSection({ version, sdk }: ImplementSectionProps) {
 
 interface FileTabsProps {
   files: ImplementFile[];
-  language: string;
+  language: CodeLanguage;
 }
 
 // The files as tabs, the activity file first and selected. Arrow keys, Home and End move
@@ -91,7 +92,7 @@ function FileTabs({ files, language }: FileTabsProps) {
           const isSelected = file === selected;
           return (
             <button
-              key={file.role}
+              key={file.name}
               id={tabId(index)}
               type="button"
               role="tab"
