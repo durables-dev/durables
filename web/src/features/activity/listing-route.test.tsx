@@ -7,6 +7,7 @@ import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
+import { python } from "./test-versions";
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
 const listingPath = "/api/activities/:handle/:name";
@@ -31,9 +32,9 @@ const chargeCard = {
     dependencies: [{ name: "stripe", line: 4 }],
     heartbeats: [],
   },
-  code: "from temporalio import activity\n",
+  code: python.code,
   activityFileName: "activities.py",
-  snippets: [],
+  snippets: python.snippets,
   integrations: [],
   publishedAt: twoDaysAgo.toISOString(),
 };
@@ -620,7 +621,13 @@ test("the page shows no popularity signal, no Start a workflow and no version pi
       .getByRole("button")
       .elements()
       .map((button) => button.getAttribute("aria-label") ?? button.textContent),
-  ).toEqual(["Copy address", "Copy published code"]);
+  ).toEqual([
+    "Copy address",
+    "Copy install command",
+    "Copy activities.py",
+    "Copy run commands",
+    "Copy published code",
+  ]);
 });
 
 test("Configure shows the version's detected variables, type names and worker requirements", async () => {
@@ -651,6 +658,38 @@ test("Configure shows the version's detected variables, type names and worker re
   await expect.element(configure.getByText(/thread pool/)).toBeVisible();
 });
 
+test("Implement fills its anchor with the install command, the four file tabs and the run commands", async () => {
+  publishChargeCard();
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const main = screen.getByRole("main");
+  const heading = main.getByRole("heading", { level: 2, name: "Implement" });
+  await expect.element(heading).toBeVisible();
+  expect(heading.element().closest("section")?.id).toBe("implement");
+  await expect
+    .element(main.getByRole("region", { name: "install command" }))
+    .toHaveTextContent("pip install temporalio");
+  expect(
+    main
+      .getByRole("tab")
+      .elements()
+      .map((tab) => tab.textContent),
+  ).toEqual(["activities.py", "workflows.py", "worker.py", "start.py"]);
+  await expect
+    .element(main.getByRole("tab", { name: "activities.py" }))
+    .toHaveAttribute("aria-selected", "true");
+  expect(
+    main
+      .getByRole("region", { name: "activities.py" })
+      .element()
+      .querySelector("code")?.textContent,
+  ).toBe(python.code);
+  await expect
+    .element(main.getByRole("region", { name: "run commands" }))
+    .toHaveTextContent("python start.py");
+});
+
 test("Source shows the published code, headed with the activity file name and line count", async () => {
   const writeText = vi
     .spyOn(navigator.clipboard, "writeText")
@@ -666,7 +705,7 @@ test("Source shows the published code, headed with the activity file name and li
   expect(section?.id).toBe("source");
   const source = page.elementLocator(section ?? document.body);
   await expect
-    .element(source.getByText("activities.py · 1 line"))
+    .element(source.getByText("activities.py · 7 lines"))
     .toBeVisible();
   const code = source.getByRole("region", { name: "published code" });
   expect(code.element().querySelector("code")?.textContent).toBe(
