@@ -373,27 +373,9 @@ describe("the Published screen", () => {
               dependencies: [],
               heartbeats: [],
             },
-            code: "from temporalio import activity\n",
+            code: pastedCode,
             activityFileName: "activities.py",
-            snippets: [
-              { label: "Install", code: "pip install temporalio" },
-              {
-                label: "workflows.py",
-                code: "from temporalio import workflow",
-              },
-              {
-                label: "worker.py",
-                code: "from temporalio.worker import Worker",
-              },
-              {
-                label: "start.py",
-                code: "from temporalio.client import Client",
-              },
-              {
-                label: "Run",
-                code: "temporal server start-dev\npython worker.py\npython start.py",
-              },
-            ],
+            snippets: [],
             integrations: [],
             publishedAt: new Date().toISOString(),
           }),

@@ -1,8 +1,8 @@
 import { CodeBlock } from "@/components/code-block";
+import { sdkLanguage } from "@/lib/sdk-language";
 import { useId, useRef, useState } from "react";
 import type { CheckedFacts } from "./check-result";
 import styles from "./published-code.module.css";
-import { sdkLanguage } from "./sdk-language";
 
 export interface PublishedCodeProps {
   /** The accepted file, exactly as pasted. */

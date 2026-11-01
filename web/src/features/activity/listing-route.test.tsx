@@ -103,6 +103,20 @@ function countActivityReads() {
   return reads;
 }
 
+/**
+ * The address copy's status region, in the top of the page. The code blocks lower down
+ * each have their own status region.
+ */
+async function addressStatus(
+  screen: Awaited<ReturnType<typeof openAt>>["screen"],
+) {
+  const title = screen.getByRole("heading", { level: 1 });
+  await expect.element(title).toBeVisible();
+  const top = title.element().closest("header");
+  if (top === null) throw new Error("The title is not in the top of the page.");
+  return page.elementLocator(top).getByRole("status");
+}
+
 // The real route tree, opened at an address as if typed into the browser.
 async function openAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
@@ -110,6 +124,16 @@ async function openAt(path: string) {
     wrapper: TestProviders,
   });
   return { screen, router };
+}
+
+// The top of the page, once the title shows. The sidebar repeats the handle, the published
+// time and MIT-0, so assertions about the top look only inside it.
+async function topOfPage(screen: Awaited<ReturnType<typeof openAt>>["screen"]) {
+  const title = screen.getByRole("heading", { level: 1 });
+  await expect.element(title).toBeVisible();
+  const header = title.element().closest("header");
+  if (header === null) throw new Error("The title is not inside a header.");
+  return page.elementLocator(header);
 }
 
 test("a published listing shows its title, address and description", async () => {
@@ -376,13 +400,12 @@ test("the top of the page shows the icon, title, SDK, address, description, publ
     .element(main.getByRole("button", { name: "Copy address" }))
     .toBeVisible();
   await expect.element(main.getByText(chargeCardDescription)).toBeVisible();
+  const top = await topOfPage(screen);
+  await expect.element(top.getByText("ddieruf", { exact: true })).toBeVisible();
   await expect
-    .element(main.getByText("ddieruf", { exact: true }))
+    .element(top.getByText("Published 2 days ago", { exact: true }))
     .toBeVisible();
-  await expect
-    .element(main.getByText("Published 2 days ago", { exact: true }))
-    .toBeVisible();
-  await expect.element(main.getByText("MIT-0", { exact: true })).toBeVisible();
+  await expect.element(top.getByText("MIT-0", { exact: true })).toBeVisible();
 
   // The square icon sits to the left of the title.
   const icon = title.element().closest("header")?.querySelector("svg");
@@ -399,7 +422,8 @@ test("the publisher line shows the initial in a circle and the handle as plain t
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
-  const handle = screen.getByRole("main").getByText("ddieruf", { exact: true });
+  const top = await topOfPage(screen);
+  const handle = top.getByText("ddieruf", { exact: true });
   await expect.element(handle).toBeVisible();
   expect(handle.element().closest("a")).toBeNull();
   const initial = handle.element().previousElementSibling;
@@ -418,7 +442,8 @@ test("the published time is the version's own timestamp", async () => {
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
-  const time = screen.getByText("2 days ago", { exact: true });
+  const top = await topOfPage(screen);
+  const time = top.getByText("2 days ago", { exact: true });
   await expect.element(time).toBeVisible();
   expect(time.element().getAttribute("datetime")).toBe(chargeCard.publishedAt);
 });
@@ -456,8 +481,7 @@ test('copying the address puts it on the clipboard and shows "Copied" beside it'
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
   const copy = screen.getByRole("button", { name: "Copy address" });
-  // The address's status region is the first on the page; each code block below has its own.
-  const status = screen.getByRole("main").getByRole("status").first();
+  const status = await addressStatus(screen);
   await expect.element(status).toHaveTextContent("");
 
   await copy.click();
@@ -482,8 +506,7 @@ test('a copy the clipboard refuses does not show "Copied" and says it failed', a
 
   await screen.getByRole("button", { name: "Copy address" }).click();
 
-  // The address's status region is the first on the page; each code block below has its own.
-  const status = screen.getByRole("main").getByRole("status").first();
+  const status = await addressStatus(screen);
   await expect.element(status).toHaveTextContent("Couldn't copy the address.");
   await expect.element(status).not.toHaveTextContent("Copied");
 });
@@ -564,7 +587,9 @@ test("below about 960px the sidebar moves under the main column and the top stac
   );
   expect(sidebarBox?.left).toBe(sectionsBox?.left);
 
-  const publisher = screen.getByText("MIT-0", { exact: true });
+  const publisher = (await topOfPage(screen)).getByText("MIT-0", {
+    exact: true,
+  });
   const quickstart = screen.getByRole("link", { name: "Quickstart" });
   expect(
     quickstart.element().getBoundingClientRect().top,
@@ -601,6 +626,7 @@ test("the page shows no popularity signal, no Start a workflow and no version pi
     "Copy install command",
     "Copy activities.py",
     "Copy run commands",
+    "Copy published code",
   ]);
 });
 
@@ -662,4 +688,77 @@ test("Implement fills its anchor with the install command, the four file tabs an
   await expect
     .element(main.getByRole("region", { name: "run commands" }))
     .toHaveTextContent("python start.py");
+});
+
+test("Source shows the published code, headed with the activity file name and line count", async () => {
+  const writeText = vi
+    .spyOn(navigator.clipboard, "writeText")
+    .mockResolvedValue(undefined);
+  publishChargeCard();
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const main = screen.getByRole("main");
+  const heading = main.getByRole("heading", { level: 2, name: "Source" });
+  await expect.element(heading).toBeVisible();
+  const section = heading.element().closest("section");
+  expect(section?.id).toBe("source");
+  const source = page.elementLocator(section ?? document.body);
+  await expect
+    .element(source.getByText("activities.py · 7 lines"))
+    .toBeVisible();
+  const code = source.getByRole("region", { name: "published code" });
+  expect(code.element().querySelector("code")?.textContent).toBe(
+    chargeCard.code,
+  );
+
+  await source.getByRole("button", { name: "Copy published code" }).click();
+
+  await expect.element(source.getByRole("status")).toHaveTextContent("Copied");
+  expect(writeText).toHaveBeenCalledWith(chargeCard.code);
+});
+
+test("the sidebar shows the version's About and Publisher cards and the no-review note", async () => {
+  publishChargeCard();
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({ ...chargeCard, integrations: ["Stripe"] }),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const sidebar = screen.getByRole("complementary");
+  const about = sidebar.getByRole("region", { name: "About" });
+  await expect.element(about).toBeVisible();
+  expect(
+    [...about.element().querySelectorAll("dt")].map((term) => [
+      term.textContent,
+      term.nextElementSibling?.textContent,
+    ]),
+  ).toEqual([
+    ["SDK", "Python, temporalio"],
+    ["Integrates with", "Stripe"],
+    ["Dependencies", "stripe"],
+    ["Published", "2 days ago"],
+    ["License", "MIT-0"],
+  ]);
+  const publisher = sidebar.getByRole("region", { name: "Publisher" });
+  await expect
+    .element(publisher.getByText("ddieruf", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(
+      sidebar.getByText(
+        "Durables doesn't review published code. You are responsible for what you run.",
+      ),
+    )
+    .toBeVisible();
+  await expect.element(sidebar.getByRole("link")).not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("main").getByText(/report this activity/i))
+    .not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("main").getByText(/provenance/i))
+    .not.toBeInTheDocument();
 });

@@ -1,11 +1,9 @@
+import type { Sdk } from "@/lib/sdk-language";
 import styles from "./configure-section.module.css";
 import type { VersionResponse } from "./listing-queries";
 
 /** How the activity runs, as detection found it. Null when detection couldn't tell. */
 export type RunsAs = VersionResponse["facts"]["runsAs"];
-
-/** The Temporal SDK the activity is written for. */
-export type Sdk = VersionResponse["sdk"];
 
 export interface ConfigureSectionProps {
   /** The environment variable names detection found in the code. Empty when it found none. */
