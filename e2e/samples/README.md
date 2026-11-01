@@ -4,6 +4,7 @@ Activity files tests paste into the contribute flow, one per SDK, as `.txt` so P
 - `java.txt` — a Java activity, refused by name.
 - `python-workflow-only.txt` — uses the SDK but holds a workflow and no activity.
 - `python-two-activities.txt` — two activities in one file.
+- `python-no-configuration.txt` — a synchronous activity that reads no environment variables and imports nothing beyond the standard library and the SDK, so it has no integrations and no dependencies.
 - `not-temporal.txt` — a plain Python script with no Temporal SDK.
 
 The file over the size limit is generated in the test.
