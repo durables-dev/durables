@@ -1,12 +1,7 @@
-import { readFileSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
-import { expect, test, type PublishDetails } from "../fixtures";
+import { expect, sample, test, type PublishDetails } from "../fixtures";
 
-function sample(file: string): string {
-  return readFileSync(new URL(`../samples/${file}`, import.meta.url), "utf8");
-}
-
-const python = sample("python.txt");
+const python = sample("python");
 
 /** The Slack activity in python.txt, as its publisher describes it. */
 const slackListing: PublishDetails = {
@@ -45,19 +40,11 @@ function copyButton(page: Page, label: string) {
 }
 
 /** The gutter's numbers for the code: one per line, from 1, as the gutter's text joins them. */
-function lineNumbers(code: string): string {
+function gutterText(code: string): string {
   return code
     .split("\n")
     .map((_line, index) => String(index + 1))
     .join("");
-}
-
-/** The line count the Source heading gives: a line break at the very end starts no line. */
-function lineCount(code: string): number {
-  const lines = code.split("\n");
-  return lines.length > 1 && lines.at(-1) === ""
-    ? lines.length - 1
-    : lines.length;
 }
 
 /**
@@ -67,7 +54,7 @@ function lineCount(code: string): number {
  */
 async function expectNumberedCode(block: Locator, code: string) {
   await expect(block.getByRole("code")).toHaveJSProperty("textContent", code);
-  await expect(block).toHaveJSProperty("textContent", lineNumbers(code) + code);
+  await expect(block).toHaveJSProperty("textContent", gutterText(code) + code);
 }
 
 /** The code a block shows, read once the block is on the page. */
@@ -256,11 +243,9 @@ test.describe("as an anonymous visitor", () => {
         await sectionLink(page, "Source").click();
 
         await expect(sectionHeading(page, "Source")).toBeInViewport();
+        // python.txt is 56 lines and ends in a line break, which starts no line of its own.
         await expect(
-          main(page).getByText(
-            `activities.py · ${String(lineCount(python))} lines`,
-            { exact: true },
-          ),
+          main(page).getByText("activities.py · 56 lines", { exact: true }),
         ).toBeVisible();
         await expectNumberedCode(codeBlock(page, "published code"), python);
 
@@ -334,7 +319,7 @@ test.describe("as an anonymous visitor", () => {
     publishListing,
   }) => {
     const listing = await publishListing({
-      code: sample("python-no-configuration.txt"),
+      code: sample("python-no-configuration"),
       title: "Slugify title",
       name: "slugify-title",
       description: "Turns a title into a URL slug.",
@@ -376,10 +361,11 @@ test.describe("as an anonymous visitor", () => {
 
   test("a listing whose imports imply an integration shows it in the About card", async ({
     page,
+    expectAccessible,
     publishListing,
   }) => {
     const listing = await publishListing({
-      code: sample("typescript.txt"),
+      code: sample("typescript"),
       title: "Upload report",
       name: "upload-report",
       description: "Uploads a CSV report to S3 and returns where it is.",
@@ -399,5 +385,6 @@ test.describe("as an anonymous visitor", () => {
     await expect(
       main(page).getByRole("tablist", { name: "Files" }).getByRole("tab"),
     ).toHaveText(["activities.ts", "workflows.ts", "worker.ts", "start.ts"]);
+    await expectAccessible();
   });
 });

@@ -1,6 +1,11 @@
-import { readFileSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
-import { expect, publisherName, test, type FakeIdentity } from "../fixtures";
+import {
+  expect,
+  publisherName,
+  sample,
+  test,
+  type FakeIdentity,
+} from "../fixtures";
 
 const providers = ["GitHub", "GitLab", "Google", "Microsoft"] as const;
 
@@ -131,14 +136,6 @@ test.describe("as an anonymous visitor", () => {
 
 // The Code and Detected steps: paste a file, see what the check found or why it refused the
 // file, read the code that will be published, and see the eight facts on Detected.
-
-/** A file from samples/, exactly as written. */
-function sample(name: string): string {
-  return readFileSync(
-    new URL(`../samples/${name}.txt`, import.meta.url),
-    "utf8",
-  );
-}
 
 /** Every line holding `text`, numbered from 1 as the editor numbers lines. */
 function linesOf(code: string, text: string): number[] {

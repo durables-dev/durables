@@ -9,6 +9,7 @@ import {
 } from "@playwright/test";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -118,6 +119,11 @@ interface WorkerFixtures {
 /** The name every signed-in test publisher carries, so the header shows "AL". */
 export const publisherName = "Ada Lovelace";
 export const publisherInitials = "AL";
+
+/** A file from samples/, exactly as written. */
+export function sample(name: string): string {
+  return readFileSync(new URL(`samples/${name}.txt`, import.meta.url), "utf8");
+}
 
 const fakeSignInPath = "/api/session/providers/fake";
 const chosenHandlePath = "/api/session/handle";
