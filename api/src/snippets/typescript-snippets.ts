@@ -92,8 +92,6 @@ export const typescriptSnippets = (
     workflowFunction: `${activity}Workflow`,
     inputType: facts.input ?? "",
     returns: facts.output === null ? "" : `: Promise<${facts.output}>`,
-    heartbeatTimeout:
-      facts.heartbeats.length === 0 ? "" : 'heartbeatTimeout: "10 seconds",',
     taskQueue: typescriptString(address.name),
     workflowId: typescriptIdWithUuid(address.name),
     packages: unique([

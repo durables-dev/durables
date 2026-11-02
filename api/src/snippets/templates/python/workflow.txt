@@ -1,7 +1,6 @@
 from datetime import timedelta
 
 from temporalio import workflow
-from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from activities import {{imports}}
@@ -14,7 +13,6 @@ class {{workflowClass}}:
         return await workflow.execute_activity(
             {{activity}},
             input,
+            # Temporal requires a start-to-close timeout. Set it for your activity.
             start_to_close_timeout=timedelta(seconds=30),
-            {{heartbeatTimeout}}
-            retry_policy=RetryPolicy(maximum_attempts=5),
         )

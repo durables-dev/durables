@@ -9,6 +9,7 @@ import {
 } from "@playwright/test";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -41,6 +42,12 @@ export interface PublishResponse {
   name: string;
   version: string;
   accountCreated: boolean;
+}
+
+/** A version published by a publisher of its own, as `publishListing` returns it. */
+export interface PublishedListing extends PublishResponse {
+  /** The address the listing opens at: `handle/name@version`. */
+  address: string;
 }
 
 /** An account seeded straight into local D1, as publishing will create one. */
@@ -91,6 +98,17 @@ interface Fixtures {
    * It counts towards their publish rate limit.
    */
   publishThroughApi: (details: PublishDetails) => Promise<PublishResponse>;
+  /**
+   * Publishes an activity through the API as a new publisher of its own, signed in on a
+   * separate API context with a unique handle. The test's page stays as it was, so it can
+   * visit the listing as anyone, including an anonymous visitor.
+   */
+  publishListing: (details: PublishDetails) => Promise<PublishedListing>;
+  /**
+   * Reads the clipboard, as a paste would. Clipboard access is granted for the test, so the
+   * page's own Copy buttons can write to it.
+   */
+  readClipboard: () => Promise<string>;
 }
 
 interface WorkerFixtures {
@@ -102,8 +120,17 @@ interface WorkerFixtures {
 export const publisherName = "Ada Lovelace";
 export const publisherInitials = "AL";
 
+/** A file from samples/, exactly as written. */
+export function sample(name: string): string {
+  return readFileSync(new URL(`samples/${name}.txt`, import.meta.url), "utf8");
+}
+
 const fakeSignInPath = "/api/session/providers/fake";
+const chosenHandlePath = "/api/session/handle";
 const publishPath = "/api/activities";
+
+// The API accepts writes only from its own pages, which the browser marks this way.
+const sameOrigin = { "Sec-Fetch-Site": "same-origin" };
 
 /** The six confirmations a publish carries (packages/schemas: publishConfirmationKeys). */
 const allConfirmations = {
@@ -124,10 +151,21 @@ async function signInAs(
       providerAccountId: `e2e-${randomUUID()}`,
       ...identity,
     },
-    // The API accepts writes only from its own pages, which the browser marks this way.
-    headers: { "Sec-Fetch-Site": "same-origin" },
+    headers: sameOrigin,
   });
   expect(response.status(), await response.text()).toBe(204);
+}
+
+async function publishAs(
+  request: APIRequestContext,
+  details: PublishDetails,
+): Promise<PublishResponse> {
+  const response = await request.post(publishPath, {
+    data: { ...details, confirmations: allConfirmations },
+    headers: sameOrigin,
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  return (await response.json()) as PublishResponse;
 }
 
 // Seeding writes to the same local D1 the running Worker reads (ADR 0004). There is no API
@@ -261,14 +299,39 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
   },
 
   publishThroughApi: async ({ page }, use) => {
+    await use((details) => publishAs(page.request, details));
+  },
+
+  // The publisher signs in and chooses a handle the way the Contribute flow does, then
+  // publishes. Nothing is cleaned up: the version's rows hold the account's handle.
+  publishListing: async ({ playwright, baseURL, uniqueHandle }, use) => {
+    const contexts: APIRequestContext[] = [];
     await use(async (details) => {
-      const response = await page.request.post(publishPath, {
-        data: { ...details, confirmations: allConfirmations },
-        headers: { "Sec-Fetch-Site": "same-origin" },
+      const request = await playwright.request.newContext(
+        baseURL === undefined ? {} : { baseURL },
+      );
+      contexts.push(request);
+      const handle = uniqueHandle("pub");
+      await signInAs(request, { name: publisherName, username: handle });
+      const chosen = await request.put(chosenHandlePath, {
+        data: { handle },
+        headers: sameOrigin,
       });
-      expect(response.status(), await response.text()).toBe(201);
-      return (await response.json()) as PublishResponse;
+      expect(chosen.status(), await chosen.text()).toBe(200);
+      const published = await publishAs(request, details);
+      return {
+        ...published,
+        address: `${published.handle}/${published.name}@${published.version}`,
+      };
     });
+    for (const request of contexts) {
+      await request.dispose();
+    }
+  },
+
+  readClipboard: async ({ context, page }, use) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await use(() => page.evaluate(() => navigator.clipboard.readText()));
   },
 });
 

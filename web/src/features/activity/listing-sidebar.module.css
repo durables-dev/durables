@@ -1,0 +1,68 @@
+.card {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: var(--text-label);
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.term {
+  flex-shrink: 0;
+  color: var(--fg-muted);
+}
+
+/* A long value, such as many dependencies, wraps inside the card. */
+.value {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.publisher {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.handle {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--fg-muted);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}

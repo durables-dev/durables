@@ -3,7 +3,7 @@ import { detectors } from "../checks/detectors";
 import type { AcceptedSdk, Facts } from "../checks/facts";
 import { checkCode } from "../checks/pipeline";
 import type { Address, Snippet } from "../storage/version-document";
-import { installLabel, runLabel } from "./labels";
+import { activityFileName, installLabel, runLabel } from "./labels";
 import { generateSnippets } from "./snippets";
 
 const address: Address = {
@@ -91,6 +91,294 @@ const lineComments: Record<AcceptedSdk, string> = {
   Python: "#",
   TypeScript: "//",
   ".NET": "//",
+};
+
+/** The generated text for each SDK's fixture activity, `factsFor(sdk)` at `address`. */
+const expectedSnippets: Record<AcceptedSdk, Snippet[]> = {
+  Python: [
+    {
+      label: "Install",
+      code: [
+        "pip install temporalio",
+        "# Also install the PyPI packages that provide: stripe",
+      ].join("\n"),
+    },
+    {
+      label: "workflows.py",
+      code: [
+        "from datetime import timedelta",
+        "",
+        "from temporalio import workflow",
+        "",
+        "with workflow.unsafe.imports_passed_through():",
+        "    from activities import ChargeRequest, ChargeResult, charge_card",
+        "",
+        "",
+        "@workflow.defn",
+        "class ChargeCardWorkflow:",
+        "    @workflow.run",
+        "    async def run(self, input: ChargeRequest) -> ChargeResult:",
+        "        return await workflow.execute_activity(",
+        "            charge_card,",
+        "            input,",
+        "            # Temporal requires a start-to-close timeout. Set it for your activity.",
+        "            start_to_close_timeout=timedelta(seconds=30),",
+        "        )",
+      ].join("\n"),
+    },
+    {
+      label: "worker.py",
+      code: [
+        "import asyncio",
+        "from concurrent.futures import ThreadPoolExecutor",
+        "",
+        "from temporalio.client import Client",
+        "from temporalio.worker import Worker",
+        "",
+        "from activities import charge_card",
+        "from workflows import ChargeCardWorkflow",
+        "",
+        "",
+        "async def main():",
+        '    client = await Client.connect("localhost:7233")',
+        "    worker = Worker(",
+        "        client,",
+        '        task_queue="charge-card",',
+        "        workflows=[ChargeCardWorkflow],",
+        "        activities=[charge_card],",
+        "        activity_executor=ThreadPoolExecutor(max_workers=10),",
+        "    )",
+        "    await worker.run()",
+        "",
+        "",
+        "asyncio.run(main())",
+      ].join("\n"),
+    },
+    {
+      label: "start.py",
+      code: [
+        "import asyncio",
+        "import uuid",
+        "",
+        "from temporalio.client import Client",
+        "",
+        "from activities import ChargeRequest",
+        "from workflows import ChargeCardWorkflow",
+        "",
+        "",
+        "async def main():",
+        '    client = await Client.connect("localhost:7233")',
+        "    # Fill in the input to pass to charge_card.",
+        "    input: ChargeRequest = ...",
+        "    result = await client.execute_workflow(",
+        "        ChargeCardWorkflow.run,",
+        "        input,",
+        '        id=f"charge-card-{uuid.uuid4()}",',
+        '        task_queue="charge-card",',
+        "    )",
+        "    print(result)",
+        "",
+        "",
+        "asyncio.run(main())",
+      ].join("\n"),
+    },
+    {
+      label: "Run",
+      code: [
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "python worker.py",
+        "python start.py",
+      ].join("\n"),
+    },
+  ],
+  TypeScript: [
+    {
+      label: "Install",
+      code: [
+        "npm install @temporalio/activity @temporalio/client @temporalio/worker @temporalio/workflow stripe",
+      ].join("\n"),
+    },
+    {
+      label: "workflows.ts",
+      code: [
+        'import { proxyActivities } from "@temporalio/workflow";',
+        "",
+        'import type * as activities from "./activities";',
+        'import type { ChargeRequest, ChargeResult } from "./activities";',
+        "",
+        "const proxies = proxyActivities<typeof activities>({",
+        "    // Temporal requires a start-to-close timeout. Set it for your activity.",
+        '    startToCloseTimeout: "30 seconds",',
+        "});",
+        "",
+        "export async function chargeCardWorkflow(input: ChargeRequest): Promise<ChargeResult> {",
+        "    return await proxies.chargeCard(input);",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "worker.ts",
+      code: [
+        'import { NativeConnection, Worker } from "@temporalio/worker";',
+        "",
+        'import * as activities from "./activities";',
+        "",
+        "async function run() {",
+        '    const connection = await NativeConnection.connect({ address: "localhost:7233" });',
+        "    const worker = await Worker.create({",
+        "        connection,",
+        '        taskQueue: "charge-card",',
+        '        workflowsPath: require.resolve("./workflows"),',
+        "        activities: { chargeCard: activities.chargeCard },",
+        "    });",
+        "    await worker.run();",
+        "}",
+        "",
+        "run().catch((err: unknown) => {",
+        "    console.error(err);",
+        "    process.exit(1);",
+        "});",
+      ].join("\n"),
+    },
+    {
+      label: "start.ts",
+      code: [
+        'import { Client, Connection } from "@temporalio/client";',
+        "",
+        'import type { ChargeRequest } from "./activities";',
+        'import { chargeCardWorkflow } from "./workflows";',
+        "",
+        "async function run() {",
+        '    const connection = await Connection.connect({ address: "localhost:7233" });',
+        "    const client = new Client({ connection });",
+        "    // Fill in the input to pass to chargeCard.",
+        "    const input = {} as ChargeRequest;",
+        "    const result = await client.workflow.execute(chargeCardWorkflow, {",
+        "        args: [input],",
+        '        taskQueue: "charge-card",',
+        "        workflowId: `charge-card-${crypto.randomUUID()}`,",
+        "    });",
+        "    console.log(result);",
+        "}",
+        "",
+        "run().catch((err: unknown) => {",
+        "    console.error(err);",
+        "    process.exit(1);",
+        "});",
+      ].join("\n"),
+    },
+    {
+      label: "Run",
+      code: [
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "npx tsx worker.ts",
+        "npx tsx start.ts",
+      ].join("\n"),
+    },
+  ],
+  ".NET": [
+    {
+      label: "Install",
+      code: [
+        "dotnet new console --output charge-card",
+        "cd charge-card",
+        "dotnet add package Temporalio",
+        "# Also add the NuGet packages that provide: Stripe",
+      ].join("\n"),
+    },
+    {
+      label: "ChargeCardWorkflow.cs",
+      code: [
+        "using Temporalio.Workflows;",
+        "",
+        "// Activities stands in for the class that declares ChargeCardAsync. Change it to your",
+        "// class's name, and add a using directive if that class is in a namespace.",
+        "[Workflow]",
+        "public class ChargeCardWorkflow",
+        "{",
+        "    [WorkflowRun]",
+        "    public async Task<ChargeResult> RunAsync(ChargeRequest input)",
+        "    {",
+        "        return await Workflow.ExecuteActivityAsync(",
+        "            (Activities activities) => activities.ChargeCardAsync(input),",
+        "            new ActivityOptions",
+        "            {",
+        "                // Temporal requires a start-to-close timeout. Set it for your activity.",
+        "                StartToCloseTimeout = TimeSpan.FromSeconds(30),",
+        "            });",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "Program.cs",
+      code: [
+        "using Temporalio.Client;",
+        "using Temporalio.Worker;",
+        "",
+        'if (args.FirstOrDefault() == "start")',
+        "{",
+        "    await Starter.RunAsync();",
+        "    return;",
+        "}",
+        "",
+        'var client = await TemporalClient.ConnectAsync(new("localhost:7233"));',
+        "// Activities stands in for the class that declares ChargeCardAsync. Change it to your",
+        "// class's name, and add a using directive if that class is in a namespace.",
+        "var activities = new Activities();",
+        "using var worker = new TemporalWorker(",
+        "    client,",
+        '    new TemporalWorkerOptions("charge-card")',
+        "        .AddActivity(activities.ChargeCardAsync)",
+        "        .AddWorkflow<ChargeCardWorkflow>());",
+        "",
+        "using var cancellation = new CancellationTokenSource();",
+        "Console.CancelKeyPress += (_, eventArgs) =>",
+        "{",
+        "    eventArgs.Cancel = true;",
+        "    cancellation.Cancel();",
+        "};",
+        "try",
+        "{",
+        "    await worker.ExecuteAsync(cancellation.Token);",
+        "}",
+        "catch (OperationCanceledException)",
+        "{",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "Starter.cs",
+      code: [
+        "using Temporalio.Client;",
+        "",
+        "public static class Starter",
+        "{",
+        "    public static async Task RunAsync()",
+        "    {",
+        '        var client = await TemporalClient.ConnectAsync(new("localhost:7233"));',
+        "        // Fill in the input to pass to ChargeCardAsync.",
+        "        ChargeRequest input = default!;",
+        "        var result = await client.ExecuteWorkflowAsync(",
+        "            (ChargeCardWorkflow workflow) => workflow.RunAsync(input),",
+        '            new(id: $"charge-card-{Guid.NewGuid()}", taskQueue: "charge-card"));',
+        "        Console.WriteLine(result);",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "Run",
+      code: [
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "dotnet run",
+        "dotnet run -- start",
+      ].join("\n"),
+    },
+  ],
 };
 
 describe("generateSnippets", () => {
@@ -285,19 +573,6 @@ describe("generateSnippets", () => {
       );
       expect(worker("async")).not.toContain("ThreadPoolExecutor");
     });
-
-    it.each(sdks)(
-      "sets a heartbeat timeout only when the %s activity heartbeats",
-      (sdk) => {
-        const workflow = (heartbeats: Facts["heartbeats"]) =>
-          snippet(
-            generateSnippets(factsFor(sdk, { heartbeats }), address),
-            fileLabels(sdk)[0] ?? "",
-          );
-        expect(workflow([{ line: 9 }])).toMatch(/heartbeat_?timeout/i);
-        expect(workflow([])).not.toMatch(/heartbeat_?timeout/i);
-      },
-    );
 
     it.each(sdks)("uses 4-space indentation in every %s snippet", (sdk) => {
       for (const { code } of generateSnippets(factsFor(sdk), address)) {
@@ -589,7 +864,6 @@ describe("generateSnippets", () => {
           "from datetime import timedelta",
           "",
           "from temporalio import workflow",
-          "from temporalio.common import RetryPolicy",
           "",
           "with workflow.unsafe.imports_passed_through():",
           "    from activities import ChargeRequest, ChargeResult, charge_card",
@@ -602,8 +876,8 @@ describe("generateSnippets", () => {
           "        return await workflow.execute_activity(",
           "            charge_card,",
           "            input,",
+          "            # Temporal requires a start-to-close timeout. Set it for your activity.",
           "            start_to_close_timeout=timedelta(seconds=30),",
-          "            retry_policy=RetryPolicy(maximum_attempts=5),",
           "        )",
         ].join("\n"),
       );
@@ -628,9 +902,7 @@ describe("generateSnippets", () => {
       expect(snippet(snippets, "workflows.ts")).toContain(
         "export async function chargeCardWorkflow(input: ChargeRequest): Promise<string> {",
       );
-      expect(snippet(snippets, "workflows.ts")).toContain(
-        'heartbeatTimeout: "10 seconds",',
-      );
+      expect(snippet(snippets, "workflows.ts")).not.toMatch(/heartbeat/i);
       expect(snippet(snippets, runLabel)).toContain(
         "export STRIPE_API_KEY=...",
       );
@@ -658,5 +930,149 @@ describe("generateSnippets", () => {
         "# Also add the NuGet packages that provide: Stripe",
       );
     });
+  });
+
+  describe("the workflow sets only the start-to-close timeout", () => {
+    const timeoutLines: Record<AcceptedSdk, string> = {
+      Python:
+        "            # Temporal requires a start-to-close timeout. Set it for your activity.\n            start_to_close_timeout=timedelta(seconds=30),\n        )",
+      TypeScript:
+        '({\n    // Temporal requires a start-to-close timeout. Set it for your activity.\n    startToCloseTimeout: "30 seconds",\n});',
+      ".NET":
+        "            {\n                // Temporal requires a start-to-close timeout. Set it for your activity.\n                StartToCloseTimeout = TimeSpan.FromSeconds(30),\n            });",
+    };
+
+    const workflowFile = (sdk: AcceptedSdk, changes: Partial<Facts> = {}) =>
+      snippet(
+        generateSnippets(factsFor(sdk, changes), address),
+        fileLabels(sdk)[0] ?? "",
+      );
+
+    it.each(sdks)(
+      "sets the %s timeout to 30 seconds, with the comment, as the only option",
+      (sdk) => {
+        for (const input of ["ChargeRequest", null]) {
+          expect(workflowFile(sdk, { input })).toContain(timeoutLines[sdk]);
+        }
+      },
+    );
+
+    it.each(sdks)("sets no retry policy in any %s snippet", (sdk) => {
+      for (const changes of [
+        {},
+        { input: null },
+        { heartbeats: [{ line: 9 }] },
+      ]) {
+        for (const { code } of generateSnippets(
+          factsFor(sdk, changes),
+          address,
+        )) {
+          expect(code).not.toMatch(/retry|attempts/i);
+        }
+      }
+    });
+
+    it.each(sdks)(
+      "sets no heartbeat timeout when the %s activity heartbeats",
+      (sdk) => {
+        for (const input of ["ChargeRequest", null]) {
+          expect(
+            workflowFile(sdk, {
+              input,
+              heartbeats: [{ line: 9 }, { line: 12 }],
+            }),
+          ).not.toMatch(/heartbeat/i);
+        }
+      },
+    );
+
+    it.each(sdks)(
+      "gives a %s activity that heartbeats the same files as one that doesn't",
+      (sdk) => {
+        for (const input of ["ChargeRequest", null]) {
+          expect(
+            generateSnippets(
+              factsFor(sdk, { input, heartbeats: [{ line: 9 }] }),
+              address,
+            ),
+          ).toEqual(generateSnippets(factsFor(sdk, { input }), address));
+        }
+      },
+    );
+
+    it.each(sdks)(
+      "uses 4-space indentation in every %s snippet, whatever the facts",
+      (sdk) => {
+        for (const changes of [
+          { input: null },
+          { output: null },
+          { heartbeats: [{ line: 9 }] },
+          { dependencies: [], configurationRead: [] },
+          { runsAs: "async" as const },
+        ]) {
+          for (const { code } of generateSnippets(
+            factsFor(sdk, changes),
+            address,
+          )) {
+            for (const line of code.split("\n")) {
+              const indent = /^\s*/.exec(line)?.[0] ?? "";
+              expect(indent).not.toContain("\t");
+              expect(indent.length % 4).toBe(0);
+            }
+          }
+        }
+      },
+    );
+  });
+
+  describe("an activity with no detected packages", () => {
+    it.each([
+      ["Python", "pip install temporalio"],
+      [
+        "TypeScript",
+        "npm install @temporalio/activity @temporalio/client @temporalio/worker @temporalio/workflow",
+      ],
+      [
+        ".NET",
+        "dotnet new console --output charge-card\ncd charge-card\ndotnet add package Temporalio",
+      ],
+    ] as const)("still installs the %s SDK", (sdk, command) => {
+      expect(
+        snippet(
+          generateSnippets(factsFor(sdk, { dependencies: [] }), address),
+          installLabel,
+        ),
+      ).toBe(command);
+    });
+  });
+
+  describe("the install command, four files and run commands for each SDK", () => {
+    it.each(sdks)(
+      "generates the expected install command, files and run commands for %s",
+      (sdk) => {
+        expect(generateSnippets(factsFor(sdk), address)).toEqual(
+          expectedSnippets[sdk],
+        );
+      },
+    );
+
+    it.each([
+      ["Python", "activities.py"],
+      ["TypeScript", "activities.ts"],
+      [".NET", "Activities.cs"],
+    ] as const)(
+      "names the %s activity file %s, the file the workflow and worker import",
+      (sdk, fileName) => {
+        expect(activityFileName[sdk]).toBe(fileName);
+        const importsActivityFile = {
+          Python: "from activities import",
+          TypeScript: 'from "./activities"',
+          ".NET": "activities.ChargeCardAsync",
+        }[sdk];
+        for (const { code } of files(expectedSnippets[sdk]).slice(0, 2)) {
+          expect(code).toContain(importsActivityFile);
+        }
+      },
+    );
   });
 });

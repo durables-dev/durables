@@ -5,6 +5,6 @@ test.each([
   ["Python", "python"],
   ["TypeScript", "typescript"],
   [".NET", "csharp"],
-] as const)("a %s activity is highlighted as %s", (sdk, language) => {
+] as const)("%s code is highlighted as %s", (sdk, language) => {
   expect(sdkLanguage(sdk)).toBe(language);
 });

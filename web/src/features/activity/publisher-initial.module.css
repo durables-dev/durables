@@ -1,0 +1,22 @@
+.initial {
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--publisher-badge);
+  color: var(--on-publisher-badge);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.small {
+  width: 22px;
+  height: 22px;
+  font-size: var(--text-caption);
+}
+
+.large {
+  width: 32px;
+  height: 32px;
+  font-size: var(--text-label);
+}
