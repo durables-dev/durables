@@ -35,7 +35,6 @@ describe("integrations from imports", () => {
     ["stripe", "Stripe"],
     ["boto3", "Amazon S3"],
     ["@aws-sdk/client-s3", "Amazon S3"],
-    ["AWSSDK.S3", "Amazon S3"],
     ["psycopg", "Postgres"],
     ["psycopg2", "Postgres"],
     ["asyncpg", "Postgres"],
@@ -44,7 +43,6 @@ describe("integrations from imports", () => {
     ["slack_sdk", "Slack"],
     ["@slack/web-api", "Slack"],
     ["SlackNet", "Slack"],
-    ["Stripe.net", "Stripe"],
   ])("maps %s to %s", (name, integration) => {
     expect(integrationsFor(imports(name))).toEqual([integration]);
   });
@@ -99,7 +97,7 @@ describe("integrations from imports", () => {
   it("matches package names without regard to case", () => {
     expect(integrationsFor(imports("Stripe"))).toEqual(["Stripe"]);
     expect(integrationsFor(imports("npgsql"))).toEqual(["Postgres"]);
-    expect(integrationsFor(imports("awssdk.s3"))).toEqual(["Amazon S3"]);
+    expect(integrationsFor(imports("SLACKNET"))).toEqual(["Slack"]);
   });
 
   it("lists an integration once when its package is imported under two casings", () => {
@@ -214,6 +212,23 @@ describe("integrations from detected code", () => {
       "}",
     ].join("\n");
     expect(integrationsIn(code)).toEqual(["Amazon S3"]);
+  });
+
+  it("reads no integration from a .NET Amazon.S3 using", () => {
+    const code = [
+      "using Amazon.S3;",
+      "using Temporalio.Activities;",
+      "",
+      "public class Reports",
+      "{",
+      "    [Activity]",
+      "    public async Task<string> UploadReportAsync(string key)",
+      "    {",
+      "        return key;",
+      "    }",
+      "}",
+    ].join("\n");
+    expect(integrationsIn(code)).toEqual([]);
   });
 
   it("reads no integration from code with no known packages", () => {

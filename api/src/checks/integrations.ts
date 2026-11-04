@@ -7,7 +7,10 @@ import type { NamedLineRef } from "./facts";
 
 interface IntegrationPackages {
   readonly integration: Integration;
-  /** The package names detection reports for this integration's client libraries. */
+  /**
+   * The dependency names detection reports for this integration's client libraries: package
+   * names for Python and TypeScript, the namespace root of a `using` for .NET.
+   */
   readonly packages: readonly string[];
 }
 
@@ -18,7 +21,7 @@ interface IntegrationPackages {
 export const integrationPackages: readonly IntegrationPackages[] = [
   {
     integration: "Amazon S3",
-    packages: ["boto3", "@aws-sdk/client-s3", "AWSSDK.S3"],
+    packages: ["boto3", "@aws-sdk/client-s3"],
   },
   {
     integration: "Postgres",
@@ -28,7 +31,8 @@ export const integrationPackages: readonly IntegrationPackages[] = [
     integration: "Slack",
     packages: ["slack_sdk", "@slack/web-api", "SlackNet"],
   },
-  { integration: "Stripe", packages: ["stripe", "Stripe.net"] },
+  // "stripe" is also the Stripe.net package's .NET namespace root.
+  { integration: "Stripe", packages: ["stripe"] },
 ];
 
 /**
