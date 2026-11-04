@@ -1,4 +1,4 @@
-import type { Sdk } from "@/lib/sdk-language";
+import type { Sdk } from "@durables/schemas";
 
 /**
  * The package each Temporal SDK is installed as, shown beside the SDK in the About card.

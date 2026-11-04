@@ -1,11 +1,30 @@
+import { integrations } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
 import { detectors } from "./detectors";
-import { integrationsFor } from "./integrations";
+import { integrationPackages, integrationsFor } from "./integrations";
 import { checkCode } from "./pipeline";
 
 /** Detected dependencies with the given names, each on its own line. */
 const imports = (...names: string[]) =>
   names.map((name, index) => ({ name, line: index + 1 }));
+
+describe("the shared integration list", () => {
+  it("holds exactly Stripe, Amazon S3, Postgres and Slack", () => {
+    expect(integrations).toEqual(["Stripe", "Amazon S3", "Postgres", "Slack"]);
+  });
+
+  it("is what detection can report, each integration once", () => {
+    const detectable = integrationPackages.map(
+      ({ integration }) => integration,
+    );
+    expect(detectable).toHaveLength(integrations.length);
+    expect(new Set(detectable)).toEqual(new Set(integrations));
+  });
+
+  it("names S3 only as Amazon S3", () => {
+    expect(integrations).not.toContain("AWS S3");
+  });
+});
 
 describe("integrations from imports", () => {
   it("maps stripe to Stripe", () => {
@@ -14,9 +33,9 @@ describe("integrations from imports", () => {
 
   it.each([
     ["stripe", "Stripe"],
-    ["boto3", "AWS S3"],
-    ["@aws-sdk/client-s3", "AWS S3"],
-    ["AWSSDK.S3", "AWS S3"],
+    ["boto3", "Amazon S3"],
+    ["@aws-sdk/client-s3", "Amazon S3"],
+    ["AWSSDK.S3", "Amazon S3"],
     ["psycopg", "Postgres"],
     ["psycopg2", "Postgres"],
     ["asyncpg", "Postgres"],
@@ -24,6 +43,8 @@ describe("integrations from imports", () => {
     ["Npgsql", "Postgres"],
     ["slack_sdk", "Slack"],
     ["@slack/web-api", "Slack"],
+    ["SlackNet", "Slack"],
+    ["Stripe.net", "Stripe"],
   ])("maps %s to %s", (name, integration) => {
     expect(integrationsFor(imports(name))).toEqual([integration]);
   });
@@ -33,17 +54,17 @@ describe("integrations from imports", () => {
       "Postgres",
     ]);
     expect(integrationsFor(imports("boto3", "@aws-sdk/client-s3"))).toEqual([
-      "AWS S3",
+      "Amazon S3",
     ]);
   });
 
   it("lists two integrations once each, in the same order whatever the import order", () => {
     expect(integrationsFor(imports("stripe", "boto3"))).toEqual([
-      "AWS S3",
+      "Amazon S3",
       "Stripe",
     ]);
     expect(integrationsFor(imports("boto3", "stripe"))).toEqual([
-      "AWS S3",
+      "Amazon S3",
       "Stripe",
     ]);
   });
@@ -51,7 +72,7 @@ describe("integrations from imports", () => {
   it("lists every integration in the listed order", () => {
     expect(
       integrationsFor(imports("@slack/web-api", "stripe", "pg", "boto3")),
-    ).toEqual(["AWS S3", "Postgres", "Slack", "Stripe"]);
+    ).toEqual(["Amazon S3", "Postgres", "Slack", "Stripe"]);
   });
 
   it("maps an unknown package to nothing", () => {
@@ -78,7 +99,7 @@ describe("integrations from imports", () => {
   it("matches package names without regard to case", () => {
     expect(integrationsFor(imports("Stripe"))).toEqual(["Stripe"]);
     expect(integrationsFor(imports("npgsql"))).toEqual(["Postgres"]);
-    expect(integrationsFor(imports("awssdk.s3"))).toEqual(["AWS S3"]);
+    expect(integrationsFor(imports("awssdk.s3"))).toEqual(["Amazon S3"]);
   });
 
   it("lists an integration once when its package is imported under two casings", () => {
@@ -126,7 +147,7 @@ describe("integrations from detected code", () => {
       '  return "ok";',
       "}",
     ].join("\n");
-    expect(integrationsIn(code)).toEqual(["AWS S3", "Postgres", "Stripe"]);
+    expect(integrationsIn(code)).toEqual(["Amazon S3", "Postgres", "Stripe"]);
   });
 
   it("reads .NET usings as detection reports them", () => {
@@ -146,5 +167,64 @@ describe("integrations from detected code", () => {
       "}",
     ].join("\n");
     expect(integrationsIn(code)).toEqual(["Postgres", "Stripe"]);
+  });
+  it("reads the Stripe.net package's using as Stripe", () => {
+    const code = [
+      "using Stripe;",
+      "using Temporalio.Activities;",
+      "",
+      "public class Payments",
+      "{",
+      "    [Activity]",
+      "    public async Task<string> ChargeCardAsync(int amount)",
+      "    {",
+      '        return "ok";',
+      "    }",
+      "}",
+    ].join("\n");
+    expect(integrationsIn(code)).toEqual(["Stripe"]);
+  });
+
+  it("reads the SlackNet package's using as Slack", () => {
+    const code = [
+      "using SlackNet;",
+      "using SlackNet.WebApi;",
+      "using Temporalio.Activities;",
+      "",
+      "public class Messages",
+      "{",
+      "    [Activity]",
+      "    public async Task<string> PostMessageAsync(string text)",
+      "    {",
+      '        return "ok";',
+      "    }",
+      "}",
+    ].join("\n");
+    expect(integrationsIn(code)).toEqual(["Slack"]);
+  });
+
+  it("reads Amazon S3 from a TypeScript S3 import", () => {
+    const code = [
+      'import { S3Client } from "@aws-sdk/client-s3";',
+      'import { heartbeat } from "@temporalio/activity";',
+      "",
+      "export async function uploadReport(key: string): Promise<string> {",
+      "  heartbeat();",
+      "  return key;",
+      "}",
+    ].join("\n");
+    expect(integrationsIn(code)).toEqual(["Amazon S3"]);
+  });
+
+  it("reads no integration from code with no known packages", () => {
+    const code = [
+      "import httpx",
+      "from temporalio import activity",
+      "",
+      "@activity.defn",
+      "async def fetch_page(url: str) -> str:",
+      "    return url",
+    ].join("\n");
+    expect(integrationsIn(code)).toEqual([]);
   });
 });

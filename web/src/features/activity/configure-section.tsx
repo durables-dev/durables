@@ -1,4 +1,4 @@
-import type { Sdk } from "@/lib/sdk-language";
+import type { Sdk } from "@durables/schemas";
 import styles from "./configure-section.module.css";
 import type { VersionResponse } from "./listing-queries";
 
