@@ -381,7 +381,7 @@ test.describe("as an anonymous visitor", () => {
       "Published",
       "License",
     ]);
-    await expect(about.getByRole("definition").nth(1)).toHaveText("AWS S3");
+    await expect(about.getByRole("definition").nth(1)).toHaveText("Amazon S3");
     await expect(
       main(page).getByRole("tablist", { name: "Files" }).getByRole("tab"),
     ).toHaveText(["activities.ts", "workflows.ts", "worker.ts", "start.ts"]);
