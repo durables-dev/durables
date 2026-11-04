@@ -1,3 +1,4 @@
+import { sdks } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
 import { detectors } from "../checks/detectors";
 import type { AcceptedSdk, Facts } from "../checks/facts";
@@ -32,8 +33,6 @@ const factsFor = (sdk: AcceptedSdk, changes: Partial<Facts> = {}): Facts => ({
   heartbeats: [],
   ...changes,
 });
-
-const sdks: readonly AcceptedSdk[] = ["Python", "TypeScript", ".NET"];
 
 /** The file names of the workflow, worker and starter, for an activity in the given SDK. */
 const fileLabels = (sdk: AcceptedSdk, workflowClass = "ChargeCardWorkflow") =>

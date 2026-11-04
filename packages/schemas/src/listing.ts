@@ -1,5 +1,31 @@
 import { z } from "zod";
 
+/**
+ * The Temporal SDKs an activity can be written for, named as listings store them, in the
+ * order the filter chips show them. The api stores and checks these values and web shows
+ * them, so both read this one copy.
+ */
+export const sdks = ["Python", "TypeScript", ".NET"] as const;
+
+export const sdkSchema = z.enum(sdks);
+
+export type Sdk = z.infer<typeof sdkSchema>;
+
+/**
+ * The integrations a listing can show, named as listings store them, in the order the filter
+ * chips show them. "Amazon S3" is the one name used everywhere.
+ */
+export const integrations = [
+  "Stripe",
+  "Amazon S3",
+  "Postgres",
+  "Slack",
+] as const;
+
+export const integrationSchema = z.enum(integrations);
+
+export type Integration = z.infer<typeof integrationSchema>;
+
 /** The longest title a listing may have. */
 export const listingTitleMaxLength = 80;
 

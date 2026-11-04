@@ -1,3 +1,4 @@
+import { sdkSchema } from "@durables/schemas";
 import { z } from "zod";
 
 // The latest check of the pasted code, as the draft keeps it: what detection found, or why
@@ -9,7 +10,7 @@ const lineRefSchema = z.object({ line: z.number().int().positive() });
 const namedLineRefSchema = lineRefSchema.extend({ name: z.string() });
 
 export const factsSchema = z.object({
-  sdk: z.enum(["Python", "TypeScript", ".NET"]),
+  sdk: sdkSchema,
   activity: namedLineRefSchema,
   input: z.string().nullable(),
   output: z.string().nullable(),

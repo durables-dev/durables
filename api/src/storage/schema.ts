@@ -1,3 +1,4 @@
+import { sdks, type Sdk } from "@durables/schemas";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -7,21 +8,14 @@ import {
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
-import type { AcceptedSdk } from "../checks/facts";
 
 /** The sign-in providers a publisher can use (ADR 0007). */
 export const providers = ["github", "gitlab", "google", "microsoft"] as const;
 
 export type Provider = (typeof providers)[number];
 
-/** The SDKs a published version can be written in (ADR 0008). */
-export const sdks = [
-  "Python",
-  "TypeScript",
-  ".NET",
-] as const satisfies readonly AcceptedSdk[];
-
-export type Sdk = (typeof sdks)[number];
+/** The SDKs a published version can be written in (ADR 0008): the shared SDK list. */
+export { sdks, type Sdk };
 
 /** A SQL check that a text column holds one of a fixed list of values. */
 const oneOf = (column: { name: string }, values: readonly string[]) =>

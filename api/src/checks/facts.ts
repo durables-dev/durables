@@ -1,5 +1,7 @@
-/** The SDKs Durables accepts activities from. */
-export type AcceptedSdk = "Python" | "TypeScript" | ".NET";
+import type { Sdk } from "@durables/schemas";
+
+/** The SDKs Durables accepts activities from: the shared SDK list. */
+export type AcceptedSdk = Sdk;
 
 /** Temporal SDKs Durables recognises but does not accept. */
 export type UnacceptedSdk = "Java" | "Go" | "PHP";

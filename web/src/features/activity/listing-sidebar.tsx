@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from "react";
-import type { Sdk } from "@/lib/sdk-language";
+import type { Sdk } from "@durables/schemas";
 import styles from "./listing-sidebar.module.css";
 import { publishedAgo } from "./published-ago";
 import { PublisherInitial } from "./publisher-initial";
