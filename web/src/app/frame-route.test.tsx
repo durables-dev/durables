@@ -9,7 +9,7 @@ import { routes } from "./router";
 function renderAt(path: string) {
   const [frame] = routes;
   if (!frame || frame.index) throw new Error("Expected the frame layout route");
-  const searchHandle: RouteHandle = { footer: false };
+  const noFooterHandle: RouteHandle = { footer: false };
   const router = createMemoryRouter(
     [
       {
@@ -17,7 +17,11 @@ function renderAt(path: string) {
         children: [
           ...(frame.children ?? []),
           { path: "/elsewhere", element: <h1>Elsewhere</h1> },
-          { path: "/search", element: <h1>Results</h1>, handle: searchHandle },
+          {
+            path: "/no-footer",
+            element: <h1>No footer</h1>,
+            handle: noFooterHandle,
+          },
         ],
       },
     ],
@@ -46,10 +50,10 @@ test("the logo link takes a visitor home from another page", async () => {
 });
 
 test("a page that opts out of the footer keeps the header and has no footer slot", async () => {
-  const screen = await renderAt("/search");
+  const screen = await renderAt("/no-footer");
 
   await expect
-    .element(screen.getByRole("heading", { name: "Results" }))
+    .element(screen.getByRole("heading", { name: "No footer" }))
     .toBeVisible();
   await expect.element(screen.getByRole("banner")).toBeVisible();
   await expect.element(screen.getByRole("contentinfo")).not.toBeInTheDocument();
