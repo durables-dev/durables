@@ -3,6 +3,7 @@ import { activityFileName } from "../snippets/labels";
 import type {
   Snippet,
   Address,
+  Listing,
   ListingDescription,
   Sdk,
   Version,
@@ -42,6 +43,34 @@ export interface ListingResponse {
   name: string;
   /** The current one-line description. */
   description: string;
+}
+
+/** One browse result: a listing, shown at its highest version number. */
+export interface ActivityCard extends Address {
+  /** The full address of the version on the card: `handle/name@version`. */
+  address: string;
+  title: string;
+  sdk: Sdk;
+  /** The listing's current one-line description. */
+  description: string;
+  /** The integrations of the version on the card. Empty when there are none. */
+  integrations: string[];
+  /** When the version on the card was published, as an ISO 8601 timestamp. */
+  publishedAt: string;
+}
+
+/** The order browse results are in. With no words, it is newest first. */
+export type BrowseSort = "newest";
+
+/** A batch of browse results, as `GET /api/activities` answers it. */
+export interface BrowseResponse {
+  /** Up to 50 cards, in the order of the sort. */
+  activities: ActivityCard[];
+  /** How many listings match in all, not only in this batch. */
+  count: number;
+  sort: BrowseSort;
+  /** Send this back as the cursor for the next batch. Null after the last batch. */
+  nextCursor: string | null;
 }
 
 /** A new version, as `POST /api/activities` answers a publish with 201. */
@@ -104,3 +133,25 @@ export const listingResponse = ({
   name,
   description,
 }: ListingDescription): ListingResponse => ({ handle, name, description });
+
+/** A browse card, from the listing at its highest version. */
+export const activityCard = ({
+  handle,
+  name,
+  version,
+  title,
+  sdk,
+  description,
+  integrations,
+  publishedAt,
+}: Listing): ActivityCard => ({
+  address: formatAddress({ handle, name, version }),
+  handle,
+  name,
+  version,
+  title,
+  sdk,
+  description,
+  integrations,
+  publishedAt: publishedAt.toISOString(),
+});

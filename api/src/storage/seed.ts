@@ -81,7 +81,8 @@ export const seedListing = async (
 
 /**
  * Adds a version under an existing listing. Publishing creates only a listing's first
- * version; later versions are a later increment, so tests write them here.
+ * version; later versions are a later increment, so tests write them here. The published date
+ * defaults to now.
  */
 export const seedVersion = async (
   database: D1Database,
@@ -92,6 +93,7 @@ export const seedVersion = async (
     title: string;
     sdk: Sdk;
     integrations: string[];
+    publishedAt?: Date;
   },
 ): Promise<void> => {
   await drizzle(database).insert(versions).values(version);
