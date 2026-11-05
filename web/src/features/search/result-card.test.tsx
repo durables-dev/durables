@@ -122,6 +122,19 @@ test("a card with no integrations has no Integrates with row", async () => {
   expect(card.getByRole("listitem").elements()).toHaveLength(0);
 });
 
+test("the integrations sit in one row with no list markers", async () => {
+  const rendered = await renderCard({}, { width: "600px" });
+  const card = cardOf(rendered);
+
+  const list = card.getByRole("list").element();
+  expect(getComputedStyle(list).listStyleType).toBe("none");
+  const tops = card
+    .getByRole("listitem")
+    .elements()
+    .map((item) => item.getBoundingClientRect().top);
+  expect(new Set(tops).size).toBe(1);
+});
+
 test("each integration link's address holds that integration alone", async () => {
   const rendered = await renderCard();
   const card = cardOf(rendered);

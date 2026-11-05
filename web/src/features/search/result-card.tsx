@@ -1,8 +1,8 @@
+import { IntegrationLink } from "@/components/integration-link";
 import { PublisherInitial } from "@/components/publisher-initial";
 import { listingPath } from "@/lib/listing-path";
 import { publishedAgo } from "@/lib/published-ago";
 import { searchAddress } from "@/lib/search-address";
-import { integrationSchema } from "@durables/schemas";
 import { useId } from "react";
 import { Link } from "react-router";
 import type { ActivityCard } from "./activity-card";
@@ -50,7 +50,7 @@ export function ResultCard({ card }: ResultCardProps) {
       {card.integrations.length === 0 ? null : (
         <div className={styles["integrations"]}>
           <span className={styles["label"]}>Integrates with</span>
-          <ul className={styles["integration-list"]}>
+          <ul className={styles["integrationList"]}>
             {card.integrations.map((integration) => (
               <li key={integration}>
                 <IntegrationLink integration={integration} />
@@ -81,26 +81,5 @@ export function ResultCard({ card }: ResultCardProps) {
         </Link>
       </div>
     </article>
-  );
-}
-
-interface IntegrationLinkProps {
-  integration: string;
-}
-
-// An integration on the shared list links to results for it alone. One the list does not
-// know could not be searched for, so it shows as plain text.
-function IntegrationLink({ integration }: IntegrationLinkProps) {
-  const known = integrationSchema.safeParse(integration);
-  if (!known.success) {
-    return <span>{integration}</span>;
-  }
-  return (
-    <Link
-      to={searchAddress({ integrations: [known.data] })}
-      className={styles["integration"]}
-    >
-      {integration}
-    </Link>
   );
 }
