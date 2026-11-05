@@ -1,5 +1,6 @@
 import { FilterChips } from "@/components/filter-chips";
 import { PageTitle } from "@/components/page-title";
+import { SearchField } from "@/components/search-field";
 import { searchAddress, type Search } from "@/lib/search-address";
 import { activeFilterCount, everything } from "@/lib/search-filters";
 import { useId, useState } from "react";
@@ -11,14 +12,13 @@ import styles from "./home-page.module.css";
 // picked. Explore All opens every activity.
 export function HomePage() {
   const navigate = useNavigate();
-  const inputId = useId();
   const panelId = useId();
   const [filters, setFilters] = useState<Search>(everything);
-  const [open, setOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const active = activeFilterCount(filters);
 
   // Enter in the box and the Search button both submit the form.
-  function search(form: FormData) {
+  function submit(form: FormData) {
     const typed = form.get("q");
     const words = typeof typed === "string" ? typed : "";
     void navigate(searchAddress({ ...filters, words }));
@@ -30,36 +30,15 @@ export function HomePage() {
       <h1 className={styles["headline"]}>
         Temporal activities, ready to copy.
       </h1>
-      <form role="search" action={search} className={styles["form"]}>
-        <div className={styles["box"]}>
-          <svg
-            className={styles["icon"]}
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-4.2-4.2" />
-          </svg>
-          <label htmlFor={inputId} className={styles["hidden"]}>
-            Search activities
-          </label>
-          <input
-            id={inputId}
-            name="q"
-            type="search"
-            className={styles["input"]}
-            placeholder="Describe what you need, or just use Filters"
-            autoComplete="off"
-          />
+      <form role="search" action={submit} className={styles["form"]}>
+        <SearchField className={styles["box"]}>
           <button
             type="button"
             className={styles["filters"]}
-            aria-expanded={open}
-            aria-controls={open ? panelId : undefined}
+            aria-expanded={panelOpen}
+            aria-controls={panelOpen ? panelId : undefined}
             onClick={() => {
-              setOpen(!open);
+              setPanelOpen(!panelOpen);
             }}
           >
             <svg
@@ -84,8 +63,8 @@ export function HomePage() {
               </>
             )}
           </button>
-        </div>
-        {open ? (
+        </SearchField>
+        {panelOpen ? (
           <div id={panelId} className={styles["panel"]}>
             <FilterChips search={filters} onChange={setFilters} />
             {active === 0 ? null : (
