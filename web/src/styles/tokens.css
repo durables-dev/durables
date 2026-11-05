@@ -40,6 +40,16 @@
      both themes. */
   --publisher-badge: var(--color-gold);
   --on-publisher-badge: var(--color-ink);
+  /* A result card's icon tile: one brand colour for the icon, on a tint of the same colour.
+     The card picks one pair by title and publisher. Decoration only, never meaning. */
+  --tile-tangerine: var(--color-tangerine);
+  --tile-tangerine-tint: rgb(255 90 31 / 16%);
+  --tile-gold: var(--color-gold);
+  --tile-gold-tint: rgb(255 183 0 / 22%);
+  --tile-ember: var(--color-ember);
+  --tile-ember-tint: rgb(238 28 58 / 14%);
+  --tile-lagoon: var(--color-lagoon);
+  --tile-lagoon-tint: rgb(79 189 183 / 18%);
   /* The Gold tint behind a message that needs the reader's attention, such as a refused
      file. Never Ember. */
   --notice: rgb(255 183 0 / 14%);
@@ -118,6 +128,8 @@
     --selected: var(--color-sand);
     --positive: var(--color-lagoon-deep);
     --positive-tint: rgb(15 116 113 / 12%);
+    --tile-lagoon: var(--color-lagoon-deep);
+    --tile-lagoon-tint: rgb(15 116 113 / 12%);
     --notice: rgb(255 183 0 / 16%);
   }
 }

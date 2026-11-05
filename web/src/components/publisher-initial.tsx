@@ -2,7 +2,7 @@ import styles from "./publisher-initial.module.css";
 
 export interface PublisherInitialProps {
   handle: string;
-  /** "small" beside the handle at the top of the page, "large" in the Publisher card. */
+  /** "small" beside a handle in a line of text, "large" in the Publisher card. */
   size: "small" | "large";
 }
 
