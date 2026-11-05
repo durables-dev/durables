@@ -44,8 +44,3 @@ export function publishedAddress({
 }: PublishedListing): string {
   return `${handle}/${name}@${version}`;
 }
-
-/** The path of the listing's page, `/<handle>/<name>@<version>`. */
-export function listingPath(listing: PublishedListing): string {
-  return `/${publishedAddress(listing)}`;
-}

@@ -11,7 +11,8 @@ const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
 /**
  * How long ago a version was published, such as "2 days ago" or "yesterday", for the
- * publisher line. Under a minute, or a time ahead of the clock, reads "just now".
+ * publisher line on the Activity page and on result cards. Under a minute, or a time ahead of
+ * the clock, reads "just now".
  */
 export function publishedAgo(publishedAt: string, now = new Date()): string {
   const seconds = Math.floor(

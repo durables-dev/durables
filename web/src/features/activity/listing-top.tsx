@@ -1,7 +1,7 @@
 import { AddressCopy } from "./address-copy";
 import styles from "./listing-top.module.css";
-import { publishedAgo } from "./published-ago";
-import { PublisherInitial } from "./publisher-initial";
+import { publishedAgo } from "@/lib/published-ago";
+import { PublisherInitial } from "@/components/publisher-initial";
 import { scrollToSection } from "./scroll-to-section";
 import { sectionHref } from "./listing-sections";
 
