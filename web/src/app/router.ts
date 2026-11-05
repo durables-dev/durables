@@ -29,6 +29,11 @@ export const routes: RouteObject[] = [
         handle: contributeHandle,
       },
       {
+        // The results page. The words and filters are in the address's search params.
+        path: "/search",
+        lazy: () => import("@/features/search/search-route"),
+      },
+      {
         path: "/terms",
         lazy: () => import("@/features/legal/terms-route"),
       },
