@@ -1,33 +1,44 @@
-import { PageMessage } from "@/components/page-message";
+import { PageTitle } from "@/components/page-title";
 import type { Search } from "@/lib/search-address";
+import { FilterSidebar } from "./filter-sidebar";
+import { SearchBox } from "./search-box";
+import { everything } from "./search-filters";
 import styles from "./search-page.module.css";
+import { SearchResults } from "./search-results";
 
 export interface SearchPageProps {
   /** The search the address holds. */
   search: Search;
+  /** Called with a changed search, to put it in the address. */
+  onSearch: (search: Search) => void;
 }
 
-const anyValue = "Any";
-
-// Placeholder. The results page story replaces it with the filters, the count and the cards.
-// Until then it shows the search the address holds.
-export function SearchPage({ search }: SearchPageProps) {
+// The results page (screen 3): the search box, the filter sidebar, and the results. Every
+// change goes into the address, and the page shows whatever search the address holds.
+export function SearchPage({ search, onSearch }: SearchPageProps) {
   return (
-    <PageMessage heading="Search">
-      <dl className={styles["search"]}>
-        <dt>Words</dt>
-        <dd>{search.words === "" ? "None" : search.words}</dd>
-        <dt>Temporal SDK</dt>
-        <dd>{search.sdks.length === 0 ? anyValue : search.sdks.join(", ")}</dd>
-        <dt>Integrates with</dt>
-        <dd>
-          {search.integrations.length === 0
-            ? anyValue
-            : search.integrations.join(", ")}
-        </dd>
-        <dt>Publisher</dt>
-        <dd>{search.publisher ?? anyValue}</dd>
-      </dl>
-    </PageMessage>
+    <div className={styles["page"]}>
+      <PageTitle page="Search" />
+      <h1 className={styles["heading"]}>Search</h1>
+      <div className={styles["bar"]}>
+        <SearchBox
+          words={search.words}
+          onSubmit={(words) => {
+            onSearch({ ...search, words });
+          }}
+        />
+      </div>
+      <div className={styles["body"]}>
+        <FilterSidebar search={search} onChange={onSearch} />
+        <div className={styles["main"]}>
+          <SearchResults
+            search={search}
+            onClearAll={() => {
+              onSearch(everything);
+            }}
+          />
+        </div>
+      </div>
+    </div>
   );
 }

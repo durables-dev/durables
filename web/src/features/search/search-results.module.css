@@ -1,0 +1,108 @@
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.count {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--fg-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.end {
+  min-height: 1px;
+  padding: 24px 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  font-size: var(--text-label);
+  color: var(--fg-muted);
+}
+
+.end p {
+  margin: 0;
+}
+
+.loading {
+  margin: 0;
+  padding: 48px 0;
+  color: var(--fg-muted);
+}
+
+.message {
+  padding: 48px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.empty {
+  padding: 56px 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-panel);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.message-heading {
+  font-size: var(--text-h3);
+  font-weight: 600;
+}
+
+.message-text {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--fg-muted);
+}
+
+.retry {
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retry:disabled {
+  cursor: default;
+  color: var(--fg-muted);
+}
+
+.clear-all {
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Below about 900px the cards sit one per row. */
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
