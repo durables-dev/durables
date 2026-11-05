@@ -97,16 +97,21 @@ export const activities = new Hono<AppEnv>()
   // Browse reads the database on every request and is never cached or rate-limited (ADR 0005,
   // 0006), so a newly published activity or a changed description shows at once.
   .get("/", zValidator("query", browseQuery, problemOnInvalid), async (c) => {
-    const { sdk, integration, publisher, cursor } = c.req.valid("query");
+    const {
+      sdk: sdks,
+      integration: integrations,
+      publisher,
+      cursor: after,
+    } = c.req.valid("query");
     // One card more than a batch shows whether another batch follows.
-    const { cards, count } = await c.var.storage.browseListings({
-      ...(sdk === undefined ? {} : { sdks: sdk }),
-      ...(integration === undefined ? {} : { integrations: integration }),
-      ...(publisher === undefined ? {} : { publisher }),
-      ...(cursor === undefined ? {} : { after: cursor }),
+    const { listings, count } = await c.var.storage.browseListings({
+      sdks,
+      integrations,
+      publisher,
+      after,
       limit: BROWSE_BATCH_SIZE + 1,
     });
-    const batch = cards.slice(0, BROWSE_BATCH_SIZE);
+    const batch = listings.slice(0, BROWSE_BATCH_SIZE);
     const last = batch.at(-1);
     c.header("Cache-Control", noStoreCacheControl);
     return c.json<BrowseResponse>(
@@ -115,7 +120,7 @@ export const activities = new Hono<AppEnv>()
         count,
         sort: "newest",
         nextCursor:
-          cards.length > BROWSE_BATCH_SIZE && last !== undefined
+          listings.length > BROWSE_BATCH_SIZE && last !== undefined
             ? encodeBrowseCursor(last)
             : null,
       },

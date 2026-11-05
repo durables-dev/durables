@@ -98,18 +98,18 @@ export interface BrowsePosition {
  * SDKs match any one of them, as do several integrations. The publisher matches the handle.
  */
 export interface BrowseFilter {
-  sdks?: readonly Sdk[];
-  integrations?: readonly string[];
-  publisher?: string;
+  sdks?: readonly Sdk[] | undefined;
+  integrations?: readonly string[] | undefined;
+  publisher?: string | undefined;
   /** Start after this card. Absent for the first batch. */
-  after?: BrowsePosition;
+  after?: BrowsePosition | undefined;
   /** The most cards to return. */
   limit: number;
 }
 
-/** A browse batch: up to the limit's cards, newest first, and the count of every match. */
+/** A browse batch: up to the limit's listings, newest first, and the count of every match. */
 export interface BrowseResult {
-  cards: Listing[];
+  listings: Listing[];
   count: number;
 }
 
@@ -472,7 +472,7 @@ export class Storage {
       );
     };
 
-    const [cards, [total]] = await this.#db.batch([
+    const [rows, [total]] = await this.#db.batch([
       this.#db
         .with(ranked)
         .select({
@@ -495,7 +495,7 @@ export class Storage {
         .from(ranked)
         .where(matches),
     ]);
-    return { cards, count: total?.count ?? 0 };
+    return { listings: rows, count: total?.count ?? 0 };
   }
 
   /**
