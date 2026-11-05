@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import {
   accounts,
@@ -86,6 +86,33 @@ export interface ListingDescription {
   description: string;
 }
 
+/** Where a browse batch ends: the last card's published date, handle and name. */
+export interface BrowsePosition {
+  publishedAt: Date;
+  handle: string;
+  name: string;
+}
+
+/**
+ * What browse narrows by and where it starts. An empty or absent list does not filter. Several
+ * SDKs match any one of them, as do several integrations. The publisher matches the handle.
+ */
+export interface BrowseFilter {
+  sdks?: readonly Sdk[] | undefined;
+  integrations?: readonly string[] | undefined;
+  publisher?: string | undefined;
+  /** Start after this card. Absent for the first batch. */
+  after?: BrowsePosition | undefined;
+  /** The most cards to return. */
+  limit: number;
+}
+
+/** A browse batch: up to the limit's listings, newest first, and the count of every match. */
+export interface BrowseResult {
+  listings: Listing[];
+  count: number;
+}
+
 /** The outcome of creating a listing. An address can be written once. */
 export type CreateListingResult =
   { outcome: "created"; listing: Listing } | { outcome: "address-taken" };
@@ -140,6 +167,17 @@ const createdListing = (
     throw new Error("The version insert returned no row.");
   }
   return { ...listing, integrations: [...listing.integrations], ...created };
+};
+
+/**
+ * Orders a listing's versions from the highest version number down. Each of the major, minor
+ * and patch numbers compares as a number, so 1.10.0 is above 1.9.0. SQLite's integer cast reads
+ * the leading digits of each part.
+ */
+const highestVersionFirst = () => {
+  const afterMajor = sql`substr(${versions.version}, instr(${versions.version}, '.') + 1)`;
+  const afterMinor = sql`substr(${afterMajor}, instr(${afterMajor}, '.') + 1)`;
+  return sql`cast(${versions.version} as integer) desc, cast(${afterMajor} as integer) desc, cast(${afterMinor} as integer) desc, ${versions.version} desc`;
 };
 
 /**
@@ -361,6 +399,103 @@ export class Storage {
         ),
       )
       .get();
+  }
+
+  /**
+   * One batch of browse results and the count of every match. Each listing appears once, as its
+   * highest version number, and the filters apply to that version. Cards are newest first by
+   * that version's published date, then by handle and name, so every card has one place in the
+   * order and a batch can start after any of them.
+   */
+  async browseListings({
+    sdks = [],
+    integrations = [],
+    publisher,
+    after,
+    limit,
+  }: BrowseFilter): Promise<BrowseResult> {
+    const ranked = this.#db.$with("ranked").as(
+      this.#db
+        .select({
+          handle: versions.handle,
+          name: versions.name,
+          version: versions.version,
+          title: versions.title,
+          description: listings.description,
+          sdk: versions.sdk,
+          integrations: versions.integrations,
+          publishedAt: versions.publishedAt,
+          rank: sql<number>`row_number() over (partition by ${versions.handle}, ${versions.name} order by ${highestVersionFirst()})`.as(
+            "rank",
+          ),
+        })
+        .from(versions)
+        .innerJoin(
+          listings,
+          and(
+            eq(listings.handle, versions.handle),
+            eq(listings.name, versions.name),
+          ),
+        ),
+    );
+
+    const filters: SQL[] = [eq(ranked.rank, 1)];
+    if (sdks.length > 0) {
+      filters.push(inArray(ranked.sdk, [...sdks]));
+    }
+    if (integrations.length > 0) {
+      // Integrations are stored as a JSON array in text, so each listing's are read with json_each.
+      filters.push(
+        sql`exists (select 1 from json_each(${ranked.integrations}) where ${inArray(sql`json_each.value`, [...integrations])})`,
+      );
+    }
+    if (publisher !== undefined) {
+      filters.push(eq(ranked.handle, publisher));
+    }
+    const matches = and(...filters);
+
+    const startAfter = (position: BrowsePosition) => {
+      // published_at is stored in whole seconds.
+      const second = Math.floor(position.publishedAt.getTime() / 1000);
+      return or(
+        sql`${ranked.publishedAt} < ${second}`,
+        and(
+          sql`${ranked.publishedAt} = ${second}`,
+          or(
+            sql`${ranked.handle} > ${position.handle}`,
+            and(
+              eq(ranked.handle, position.handle),
+              sql`${ranked.name} > ${position.name}`,
+            ),
+          ),
+        ),
+      );
+    };
+
+    const [rows, [total]] = await this.#db.batch([
+      this.#db
+        .with(ranked)
+        .select({
+          handle: ranked.handle,
+          name: ranked.name,
+          version: ranked.version,
+          title: ranked.title,
+          description: ranked.description,
+          sdk: ranked.sdk,
+          integrations: ranked.integrations,
+          publishedAt: ranked.publishedAt,
+        })
+        .from(ranked)
+        .where(after === undefined ? matches : and(matches, startAfter(after)))
+        .orderBy(desc(ranked.publishedAt), ranked.handle, ranked.name)
+        .limit(limit),
+      this.#db
+        .with(ranked)
+        .select({ count: count() })
+        .from(ranked)
+        .where(matches),
+    ]);
+    return { listings: rows, count: total?.count ?? 0 };
   }
 
   /**

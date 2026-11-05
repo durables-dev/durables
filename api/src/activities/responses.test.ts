@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
-import type { Version, VersionDocument } from "../storage/storage";
+import type { Listing, Version, VersionDocument } from "../storage/storage";
 import {
+  activityCard,
   formatAddress,
   listingResponse,
   publishResponse,
@@ -171,5 +172,38 @@ describe("the publish response", () => {
     expect(
       versionLocation({ handle: "a b", name: "c/d", version: "1.0.0" }),
     ).toBe("/api/activities/a%20b/c%2Fd/versions/1.0.0");
+  });
+});
+
+describe("a browse card", () => {
+  const listing: Listing = {
+    handle: "acme",
+    name: "charge-card",
+    version: "2.1.0",
+    title: "Charge card",
+    description: "The listing's current description.",
+    sdk: ".NET",
+    integrations: ["Stripe", "Postgres"],
+    publishedAt: new Date("2026-10-23T12:00:00Z"),
+  };
+
+  test("holds the version's address, title, SDK, integrations and published date, and the current description", () => {
+    expect(activityCard(listing)).toEqual({
+      address: "acme/charge-card@2.1.0",
+      handle: "acme",
+      name: "charge-card",
+      version: "2.1.0",
+      title: "Charge card",
+      sdk: ".NET",
+      description: "The listing's current description.",
+      integrations: ["Stripe", "Postgres"],
+      publishedAt: "2026-10-23T12:00:00.000Z",
+    });
+  });
+
+  test("holds an empty integrations list when there are none", () => {
+    expect(activityCard({ ...listing, integrations: [] }).integrations).toEqual(
+      [],
+    );
   });
 });
