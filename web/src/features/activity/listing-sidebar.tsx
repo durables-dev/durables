@@ -1,13 +1,19 @@
-import { useId, type ReactNode } from "react";
+import { Fragment, useId, type ReactNode } from "react";
+import { Link } from "react-router";
 import type { Sdk } from "@durables/schemas";
 import styles from "./listing-sidebar.module.css";
 import { publishedAgo } from "@/lib/published-ago";
+import { searchAddress } from "@/lib/search-address";
+import { IntegrationLink } from "@/components/integration-link";
 import { PublisherInitial } from "@/components/publisher-initial";
 import { sdkPackage } from "./sdk-package";
 
 export interface ListingSidebarProps {
   sdk: Sdk;
-  /** The integrations implied by the code's imports. Empty hides the Integrates with row. */
+  /**
+   * The integrations implied by the code's imports, each a link to results for it alone.
+   * Empty hides the Integrates with row.
+   */
   integrations: readonly string[];
   /** The third-party packages the code imports, beyond the SDK. */
   dependencies: readonly string[];
@@ -17,7 +23,8 @@ export interface ListingSidebarProps {
 }
 
 // The Activity page's sidebar: the About and Publisher cards, then the note that Durables
-// doesn't review published code. Nothing here links into search (API map D19 to D22).
+// doesn't review published code. Each integration links to results for that integration,
+// and the handle and "Search all activities by" link to that publisher's activities.
 export function ListingSidebar({
   sdk,
   integrations,
@@ -27,6 +34,7 @@ export function ListingSidebar({
 }: ListingSidebarProps) {
   const aboutId = useId();
   const publisherId = useId();
+  const publisherSearchPath = searchAddress({ publisher: handle });
   return (
     <>
       <section className={styles["card"]} aria-labelledby={aboutId}>
@@ -39,7 +47,12 @@ export function ListingSidebar({
           </AboutRow>
           {integrations.length === 0 ? null : (
             <AboutRow term="Integrates with">
-              {integrations.join(", ")}
+              {integrations.map((integration, position) => (
+                <Fragment key={integration}>
+                  {position === 0 ? null : ", "}
+                  <IntegrationLink integration={integration} />
+                </Fragment>
+              ))}
             </AboutRow>
           )}
           <AboutRow term="Dependencies">
@@ -55,14 +68,22 @@ export function ListingSidebar({
           <AboutRow term="License">MIT-0</AboutRow>
         </dl>
       </section>
-      <section className={styles["card"]} aria-labelledby={publisherId}>
+      <section
+        className={`${styles["card"]} ${styles["publisherCard"]}`}
+        aria-labelledby={publisherId}
+      >
         <h2 id={publisherId} className={styles["heading"]}>
           Publisher
         </h2>
         <p className={styles["publisher"]}>
           <PublisherInitial handle={handle} size="large" />
-          <span className={styles["handle"]}>{handle}</span>
+          <Link to={publisherSearchPath} className={styles["handle"]}>
+            {handle}
+          </Link>
         </p>
+        <Link to={publisherSearchPath} className={styles["searchPublisher"]}>
+          Search all activities by {handle}
+        </Link>
       </section>
       <p className={styles["note"]}>
         Durables doesn&apos;t review published code. You are responsible for

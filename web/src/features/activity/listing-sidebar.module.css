@@ -9,6 +9,11 @@
   font-size: var(--text-label);
 }
 
+/* The Publisher card carries a link-coloured line, so it takes the link panel's background. */
+.publisher-card {
+  background: var(--surface-link);
+}
+
 .heading {
   font-family: var(--font-display);
   font-size: var(--text-body);
@@ -55,7 +60,12 @@
 }
 
 .handle {
+  color: var(--fg);
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.search-publisher {
   overflow-wrap: anywhere;
 }
 

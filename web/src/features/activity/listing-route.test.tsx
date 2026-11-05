@@ -1,5 +1,6 @@
 import "@/styles/global.css";
 import { routes } from "@/app/router";
+import { searchAddress } from "@/lib/search-address";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, expect, test, vi } from "vitest";
@@ -433,8 +434,46 @@ test("the publisher line shows the initial in a circle and the handle as plain t
   expect(initial.textContent).toBe("D");
   expect(getComputedStyle(initial).borderRadius).not.toBe("0px");
   await expect
-    .element(screen.getByRole("main").getByRole("link", { name: "ddieruf" }))
+    .element(top.getByRole("link", { name: "ddieruf" }))
     .not.toBeInTheDocument();
+});
+
+test("the sidebar links the version's integrations and its publisher into search", async () => {
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({
+        ...chargeCard,
+        integrations: ["Stripe", "Amazon S3"],
+      }),
+    ),
+    http.get(listingPath, () =>
+      HttpResponse.json({
+        handle: "ddieruf",
+        name: "charge-card",
+        description: chargeCardDescription,
+      }),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const about = screen.getByRole("region", { name: "About" });
+  for (const integration of ["Stripe", "Amazon S3"] as const) {
+    const link = about.getByRole("link", { name: integration, exact: true });
+    await expect.element(link).toBeVisible();
+    expect(link.element().getAttribute("href")).toBe(
+      searchAddress({ integrations: [integration] }),
+    );
+  }
+  const publisher = screen.getByRole("region", { name: "Publisher" });
+  for (const name of ["ddieruf", "Search all activities by ddieruf"]) {
+    expect(
+      publisher
+        .getByRole("link", { name, exact: true })
+        .element()
+        .getAttribute("href"),
+    ).toBe(searchAddress({ publisher: "ddieruf" }));
+  }
 });
 
 test("the published time is the version's own timestamp", async () => {
@@ -754,7 +793,12 @@ test("the sidebar shows the version's About and Publisher cards and the no-revie
       ),
     )
     .toBeVisible();
-  await expect.element(sidebar.getByRole("link")).not.toBeInTheDocument();
+  expect(
+    sidebar
+      .getByRole("link")
+      .elements()
+      .map((link) => link.textContent),
+  ).toEqual(["Stripe", "ddieruf", "Search all activities by ddieruf"]);
   await expect
     .element(screen.getByRole("main").getByText(/report this activity/i))
     .not.toBeInTheDocument();

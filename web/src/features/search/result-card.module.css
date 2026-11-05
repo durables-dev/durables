@@ -131,13 +131,6 @@
   gap: 4px 10px;
 }
 
-.integration {
-  color: var(--positive);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 .footer {
   margin-top: auto;
   padding-top: 2px;
