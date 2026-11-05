@@ -1,13 +1,18 @@
-import { useId, type ReactNode } from "react";
-import type { Sdk } from "@durables/schemas";
+import { Fragment, useId, type ReactNode } from "react";
+import { Link } from "react-router";
+import { integrationSchema, type Sdk } from "@durables/schemas";
 import styles from "./listing-sidebar.module.css";
 import { publishedAgo } from "@/lib/published-ago";
+import { searchAddress } from "@/lib/search-address";
 import { PublisherInitial } from "@/components/publisher-initial";
 import { sdkPackage } from "./sdk-package";
 
 export interface ListingSidebarProps {
   sdk: Sdk;
-  /** The integrations implied by the code's imports. Empty hides the Integrates with row. */
+  /**
+   * The integrations implied by the code's imports, each a link to results for it alone.
+   * Empty hides the Integrates with row.
+   */
   integrations: readonly string[];
   /** The third-party packages the code imports, beyond the SDK. */
   dependencies: readonly string[];
@@ -17,7 +22,8 @@ export interface ListingSidebarProps {
 }
 
 // The Activity page's sidebar: the About and Publisher cards, then the note that Durables
-// doesn't review published code. Nothing here links into search (API map D19 to D22).
+// doesn't review published code. Each integration links to results for that integration,
+// and the handle and "Search all activities by" link to that publisher's activities.
 export function ListingSidebar({
   sdk,
   integrations,
@@ -27,6 +33,7 @@ export function ListingSidebar({
 }: ListingSidebarProps) {
   const aboutId = useId();
   const publisherId = useId();
+  const publisherSearch = searchAddress({ publisher: handle });
   return (
     <>
       <section className={styles["card"]} aria-labelledby={aboutId}>
@@ -39,7 +46,12 @@ export function ListingSidebar({
           </AboutRow>
           {integrations.length === 0 ? null : (
             <AboutRow term="Integrates with">
-              {integrations.join(", ")}
+              {integrations.map((integration, position) => (
+                <Fragment key={integration}>
+                  {position === 0 ? null : ", "}
+                  <IntegrationLink integration={integration} />
+                </Fragment>
+              ))}
             </AboutRow>
           )}
           <AboutRow term="Dependencies">
@@ -55,14 +67,22 @@ export function ListingSidebar({
           <AboutRow term="License">MIT-0</AboutRow>
         </dl>
       </section>
-      <section className={styles["card"]} aria-labelledby={publisherId}>
+      <section
+        className={`${styles["card"]} ${styles["publisherCard"]}`}
+        aria-labelledby={publisherId}
+      >
         <h2 id={publisherId} className={styles["heading"]}>
           Publisher
         </h2>
         <p className={styles["publisher"]}>
           <PublisherInitial handle={handle} size="large" />
-          <span className={styles["handle"]}>{handle}</span>
+          <Link to={publisherSearch} className={styles["handle"]}>
+            {handle}
+          </Link>
         </p>
+        <Link to={publisherSearch} className={styles["searchPublisher"]}>
+          Search all activities by {handle}
+        </Link>
       </section>
       <p className={styles["note"]}>
         Durables doesn&apos;t review published code. You are responsible for
@@ -83,5 +103,26 @@ function AboutRow({ term, children }: AboutRowProps) {
       <dt className={styles["term"]}>{term}</dt>
       <dd className={styles["value"]}>{children}</dd>
     </div>
+  );
+}
+
+interface IntegrationLinkProps {
+  integration: string;
+}
+
+// An integration on the shared list links to results for it alone. One the list does not
+// know could not be searched for, so it shows as plain text.
+function IntegrationLink({ integration }: IntegrationLinkProps) {
+  const known = integrationSchema.safeParse(integration);
+  if (!known.success) {
+    return <span>{integration}</span>;
+  }
+  return (
+    <Link
+      to={searchAddress({ integrations: [known.data] })}
+      className={styles["integration"]}
+    >
+      {integration}
+    </Link>
   );
 }

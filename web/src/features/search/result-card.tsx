@@ -50,7 +50,7 @@ export function ResultCard({ card }: ResultCardProps) {
       {card.integrations.length === 0 ? null : (
         <div className={styles["integrations"]}>
           <span className={styles["label"]}>Integrates with</span>
-          <ul className={styles["integration-list"]}>
+          <ul className={styles["integrationList"]}>
             {card.integrations.map((integration) => (
               <li key={integration}>
                 <IntegrationLink integration={integration} />
