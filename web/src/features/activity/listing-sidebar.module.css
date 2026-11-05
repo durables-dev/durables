@@ -65,11 +65,6 @@
   overflow-wrap: anywhere;
 }
 
-.integration {
-  color: var(--positive);
-  font-weight: 600;
-}
-
 .search-publisher {
   overflow-wrap: anywhere;
 }

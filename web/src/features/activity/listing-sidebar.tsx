@@ -1,9 +1,10 @@
 import { Fragment, useId, type ReactNode } from "react";
 import { Link } from "react-router";
-import { integrationSchema, type Sdk } from "@durables/schemas";
+import type { Sdk } from "@durables/schemas";
 import styles from "./listing-sidebar.module.css";
 import { publishedAgo } from "@/lib/published-ago";
 import { searchAddress } from "@/lib/search-address";
+import { IntegrationLink } from "@/components/integration-link";
 import { PublisherInitial } from "@/components/publisher-initial";
 import { sdkPackage } from "./sdk-package";
 
@@ -33,7 +34,7 @@ export function ListingSidebar({
 }: ListingSidebarProps) {
   const aboutId = useId();
   const publisherId = useId();
-  const publisherSearch = searchAddress({ publisher: handle });
+  const publisherSearchPath = searchAddress({ publisher: handle });
   return (
     <>
       <section className={styles["card"]} aria-labelledby={aboutId}>
@@ -76,11 +77,11 @@ export function ListingSidebar({
         </h2>
         <p className={styles["publisher"]}>
           <PublisherInitial handle={handle} size="large" />
-          <Link to={publisherSearch} className={styles["handle"]}>
+          <Link to={publisherSearchPath} className={styles["handle"]}>
             {handle}
           </Link>
         </p>
-        <Link to={publisherSearch} className={styles["searchPublisher"]}>
+        <Link to={publisherSearchPath} className={styles["searchPublisher"]}>
           Search all activities by {handle}
         </Link>
       </section>
@@ -103,26 +104,5 @@ function AboutRow({ term, children }: AboutRowProps) {
       <dt className={styles["term"]}>{term}</dt>
       <dd className={styles["value"]}>{children}</dd>
     </div>
-  );
-}
-
-interface IntegrationLinkProps {
-  integration: string;
-}
-
-// An integration on the shared list links to results for it alone. One the list does not
-// know could not be searched for, so it shows as plain text.
-function IntegrationLink({ integration }: IntegrationLinkProps) {
-  const known = integrationSchema.safeParse(integration);
-  if (!known.success) {
-    return <span>{integration}</span>;
-  }
-  return (
-    <Link
-      to={searchAddress({ integrations: [known.data] })}
-      className={styles["integration"]}
-    >
-      {integration}
-    </Link>
   );
 }
