@@ -23,7 +23,7 @@ import { publisherLimitKey } from "../http/rate-limits";
 import { problemOnInvalid } from "../http/validation";
 import { generateSnippets } from "../snippets/snippets";
 import { encodeBrowseCursor } from "./browse-cursor";
-import { BROWSE_BATCH_SIZE, browseQuery } from "./browse-request";
+import { BROWSE_BATCH_SIZE, browseQuery, browseSort } from "./browse-request";
 import {
   addressTaken,
   handleNotChosen,
@@ -94,17 +94,20 @@ const noSuchListing = (handle: string, name: string) =>
  * handle or name is never lowercased, so it finds nothing and answers 404.
  */
 export const activities = new Hono<AppEnv>()
-  // Browse reads the database on every request and is never cached or rate-limited (ADR 0005,
-  // 0006), so a newly published activity or a changed description shows at once.
+  // Browse and search read the database on every request and are never cached or rate-limited
+  // (ADR 0005, 0006), so a newly published activity or a changed description shows at once.
   .get("/", zValidator("query", browseQuery, problemOnInvalid), async (c) => {
     const {
+      q: words = [],
       sdk: sdks,
       integration: integrations,
       publisher,
       cursor: after,
     } = c.req.valid("query");
+    const sort = browseSort(words);
     // One card more than a batch shows whether another batch follows.
     const { listings, count } = await c.var.storage.browseListings({
+      words,
       sdks,
       integrations,
       publisher,
@@ -118,10 +121,10 @@ export const activities = new Hono<AppEnv>()
       {
         activities: batch.map(activityCard),
         count,
-        sort: "newest",
+        sort,
         nextCursor:
           listings.length > BROWSE_BATCH_SIZE && last !== undefined
-            ? encodeBrowseCursor(last)
+            ? encodeBrowseCursor({ ...last, sort })
             : null,
       },
       200,

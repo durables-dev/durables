@@ -1,5 +1,7 @@
-import { and, count, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { containsPattern, LIKE_ESCAPE } from "./like-pattern";
 import {
   accounts,
   handles,
@@ -86,8 +88,12 @@ export interface ListingDescription {
   description: string;
 }
 
-/** Where a browse batch ends: the last card's published date, handle and name. */
+/**
+ * Where a browse batch ends: the last card's relevance score, published date, handle and name.
+ * The score is 0 when there are no words.
+ */
 export interface BrowsePosition {
+  score: number;
   publishedAt: Date;
   handle: string;
   name: string;
@@ -96,8 +102,11 @@ export interface BrowsePosition {
 /**
  * What browse narrows by and where it starts. An empty or absent list does not filter. Several
  * SDKs match any one of them, as do several integrations. The publisher matches the handle.
+ * Every word must appear in the title, description, address, SDK or one of the integrations.
  */
 export interface BrowseFilter {
+  /** The search words. Empty or absent means no words. */
+  words?: readonly string[] | undefined;
   sdks?: readonly Sdk[] | undefined;
   integrations?: readonly string[] | undefined;
   publisher?: string | undefined;
@@ -107,9 +116,20 @@ export interface BrowseFilter {
   limit: number;
 }
 
-/** A browse batch: up to the limit's listings, newest first, and the count of every match. */
+/**
+ * A browse result: a listing and its relevance score. Each word in the title scores 3 and each
+ * word in the description scores 1. The score is 0 when there are no words.
+ */
+export interface BrowseListing extends Listing {
+  score: number;
+}
+
+/**
+ * A browse batch and the count of every match. Listings are highest score first, then newest
+ * first, so with no words they are newest first.
+ */
 export interface BrowseResult {
-  listings: Listing[];
+  listings: BrowseListing[];
   count: number;
 }
 
@@ -403,17 +423,32 @@ export class Storage {
 
   /**
    * One batch of browse results and the count of every match. Each listing appears once, as its
-   * highest version number, and the filters apply to that version. Cards are newest first by
-   * that version's published date, then by handle and name, so every card has one place in the
-   * order and a batch can start after any of them.
+   * highest version number, and the filters and words apply to that version. Cards are highest
+   * score first, then newest first by that version's published date, then by handle and name, so
+   * every card has one place in the order and a batch can start after any of them. With no
+   * words every score is 0, so cards are newest first.
    */
   async browseListings({
+    words = [],
     sdks = [],
     integrations = [],
     publisher,
     after,
     limit,
   }: BrowseFilter): Promise<BrowseResult> {
+    // The words go to D1 as one JSON array of LIKE patterns, read with json_each, so a search
+    // binds one parameter however many words it has. LIKE ignores ASCII letter case.
+    const patterns = JSON.stringify(words.map(containsPattern));
+    const like = (text: SQL | SQLiteColumn, pattern: SQL) =>
+      sql`(${text} like ${pattern} escape ${LIKE_ESCAPE})`;
+    const word = sql.raw("search_word.value");
+    const eachWord = sql`json_each(${patterns}) as search_word`;
+
+    const score =
+      words.length === 0
+        ? sql<number>`0`
+        : sql<number>`(select coalesce(sum(${like(versions.title, word)} * 3 + ${like(listings.description, word)}), 0) from ${eachWord})`;
+
     const ranked = this.#db.$with("ranked").as(
       this.#db
         .select({
@@ -425,6 +460,7 @@ export class Storage {
           sdk: versions.sdk,
           integrations: versions.integrations,
           publishedAt: versions.publishedAt,
+          score: score.as("score"),
           rank: sql<number>`row_number() over (partition by ${versions.handle}, ${versions.name} order by ${highestVersionFirst()})`.as(
             "rank",
           ),
@@ -440,13 +476,24 @@ export class Storage {
     );
 
     const filters: SQL[] = [eq(ranked.rank, 1)];
+    if (words.length > 0) {
+      // Every word appears in at least one field. The address is matched as the site shows it.
+      const address = sql`${ranked.handle} || '/' || ${ranked.name} || '@' || ${ranked.version}`;
+      const inIntegrations = sql`exists (select 1 from json_each(${ranked.integrations}) as integration where ${like(sql.raw("integration.value"), word)})`;
+      filters.push(
+        sql`not exists (select 1 from ${eachWord} where not (${like(ranked.title, word)} or ${like(ranked.description, word)} or ${like(address, word)} or ${like(ranked.sdk, word)} or ${inIntegrations}))`,
+      );
+    }
     if (sdks.length > 0) {
-      filters.push(inArray(ranked.sdk, [...sdks]));
+      // One JSON parameter however many values were sent, as with the words: D1 binds at most 100.
+      filters.push(
+        sql`${ranked.sdk} in (select value from json_each(${JSON.stringify(sdks)}))`,
+      );
     }
     if (integrations.length > 0) {
       // Integrations are stored as a JSON array in text, so each listing's are read with json_each.
       filters.push(
-        sql`exists (select 1 from json_each(${ranked.integrations}) where ${inArray(sql`json_each.value`, [...integrations])})`,
+        sql`exists (select 1 from json_each(${ranked.integrations}) as integration where integration.value in (select value from json_each(${JSON.stringify(integrations)})))`,
       );
     }
     if (publisher !== undefined) {
@@ -458,14 +505,20 @@ export class Storage {
       // published_at is stored in whole seconds.
       const second = Math.floor(position.publishedAt.getTime() / 1000);
       return or(
-        sql`${ranked.publishedAt} < ${second}`,
+        sql`${ranked.score} < ${position.score}`,
         and(
-          sql`${ranked.publishedAt} = ${second}`,
+          sql`${ranked.score} = ${position.score}`,
           or(
-            sql`${ranked.handle} > ${position.handle}`,
+            sql`${ranked.publishedAt} < ${second}`,
             and(
-              eq(ranked.handle, position.handle),
-              sql`${ranked.name} > ${position.name}`,
+              sql`${ranked.publishedAt} = ${second}`,
+              or(
+                sql`${ranked.handle} > ${position.handle}`,
+                and(
+                  eq(ranked.handle, position.handle),
+                  sql`${ranked.name} > ${position.name}`,
+                ),
+              ),
             ),
           ),
         ),
@@ -484,10 +537,16 @@ export class Storage {
           sdk: ranked.sdk,
           integrations: ranked.integrations,
           publishedAt: ranked.publishedAt,
+          score: ranked.score,
         })
         .from(ranked)
         .where(after === undefined ? matches : and(matches, startAfter(after)))
-        .orderBy(desc(ranked.publishedAt), ranked.handle, ranked.name)
+        .orderBy(
+          desc(ranked.score),
+          desc(ranked.publishedAt),
+          ranked.handle,
+          ranked.name,
+        )
         .limit(limit),
       this.#db
         .with(ranked)

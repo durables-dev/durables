@@ -1,17 +1,39 @@
 import { z } from "zod";
 import type { BrowsePosition } from "../storage/storage";
+import type { BrowseSort } from "./responses";
 
 // The page position browse answers as nextCursor and reads back from the cursor parameter
 // (api/CONVENTIONS.md: pagination is cursor-based). The client treats it as opaque. Inside, it
 // is base64url JSON naming the sort it belongs to and the last card the previous batch showed.
 
-/** What a newest-first cursor holds: the last card's published second, handle and name. */
-const newestCursor = z.strictObject({
-  sort: z.literal("newest"),
+/** A page position and the sort it belongs to. */
+export interface BrowseCursor extends BrowsePosition {
+  sort: BrowseSort;
+}
+
+const position = {
   publishedAt: z.int().nonnegative(),
   handle: z.string().min(1),
   name: z.string().min(1),
+};
+
+/** What a newest-first cursor holds: the last card's published second, handle and name. */
+const newestCursor = z.strictObject({
+  sort: z.literal("newest"),
+  ...position,
 });
+
+/** What a relevance cursor holds: the newest-first fields and the last card's score. */
+const relevanceCursor = z.strictObject({
+  sort: z.literal("relevance"),
+  score: z.int().nonnegative(),
+  ...position,
+});
+
+const cursorJson = z.discriminatedUnion("sort", [
+  newestCursor,
+  relevanceCursor,
+]);
 
 const base64urlPattern = /^[A-Za-z0-9_-]+$/;
 
@@ -37,15 +59,19 @@ const fromBase64url = (encoded: string): string | undefined => {
   }
 };
 
-/** The cursor for the batch after the one ending at this position. */
+/** The cursor for the batch after the one ending at this position, in this sort. */
 export const encodeBrowseCursor = ({
+  sort,
+  score,
   publishedAt,
   handle,
   name,
-}: BrowsePosition): string =>
+}: BrowseCursor): string =>
   toBase64url(
     JSON.stringify({
-      sort: "newest",
+      sort,
+      // With no words every score is 0, so a newest-first cursor leaves it out.
+      ...(sort === "relevance" ? { score } : {}),
       // published_at is stored in whole seconds.
       publishedAt: Math.floor(publishedAt.getTime() / 1000),
       handle,
@@ -53,10 +79,10 @@ export const encodeBrowseCursor = ({
     }),
   );
 
-/** The position a cursor names, or undefined when the cursor is malformed. */
+/** The position and sort a cursor names, or undefined when the cursor is malformed. */
 export const decodeBrowseCursor = (
   cursor: string,
-): BrowsePosition | undefined => {
+): BrowseCursor | undefined => {
   const text = fromBase64url(cursor);
   if (text === undefined) {
     return undefined;
@@ -67,10 +93,16 @@ export const decodeBrowseCursor = (
   } catch {
     return undefined;
   }
-  const parsed = newestCursor.safeParse(json);
+  const parsed = cursorJson.safeParse(json);
   if (!parsed.success) {
     return undefined;
   }
-  const { publishedAt, handle, name } = parsed.data;
-  return { publishedAt: new Date(publishedAt * 1000), handle, name };
+  const { sort, publishedAt, handle, name } = parsed.data;
+  return {
+    sort,
+    score: parsed.data.sort === "relevance" ? parsed.data.score : 0,
+    publishedAt: new Date(publishedAt * 1000),
+    handle,
+    name,
+  };
 };
