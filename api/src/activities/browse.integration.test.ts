@@ -335,6 +335,21 @@ describe("the SDK filter", () => {
   test("answers 400 when one of several SDKs is unsupported", async () => {
     await expectInvalid({ sdk: ["Python", "Java"] }, "sdk", sdkFilterMessage);
   });
+
+  test("answers 200 for an SDK repeated 150 times", async () => {
+    // D1 binds at most 100 parameters, so the SDKs go to it as one JSON array.
+    const handle = await newHandle();
+    const python = await seedActivity(handle, {}, [{ sdk: "Python" }]);
+    await seedActivity(handle, {}, [{ sdk: "TypeScript" }]);
+
+    const body = await browse({
+      publisher: handle,
+      sdk: Array.from({ length: 150 }, () => "Python"),
+    });
+
+    expect(names(body)).toEqual([python.name]);
+    expect(body.count).toBe(1);
+  });
 });
 
 describe("the integration filter", () => {
@@ -378,6 +393,26 @@ describe("the integration filter", () => {
     const body = await browse({ publisher: handle, integration: "S3" });
 
     expect(body.count).toBe(0);
+  });
+
+  test("answers 200 for 150 integration values", async () => {
+    // D1 binds at most 100 parameters, so the integrations go to it as one JSON array.
+    const handle = await newHandle();
+    const stripe = await seedActivity(handle, {}, [
+      { integrations: ["Stripe"] },
+    ]);
+    await seedActivity(handle, {}, [{ integrations: ["Slack"] }]);
+
+    const body = await browse({
+      publisher: handle,
+      integration: [
+        ...Array.from({ length: 149 }, (_, i) => `Integration ${i}`),
+        "Stripe",
+      ],
+    });
+
+    expect(names(body)).toEqual([stripe.name]);
+    expect(body.count).toBe(1);
   });
 });
 

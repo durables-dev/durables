@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { containsPattern, LIKE_ESCAPE } from "./like-pattern";
@@ -485,12 +485,15 @@ export class Storage {
       );
     }
     if (sdks.length > 0) {
-      filters.push(inArray(ranked.sdk, [...sdks]));
+      // One JSON parameter however many values were sent, as with the words: D1 binds at most 100.
+      filters.push(
+        sql`${ranked.sdk} in (select value from json_each(${JSON.stringify(sdks)}))`,
+      );
     }
     if (integrations.length > 0) {
       // Integrations are stored as a JSON array in text, so each listing's are read with json_each.
       filters.push(
-        sql`exists (select 1 from json_each(${ranked.integrations}) where ${inArray(sql`json_each.value`, [...integrations])})`,
+        sql`exists (select 1 from json_each(${ranked.integrations}) as integration where integration.value in (select value from json_each(${JSON.stringify(integrations)})))`,
       );
     }
     if (publisher !== undefined) {
