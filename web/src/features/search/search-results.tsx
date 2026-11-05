@@ -30,8 +30,8 @@ export function SearchResults({ search, onClearAll }: SearchResultsProps) {
     if (results.isError) {
       return (
         <div className={styles["message"]}>
-          <h2 className={styles["message-heading"]}>Something went wrong</h2>
-          <p className={styles["message-text"]}>
+          <h2 className={styles["messageHeading"]}>Something went wrong</h2>
+          <p className={styles["messageText"]}>
             Results could not be loaded. Try again in a moment.
           </p>
           <button
@@ -65,13 +65,13 @@ export function SearchResults({ search, onClearAll }: SearchResultsProps) {
       </p>
       {cards.length === 0 ? (
         <div className={styles["empty"]}>
-          <h2 className={styles["message-heading"]}>No activities match</h2>
-          <p className={styles["message-text"]}>
+          <h2 className={styles["messageHeading"]}>No activities match</h2>
+          <p className={styles["messageText"]}>
             Try removing a filter or describing what you need differently.
           </p>
           <button
             type="button"
-            className={styles["clear-all"]}
+            className={styles["clearAll"]}
             onClick={onClearAll}
           >
             Clear filters

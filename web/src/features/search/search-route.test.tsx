@@ -736,6 +736,28 @@ test("no matches shows the empty state, and Clear filters clears the words and t
     .toHaveAttribute("aria-pressed", "true");
 });
 
+test("the empty state's heading, text and Clear filters button take their styles", async () => {
+  serveBrowse([testCard(1)], { matching: () => [] });
+  const opened = await openAt(searchAddress({ words: "nothing like this" }));
+
+  // A class name the CSS module does not export is undefined, and React then writes no class.
+  await expect
+    .element(
+      opened.screen.getByRole("heading", { name: "No activities match" }),
+    )
+    .toHaveAttribute("class");
+  await expect
+    .element(
+      opened.screen.getByText(
+        "Try removing a filter or describing what you need differently.",
+      ),
+    )
+    .toHaveAttribute("class");
+  await expect
+    .element(opened.screen.getByRole("button", { name: "Clear filters" }))
+    .toHaveAttribute("class");
+});
+
 // Criterion 7: the error state
 
 test("a failed load shows the error state, and Try again asks again", async () => {
@@ -761,6 +783,20 @@ test("a failed load shows the error state, and Try again asks again", async () =
   await expect
     .element(opened.screen.getByText("Something went wrong"))
     .not.toBeInTheDocument();
+});
+
+test("the error state's heading and text take their styles", async () => {
+  serveBrowse(testCards(1), { fails: () => true });
+  const opened = await openAt("/search");
+
+  await expect
+    .element(
+      opened.screen.getByRole("heading", { name: "Something went wrong" }),
+    )
+    .toHaveAttribute("class");
+  await expect
+    .element(opened.screen.getByText(/Results could not be loaded/))
+    .toHaveAttribute("class");
 });
 
 test("the filters stay usable while the results have failed", async () => {
