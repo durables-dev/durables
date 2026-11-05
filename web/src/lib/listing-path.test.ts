@@ -8,6 +8,16 @@ describe("listingPath", () => {
     ).toBe("/ddieruf/charge-card@1.2.0");
   });
 
+  test("its page is at /handle/name@version", () => {
+    expect(
+      listingPath({
+        handle: "ddieruf",
+        name: "post-slack-message",
+        version: "1.0.0",
+      }),
+    ).toBe("/ddieruf/post-slack-message@1.0.0");
+  });
+
   test("each part is percent-encoded", () => {
     expect(
       listingPath({ handle: "a/b", name: "c?d", version: "1.0.0#x" }),

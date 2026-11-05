@@ -1,9 +1,6 @@
 import { Link } from "react-router";
-import {
-  listingPath,
-  publishedAddress,
-  type PublishedListing,
-} from "./published-listing";
+import { listingPath } from "@/lib/listing-path";
+import { publishedAddress, type PublishedListing } from "./published-listing";
 import styles from "./published-screen.module.css";
 import stepStyles from "./step.module.css";
 import { useFocusOnAppear } from "./use-focus-on-appear";
