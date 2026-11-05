@@ -3,9 +3,13 @@ import { encodeBrowseCursor } from "./browse-cursor";
 import {
   BROWSE_BATCH_SIZE,
   browseQuery,
+  browseSort,
   cursorMessage,
+  MAX_WORDS_LENGTH,
   publisherMessage,
   sdkFilterMessage,
+  searchWords,
+  wordsMessage,
 } from "./browse-request";
 
 /** The first error message for each failing field. */
@@ -70,10 +74,12 @@ describe("the browse query", () => {
 
   test("reads a cursor as the position it names", () => {
     const position = {
+      sort: "newest",
+      score: 0,
       publishedAt: new Date("2026-10-20T09:30:00Z"),
       handle: "acme",
       name: "charge-card",
-    };
+    } as const;
 
     expect(browseQuery.parse({ cursor: encodeBrowseCursor(position) })).toEqual(
       {
@@ -97,7 +103,96 @@ describe("the browse query", () => {
   });
 
   test("ignores parameters it does not know", () => {
-    expect(browseQuery.parse({ q: "stripe" })).toEqual({});
+    expect(browseQuery.parse({ sort: "popular" })).toEqual({});
+  });
+});
+
+describe("the search words", () => {
+  const position = {
+    score: 3,
+    publishedAt: new Date("2026-10-20T09:30:00Z"),
+    handle: "acme",
+    name: "charge-card",
+  };
+
+  test("are read from q, split on spaces", () => {
+    expect(browseQuery.parse({ q: "charge  card\tstripe" })).toEqual({
+      q: ["charge", "card", "stripe"],
+    });
+  });
+
+  test("keep letter case and pattern characters as typed", () => {
+    expect(browseQuery.parse({ q: "Stripe 100%_off" })).toEqual({
+      q: ["Stripe", "100%_off"],
+    });
+  });
+
+  test.each(["", "   ", " \t \n "])("are no words when q is %j", (q) => {
+    expect(browseQuery.parse({ q })).toEqual({ q: [] });
+  });
+
+  test("accept words up to the limit", () => {
+    const q = "a".repeat(MAX_WORDS_LENGTH);
+
+    expect(browseQuery.parse({ q })).toEqual({ q: [q] });
+  });
+
+  test("are rejected over the limit", () => {
+    expect(errors({ q: "a".repeat(MAX_WORDS_LENGTH + 1) })).toEqual({
+      q: wordsMessage,
+    });
+  });
+
+  test("are rejected when q is sent more than once", () => {
+    expect(errors({ q: ["charge", "card"] })).toEqual({ q: wordsMessage });
+  });
+
+  test("take a relevance cursor", () => {
+    const cursor = encodeBrowseCursor({ ...position, sort: "relevance" });
+
+    expect(browseQuery.parse({ q: "charge", cursor })).toEqual({
+      q: ["charge"],
+      cursor: { ...position, sort: "relevance" },
+    });
+  });
+
+  test("reject a newest-first cursor", () => {
+    const cursor = encodeBrowseCursor({ ...position, sort: "newest" });
+
+    expect(errors({ q: "charge", cursor })).toEqual({ cursor: cursorMessage });
+  });
+
+  test.each([{}, { q: "   " }])(
+    "being absent or blank, reject a relevance cursor: %j",
+    (query) => {
+      const cursor = encodeBrowseCursor({ ...position, sort: "relevance" });
+
+      expect(errors({ ...query, cursor })).toEqual({ cursor: cursorMessage });
+    },
+  );
+});
+
+describe("searchWords", () => {
+  test("splits on any run of whitespace and drops the ends", () => {
+    expect(searchWords("  send\n slack   message ")).toEqual([
+      "send",
+      "slack",
+      "message",
+    ]);
+  });
+
+  test("finds no words in whitespace", () => {
+    expect(searchWords(" \t ")).toEqual([]);
+  });
+});
+
+describe("browseSort", () => {
+  test("is relevance with words", () => {
+    expect(browseSort(["stripe"])).toBe("relevance");
+  });
+
+  test("is newest with no words", () => {
+    expect(browseSort([])).toBe("newest");
   });
 });
 

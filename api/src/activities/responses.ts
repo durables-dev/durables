@@ -59,8 +59,8 @@ export interface ActivityCard extends Address {
   publishedAt: string;
 }
 
-/** The order browse results are in. With no words, it is newest first. */
-export type BrowseSort = "newest";
+/** The order browse results are in: relevance when there are words, newest first otherwise. */
+export type BrowseSort = "newest" | "relevance";
 
 /** A batch of browse results, as `GET /api/activities` answers it. */
 export interface BrowseResponse {

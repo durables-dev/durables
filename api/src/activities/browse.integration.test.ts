@@ -2,10 +2,12 @@ import type { Sdk } from "@durables/schemas";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
 import { seedAccount, seedListing, seedVersion } from "../storage/seed";
+import { encodeBrowseCursor } from "./browse-cursor";
 import {
   BROWSE_BATCH_SIZE,
   cursorMessage,
   sdkFilterMessage,
+  wordsMessage,
 } from "./browse-request";
 import type { ActivityCard, BrowseResponse } from "./responses";
 
@@ -495,5 +497,455 @@ describe("no matches", () => {
       sort: "newest",
       nextCursor: null,
     });
+  });
+});
+
+/** A word no other test uses, so a search for it finds only this test's listings. */
+const newWord = () => `zq${crypto.randomUUID().slice(0, 8)}`;
+
+describe("searching with words", () => {
+  test.each<
+    [
+      string,
+      (word: string) => {
+        listing: { name?: string; description?: string };
+        version: SeededVersion;
+      },
+    ]
+  >([
+    [
+      "title",
+      (word) => ({ listing: {}, version: { title: `Charge ${word}` } }),
+    ],
+    [
+      "description",
+      (word) => ({
+        listing: { description: `Charges a card, then ${word} it.` },
+        version: {},
+      }),
+    ],
+    [
+      "address",
+      (word) => ({ listing: { name: `${word}-charge-card` }, version: {} }),
+    ],
+  ])(
+    "returns a listing with the word in its %s, sorted by relevance",
+    async (_, seed) => {
+      const word = newWord();
+      const { listing, version } = seed(word);
+      const handle = await newHandle();
+      const matching = await seedActivity(handle, listing, [version]);
+      await seedActivity(handle);
+
+      const body = await browse({ q: word });
+
+      expect(body.sort).toBe("relevance");
+      expect(names(body)).toEqual([matching.name]);
+      expect(body.count).toBe(1);
+      expect(body.nextCursor).toBeNull();
+    },
+  );
+
+  test("returns a listing with the word as its SDK", async () => {
+    const handle = await newHandle();
+    const typescript = await seedActivity(handle, {}, [{ sdk: "TypeScript" }]);
+    await seedActivity(handle, {}, [{ sdk: "Python" }]);
+
+    const body = await browse({ q: "typescript", publisher: handle });
+
+    expect(names(body)).toEqual([typescript.name]);
+    expect(body.sort).toBe("relevance");
+  });
+
+  test("returns a listing with the word in one of its integrations", async () => {
+    const handle = await newHandle();
+    const postgres = await seedActivity(handle, {}, [
+      { integrations: ["Stripe", "Postgres"] },
+    ]);
+    await seedActivity(handle, {}, [{ integrations: ["Stripe"] }]);
+    await seedActivity(handle, {}, [{ integrations: [] }]);
+
+    const body = await browse({ q: "postgres", publisher: handle });
+
+    expect(names(body)).toEqual([postgres.name]);
+  });
+
+  test("returns only listings where every word appears in some field", async () => {
+    const [first, second] = [newWord(), newWord()];
+    const handle = await newHandle();
+    const both = await seedActivity(
+      handle,
+      { description: `Then ${second}.` },
+      [{ title: `Charge ${first}` }],
+    );
+    await seedActivity(handle, {}, [{ title: `Charge ${first}` }]);
+    await seedActivity(handle, {}, [{ title: `Charge ${second}` }]);
+
+    const body = await browse({ q: `${first} ${second}` });
+
+    expect(names(body)).toEqual([both.name]);
+    expect(body.count).toBe(1);
+  });
+
+  test("ranks a title match above a description match, even when the description match is newer", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    const inDescription = await seedActivity(
+      handle,
+      { description: `Charges a card with ${word}.` },
+      [{ publishedAt: at("2026-06-02T00:00:00Z") }],
+    );
+    const inTitle = await seedActivity(handle, {}, [
+      { title: `Charge ${word}`, publishedAt: at("2026-06-01T00:00:00Z") },
+    ]);
+
+    const body = await browse({ q: word });
+
+    expect(names(body)).toEqual([inTitle.name, inDescription.name]);
+  });
+
+  test("scores 3 for each word in the title and 1 for each word in the description", async () => {
+    const [first, second] = [newWord(), newWord()];
+    const handle = await newHandle();
+    const date = at("2026-06-01T00:00:00Z");
+    // Scores: 6, 4, 3 and 2. The address and SDK match but score nothing.
+    const bothInTitle = await seedActivity(handle, {}, [
+      { title: `${first} ${second}`, publishedAt: date },
+    ]);
+    const titleAndDescription = await seedActivity(
+      handle,
+      { description: `About ${second}.` },
+      [{ title: first, publishedAt: date }],
+    );
+    const titleAndAddress = await seedActivity(
+      handle,
+      { name: `${second}-tool` },
+      [{ title: first, publishedAt: date }],
+    );
+    const bothInDescription = await seedActivity(
+      handle,
+      { description: `${first} and ${second}.` },
+      [{ publishedAt: date }],
+    );
+
+    const body = await browse({ q: `${second} ${first}` });
+
+    expect(names(body)).toEqual([
+      bothInTitle.name,
+      titleAndDescription.name,
+      titleAndAddress.name,
+      bothInDescription.name,
+    ]);
+  });
+
+  test("orders listings with equal scores newest first, then by handle and name", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    const older = await seedActivity(handle, { name: "a-older" }, [
+      { title: `Charge ${word}`, publishedAt: at("2026-06-01T00:00:00Z") },
+    ]);
+    const newerB = await seedActivity(handle, { name: "c-newer" }, [
+      { title: `Charge ${word}`, publishedAt: at("2026-06-03T00:00:00Z") },
+    ]);
+    const newerA = await seedActivity(handle, { name: "b-newer" }, [
+      { title: `Charge ${word}`, publishedAt: at("2026-06-03T00:00:00Z") },
+    ]);
+
+    const body = await browse({ q: word });
+
+    expect(names(body)).toEqual([newerA.name, newerB.name, older.name]);
+  });
+
+  test("matches the version on the card, not older versions", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    await seedActivity(handle, {}, [
+      { version: "1.0.0", title: `Charge ${word}` },
+      { version: "2.0.0", title: "Charge card" },
+    ]);
+
+    const body = await browse({ q: word });
+
+    expect(body.activities).toEqual([]);
+    expect(body.count).toBe(0);
+  });
+
+  test("ignores letter case in the words and in the listing", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    const upper = await seedActivity(handle, {}, [
+      { title: `Charge ${word.toUpperCase()}` },
+    ]);
+    const lower = await seedActivity(handle, { name: `${word}-tool` });
+
+    const lowerSearch = await browse({ q: word });
+    const upperSearch = await browse({ q: word.toUpperCase() });
+
+    expect(names(lowerSearch).sort()).toEqual([upper.name, lower.name].sort());
+    expect(names(upperSearch).sort()).toEqual([upper.name, lower.name].sort());
+  });
+
+  test("combines with the SDK, integration and publisher filters, so results match all of them", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    const other = await newHandle();
+    const title = `Charge ${word}`;
+    const matching = await seedActivity(handle, {}, [
+      { title, sdk: "Python", integrations: ["Stripe"] },
+    ]);
+    await seedActivity(handle, {}, [
+      { title, sdk: "TypeScript", integrations: ["Stripe"] },
+    ]);
+    await seedActivity(handle, {}, [
+      { title, sdk: "Python", integrations: ["Slack"] },
+    ]);
+    await seedActivity(other, {}, [
+      { title, sdk: "Python", integrations: ["Stripe"] },
+    ]);
+    await seedActivity(handle, {}, [
+      { sdk: "Python", integrations: ["Stripe"] },
+    ]);
+
+    const body = await browse({
+      q: word,
+      sdk: "Python",
+      integration: "Stripe",
+      publisher: handle,
+    });
+
+    expect(names(body)).toEqual([matching.name]);
+    expect(body.count).toBe(1);
+    expect(body.sort).toBe("relevance");
+  });
+
+  test.each(["", "   ", " \t "])(
+    "treats the words %j as no words: newest first, sorted by newest",
+    async (q) => {
+      const handle = await newHandle();
+      const older = await seedActivity(handle, {}, [
+        { publishedAt: at("2026-06-01T00:00:00Z") },
+      ]);
+      const newer = await seedActivity(handle, {}, [
+        { publishedAt: at("2026-06-02T00:00:00Z") },
+      ]);
+
+      const body = await browse({ q, publisher: handle });
+
+      expect(names(body)).toEqual([newer.name, older.name]);
+      expect(body.sort).toBe("newest");
+      expect(body.count).toBe(2);
+    },
+  );
+
+  test.each([
+    ["%", "Save 100% today", "Save 100 today"],
+    ["_", "Read a_b file", "Read axb file"],
+    ["\\", "Split a\\b path", "Split ab path"],
+  ])(
+    "matches %s in the words literally",
+    async (character, withCharacter, without) => {
+      const handle = await newHandle();
+      const literal = await seedActivity(handle, {}, [
+        { title: withCharacter },
+      ]);
+      await seedActivity(handle, {}, [{ title: without }]);
+
+      const alone = await browse({ q: character, publisher: handle });
+      const inWord = await browse({
+        q: withCharacter.split(" ")[1] ?? "",
+        publisher: handle,
+      });
+
+      expect(names(alone)).toEqual([literal.name]);
+      expect(names(inWord)).toEqual([literal.name]);
+    },
+  );
+
+  test("answers an empty batch, a count of 0 and no next position when nothing matches", async () => {
+    const body = await browse({ q: newWord() });
+
+    expect(body).toEqual({
+      activities: [],
+      count: 0,
+      sort: "relevance",
+      nextCursor: null,
+    });
+  });
+
+  test("pages matches in batches of 50 in relevance order, each with the full count", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    const seeded: { name: string; score: number; second: number }[] = [];
+    for (let i = 0; i < 60; i++) {
+      // Thirds score 3, 1 and 4, and pairs share a published second.
+      const score = [3, 1, 4][i % 3] ?? 0;
+      const second = Math.floor(i / 2);
+      const name = `activity-${String(i).padStart(3, "0")}`;
+      await seedActivity(
+        handle,
+        {
+          name,
+          description:
+            score === 3 ? "Charges a card." : `Charges a card with ${word}.`,
+        },
+        [
+          {
+            title: score === 1 ? "Charge card" : `Charge ${word}`,
+            publishedAt: new Date(Date.UTC(2026, 0, 1) + second * 1000),
+          },
+        ],
+      );
+      seeded.push({ name, score, second });
+    }
+    await seedActivity(handle);
+    const expected = [...seeded]
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.second - a.second ||
+          a.name.localeCompare(b.name),
+      )
+      .map(({ name }) => name);
+
+    const first = await browse({ q: word });
+    const second = await browse({ q: word, cursor: first.nextCursor ?? "" });
+
+    expect([first, second].map((b) => b.activities.length)).toEqual([50, 10]);
+    expect([first, second].map((b) => b.count)).toEqual([60, 60]);
+    expect([first, second].map((b) => b.sort)).toEqual([
+      "relevance",
+      "relevance",
+    ]);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(second.nextCursor).toBeNull();
+    expect([...names(first), ...names(second)]).toEqual(expected);
+  });
+
+  test("answers 400 for a newest-first page position sent with words", async () => {
+    const cursor = encodeBrowseCursor({
+      sort: "newest",
+      score: 0,
+      publishedAt: at("2026-06-01T00:00:00Z"),
+      handle: "acme",
+      name: "charge-card",
+    });
+
+    await expectInvalid({ q: "charge", cursor }, "cursor", cursorMessage);
+  });
+
+  test("answers 400 for a relevance page position sent without words", async () => {
+    const cursor = encodeBrowseCursor({
+      sort: "relevance",
+      score: 3,
+      publishedAt: at("2026-06-01T00:00:00Z"),
+      handle: "acme",
+      name: "charge-card",
+    });
+
+    await expectInvalid({ cursor }, "cursor", cursorMessage);
+  });
+
+  test("answers 400 for words over 500 characters", async () => {
+    await expectInvalid({ q: "a".repeat(501) }, "q", wordsMessage);
+  });
+
+  test("answers no-store", async () => {
+    const response = await get({ q: "charge" });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
+
+/** A Python activity importing slack_sdk, which implies the Slack integration. */
+const postSlackMessage = [
+  "import os",
+  "",
+  "from slack_sdk import WebClient",
+  "from temporalio import activity",
+  "",
+  "",
+  "@activity.defn",
+  "async def post_slack_message(channel: str) -> str:",
+  '    client = WebClient(token=os.environ["SLACK_TOKEN"])',
+  "    return client.chat_postMessage(channel=channel).data['ts']",
+  "",
+].join("\n");
+
+const cookieFrom = (response: Response) =>
+  (response.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+
+/** Signs in through the local fake provider as a new publisher with a handle chosen. */
+const newSignedInPublisher = async () => {
+  const signedIn = await exports.default.fetch(
+    "http://localhost/api/session/providers/fake",
+    {
+      method: "POST",
+      headers: {
+        "Sec-Fetch-Site": "same-origin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Ada Lovelace",
+        providerAccountId: `publisher-${crypto.randomUUID()}`,
+      }),
+    },
+  );
+  expect(signedIn.status).toBe(204);
+  const handle = `ada-${crypto.randomUUID().slice(0, 8)}`;
+  const chosen = await exports.default.fetch(
+    "http://localhost/api/session/handle",
+    {
+      method: "PUT",
+      headers: {
+        "Sec-Fetch-Site": "same-origin",
+        "Content-Type": "application/json",
+        Cookie: cookieFrom(signedIn),
+      },
+      body: JSON.stringify({ handle }),
+    },
+  );
+  expect(chosen.status).toBe(200);
+  return { cookie: cookieFrom(chosen), handle };
+};
+
+describe("an activity just published", () => {
+  test("is found by searching its title, with nothing else written", async () => {
+    const word = newWord();
+    const { cookie, handle } = await newSignedInPublisher();
+    const name = `post-slack-message-${crypto.randomUUID().slice(0, 8)}`;
+    const published = await exports.default.fetch(
+      "http://localhost/api/activities",
+      {
+        method: "POST",
+        headers: {
+          "Sec-Fetch-Site": "same-origin",
+          "Content-Type": "application/json",
+          Cookie: cookie,
+        },
+        body: JSON.stringify({
+          code: postSlackMessage,
+          title: `Post slack message ${word}`,
+          name,
+          description: "Posts a message to a Slack channel.",
+          confirmations: {
+            rights: true,
+            mitZero: true,
+            noSecrets: true,
+            notMalicious: true,
+            noResponsibility: true,
+            terms: true,
+          },
+        }),
+      },
+    );
+    expect(published.status).toBe(201);
+
+    const body = await browse({ q: `post ${word.toUpperCase()}` });
+
+    expect(body.activities.map((card) => card.address)).toEqual([
+      `${handle}/${name}@1.0.0`,
+    ]);
+    expect(body.sort).toBe("relevance");
   });
 });
