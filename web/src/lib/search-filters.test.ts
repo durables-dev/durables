@@ -1,4 +1,4 @@
-import type { Search } from "@/lib/search-address";
+import type { Search } from "./search-address";
 import { describe, expect, test } from "vitest";
 import {
   activeFilterCount,
