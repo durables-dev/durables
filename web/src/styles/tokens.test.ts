@@ -105,6 +105,20 @@ test.each([
 test.each([
   ["Ink", ink],
   ["Cream", cream],
+])(
+  "a positive tag on a surface panel keeps AA contrast under %s",
+  (_theme, block) => {
+    const text = resolve(block, "--positive") ?? resolve(ink, "--positive");
+    const tag = resolve(block, "--positive-tag");
+    expect(text).toMatch(/^#[0-9a-f]{6}$/);
+    expect(tag).toMatch(/^#[0-9a-f]{6}$/);
+    expect(contrast(text ?? "", tag ?? "")).toBeGreaterThanOrEqual(4.5);
+  },
+);
+
+test.each([
+  ["Ink", ink],
+  ["Cream", cream],
 ])("the code panel stays Ink with Cream text under %s", (_theme, block) => {
   expect(
     resolve(block, "--code-background") ?? resolve(ink, "--code-background"),

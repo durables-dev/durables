@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
-import { expect, publisherInitials, publisherName, test } from "../fixtures";
+import {
+  expect,
+  publisherInitials,
+  publisherName,
+  sample,
+  test,
+} from "../fixtures";
 
 // Where a provider's callback sends a finished sign-in (api: session/sign-in.ts).
 const signedInPath = "/contribute";
@@ -192,6 +198,105 @@ test.describe("as an anonymous visitor", () => {
       ).toHaveCount(0);
       await expect(accountMenu(page)).toHaveText(publisherInitials);
       await expectAccessible();
+    },
+  );
+  test(
+    "an activity consumer opens a result's activity page and follows its integration and publisher links back into results",
+    { tag: "@journey" },
+    async ({ page, expectAccessible, publishListing, uniqueWord }) => {
+      const title = `Upload report ${uniqueWord()}`;
+      const listing = await publishListing({
+        code: sample("typescript"),
+        title,
+        name: "report-upload",
+        description: "Uploads a CSV report to S3 and returns where it is.",
+      });
+      const main = page.getByRole("main");
+      const result = main.getByRole("article", { name: title, exact: true });
+      const about = page.getByRole("region", { name: "About" });
+      const publisher = page.getByRole("region", { name: "Publisher" });
+      const publisherResults = `/search?publisher=${listing.handle}`;
+
+      async function expectOnActivityPage() {
+        await expect(page).toHaveURL(`/${listing.address}`);
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(
+          main.getByText(listing.address, { exact: true }),
+        ).toBeVisible();
+      }
+
+      async function expectPublisherResults() {
+        await expect(page).toHaveURL(publisherResults);
+        await expect(main.getByText(/ · sorted by /)).toHaveText(
+          "1 activity · sorted by newest",
+        );
+        await expect(main.getByRole("article")).toHaveCount(1);
+        await expect(result).toBeVisible();
+      }
+
+      await test.step("search home for the title and press View on its card", async () => {
+        await page.goto("/");
+        await page
+          .getByRole("searchbox", { name: "Search activities" })
+          .fill(title);
+        await page.getByRole("button", { name: "Search", exact: true }).click();
+        await expect(result).toBeVisible();
+
+        await result.getByRole("link", { name: "View" }).click();
+
+        await expectOnActivityPage();
+        await expectAccessible();
+      });
+
+      await test.step("the About card's Amazon S3 link opens results for Amazon S3", async () => {
+        await about
+          .getByRole("link", { name: "Amazon S3", exact: true })
+          .click();
+
+        await expect(page).toHaveURL("/search?integration=Amazon+S3");
+        await expect(
+          page
+            .getByRole("complementary", { name: "Filters" })
+            .getByRole("group", { name: "Integrates with" })
+            .getByRole("button", { name: "Amazon S3" }),
+        ).toHaveAttribute("aria-pressed", "true");
+        await expect(main.getByText(/ · sorted by /)).toHaveText(
+          /^[\d,]+ activit(y|ies) · sorted by newest$/,
+        );
+        // Newest first, and published moments ago.
+        await expect(result).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("Back returns to the activity page", async () => {
+        await page.goBack();
+
+        await expectOnActivityPage();
+      });
+
+      await test.step("Search all activities by the publisher opens their activities", async () => {
+        await publisher
+          .getByRole("link", {
+            name: `Search all activities by ${listing.handle}`,
+          })
+          .click();
+
+        await expectPublisherResults();
+        await expectAccessible();
+      });
+
+      await test.step("the Publisher card's handle opens the same results", async () => {
+        await page.goBack();
+        await expectOnActivityPage();
+
+        await publisher
+          .getByRole("link", { name: listing.handle, exact: true })
+          .click();
+
+        await expectPublisherResults();
+      });
     },
   );
 });
