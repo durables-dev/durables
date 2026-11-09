@@ -105,6 +105,19 @@ interface Fixtures {
    */
   publishListing: (details: PublishDetails) => Promise<PublishedListing>;
   /**
+   * Publishes several activities through the API, in the order given, as one new publisher of
+   * its own, the way publishListing publishes one. At most ten, the publish rate limit.
+   */
+  publishListings: (
+    details: readonly PublishDetails[],
+  ) => Promise<PublishedListing[]>;
+  /**
+   * A word no published activity holds, unique to this test. Put in a title or description, it
+   * lets a search match this test's activities and nothing else. It derives from the worker
+   * index, with a random part because the local stores persist between runs.
+   */
+  uniqueWord: () => string;
+  /**
    * Reads the clipboard, as a paste would. Clipboard access is granted for the test, so the
    * page's own Copy buttons can write to it.
    */
@@ -304,9 +317,20 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 
   // The publisher signs in and chooses a handle the way the Contribute flow does, then
   // publishes. Nothing is cleaned up: the version's rows hold the account's handle.
-  publishListing: async ({ playwright, baseURL, uniqueHandle }, use) => {
-    const contexts: APIRequestContext[] = [];
+  publishListing: async ({ publishListings }, use) => {
     await use(async (details) => {
+      const [published] = await publishListings([details]);
+      if (published === undefined) throw new Error("Nothing was published.");
+      return published;
+    });
+  },
+
+  publishListings: async ({ playwright, baseURL, uniqueHandle }, use) => {
+    const contexts: APIRequestContext[] = [];
+    await use(async (listings) => {
+      if (listings.length > 10) {
+        throw new Error("One publisher can publish at most ten a minute.");
+      }
       const request = await playwright.request.newContext(
         baseURL === undefined ? {} : { baseURL },
       );
@@ -318,15 +342,27 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         headers: sameOrigin,
       });
       expect(chosen.status(), await chosen.text()).toBe(200);
-      const published = await publishAs(request, details);
-      return {
-        ...published,
-        address: `${published.handle}/${published.name}@${published.version}`,
-      };
+      const published: PublishedListing[] = [];
+      for (const details of listings) {
+        const response = await publishAs(request, details);
+        published.push({
+          ...response,
+          address: `${response.handle}/${response.name}@${response.version}`,
+        });
+      }
+      return published;
     });
     for (const request of contexts) {
       await request.dispose();
     }
+  },
+
+  // eslint-disable-next-line no-empty-pattern -- Playwright reads the fixtures a fixture needs from this pattern; this one needs none.
+  uniqueWord: async ({}, use, testInfo) => {
+    await use(
+      () =>
+        `zq${testInfo.workerIndex}x${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+    );
   },
 
   readClipboard: async ({ context, page }, use) => {
