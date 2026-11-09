@@ -37,49 +37,8 @@
 }
 
 .group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   padding-top: 18px;
   border-top: 1px solid var(--rule);
-}
-
-.caption {
-  margin: 0;
-  font-size: var(--text-label);
-  line-height: 1.45;
-}
-
-.title {
-  font-weight: 600;
-}
-
-.help {
-  color: var(--fg-muted);
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.chip {
-  height: 30px;
-  padding: 0 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
-  background: transparent;
-  color: var(--fg);
-  font-family: var(--font-body);
-  font-size: var(--text-label);
-  cursor: pointer;
-}
-
-.chip[aria-pressed="true"] {
-  border-color: var(--fg);
-  background: var(--fg);
-  color: var(--bg);
 }
 
 /* Below about 900px the filters move above the results. */

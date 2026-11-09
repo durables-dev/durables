@@ -1,4 +1,4 @@
-import type { Search } from "@/lib/search-address";
+import type { Search } from "./search-address";
 import type { Integration, Sdk } from "@durables/schemas";
 
 /** The search with every SDK cleared, which is what the Any chip means. */
