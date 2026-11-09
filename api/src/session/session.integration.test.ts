@@ -1,6 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { SessionIdentity } from "../auth/auth";
+import type { SessionChanges, SessionIdentity } from "../auth/auth";
 import { createApp } from "../index";
 import { seedAccount } from "../storage/seed";
 import { session } from "./session";
@@ -14,6 +14,12 @@ const testApp = createApp()
   .route("/api/session", session)
   .post("/api/test/sign-in", async (c) => {
     await c.var.auth.start(await c.req.json<SessionIdentity>());
+    return c.body(null, 204);
+  })
+  // Puts a handle in the cookie directly. The handle save refuses once an account exists, so
+  // this is the only way to give a returning publisher's cookie a handle that differs.
+  .post("/api/test/choose-handle", async (c) => {
+    await c.var.auth.update(await c.req.json<SessionChanges>());
     return c.body(null, 204);
   });
 
@@ -121,6 +127,96 @@ describe("GET /api/session", () => {
 
     expect(await response.json()).toMatchObject({
       user: { provider: "microsoft", accountExists: true },
+    });
+  });
+
+  test("returns the account's handle to a returning publisher who signs in again", async () => {
+    const seeded = await seedAccount(env.DB, { provider: "google" });
+    const cookie = await signIn(
+      identity({ providerAccountId: seeded.providerAccountId }),
+    );
+
+    const response = await readSession(cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({
+      user: { handle: seeded.handle, accountExists: true },
+    });
+  });
+
+  test("returns the account's handle when the cookie holds a different one", async () => {
+    const seeded = await seedAccount(env.DB, { provider: "github" });
+    const cookie = await signIn(
+      identity({
+        provider: "github",
+        providerAccountId: seeded.providerAccountId,
+      }),
+    );
+    const withOtherHandle = await testApp.request(
+      "/api/test/choose-handle",
+      {
+        method: "POST",
+        headers: { "Sec-Fetch-Site": "same-origin", Cookie: cookie },
+        body: JSON.stringify({ handle: `other-${seeded.handle}` }),
+      },
+      env,
+    );
+    expect(withOtherHandle.status).toBe(204);
+    const reissued =
+      (withOtherHandle.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+
+    const response = await readSession(reissued);
+
+    expect(await response.json()).toMatchObject({
+      user: { handle: seeded.handle, accountExists: true },
+    });
+  });
+
+  test("returns the cookie's chosen handle before the account exists", async () => {
+    const cookie = await signIn(identity());
+    const chosen = `chosen-${crypto.randomUUID().slice(0, 8)}`;
+    const withHandle = await testApp.request(
+      "/api/test/choose-handle",
+      {
+        method: "POST",
+        headers: { "Sec-Fetch-Site": "same-origin", Cookie: cookie },
+        body: JSON.stringify({ handle: chosen }),
+      },
+      env,
+    );
+    const reissued =
+      (withHandle.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+
+    const response = await readSession(reissued);
+
+    expect(await response.json()).toMatchObject({
+      user: { handle: chosen, accountExists: false },
+    });
+  });
+
+  test("looks the account up by the signed-in provider and provider account ID", async () => {
+    const providerAccountId = `shared-${crypto.randomUUID()}`;
+    const onGitHub = await seedAccount(env.DB, {
+      provider: "github",
+      providerAccountId,
+    });
+    const onGitLab = await seedAccount(env.DB, {
+      provider: "gitlab",
+      providerAccountId,
+    });
+    const gitLabCookie = await signIn(
+      identity({ provider: "gitlab", providerAccountId }),
+    );
+    const gitHubCookie = await signIn(
+      identity({ provider: "github", providerAccountId }),
+    );
+
+    expect(await (await readSession(gitLabCookie)).json()).toMatchObject({
+      user: { handle: onGitLab.handle, accountExists: true },
+    });
+    expect(await (await readSession(gitHubCookie)).json()).toMatchObject({
+      user: { handle: onGitHub.handle, accountExists: true },
     });
   });
 
