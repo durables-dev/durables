@@ -34,6 +34,10 @@
   --positive: var(--color-lagoon);
   /* The tint behind a positive tag, such as the SDK on a listing. */
   --positive-tint: rgb(79 189 183 / 18%);
+  /* The same tag on a surface panel, such as the SDK on a result card. It is opaque because
+     the translucent tint over Sand drops Lagoon Deep below AA, so on Cream it is the tint
+     over Cream instead. */
+  --positive-tag: #243330;
   /* The tint behind an accent mark, such as the default activity icon. */
   --accent-tint: rgb(255 90 31 / 16%);
   /* The round mark behind a publisher's initial, as the activity page shows it. Gold under
@@ -128,6 +132,7 @@
     --selected: var(--color-sand);
     --positive: var(--color-lagoon-deep);
     --positive-tint: rgb(15 116 113 / 12%);
+    --positive-tag: #e2ebe5;
     --tile-lagoon: var(--color-lagoon-deep);
     --tile-lagoon-tint: rgb(15 116 113 / 12%);
     --notice: rgb(255 183 0 / 16%);
