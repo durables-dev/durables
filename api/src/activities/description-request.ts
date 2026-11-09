@@ -8,5 +8,3 @@ import { z } from "zod";
 export const descriptionBody = z.object({
   description: listingDescriptionSchema,
 });
-
-export type DescriptionBody = z.infer<typeof descriptionBody>;
