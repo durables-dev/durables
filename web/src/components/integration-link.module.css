@@ -1,0 +1,6 @@
+.integration {
+  color: var(--positive);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

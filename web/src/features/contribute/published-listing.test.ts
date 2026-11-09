@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  listingPath,
   publishedAddress,
   publishedState,
   readPublishedListing,
@@ -35,9 +34,5 @@ describe("readPublishedListing", () => {
 describe("the listing's address", () => {
   test("is handle/name@version", () => {
     expect(publishedAddress(listing)).toBe("ddieruf/post-slack-message@1.0.0");
-  });
-
-  test("its page is at /handle/name@version", () => {
-    expect(listingPath(listing)).toBe("/ddieruf/post-slack-message@1.0.0");
   });
 });

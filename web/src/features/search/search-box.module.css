@@ -1,0 +1,9 @@
+.form {
+  width: 100%;
+  max-width: 584px;
+}
+
+.box {
+  padding: 0 18px 0 14px;
+  border-radius: var(--radius-panel);
+}

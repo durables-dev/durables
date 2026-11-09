@@ -1,4 +1,6 @@
 import "@/styles/global.css";
+import { readSearch, searchAddress } from "@/lib/search-address";
+import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test } from "vitest";
 import { render } from "vitest-browser-react";
 import { ListingSidebar, type ListingSidebarProps } from "./listing-sidebar";
@@ -13,13 +15,36 @@ const chargeCard: ListingSidebarProps = {
   handle: "ddieruf",
 };
 
-// The sidebar sits in a 300px column on the page, so the tests give it the same width.
-function renderSidebar(props: Partial<ListingSidebarProps> = {}) {
-  return render(
-    <aside style={{ width: "300px" }}>
-      <ListingSidebar {...chargeCard} {...props} />
-    </aside>,
+// The sidebar sits in a 300px column on the page, so the tests give it the same width. It
+// renders in a router, with /search standing in for the results page its links open.
+async function renderSidebar(props: Partial<ListingSidebarProps> = {}) {
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/:handle/:nameAtVersion",
+        element: (
+          <aside style={{ width: "300px" }}>
+            <ListingSidebar {...chargeCard} {...props} />
+          </aside>
+        ),
+      },
+      { path: "/search", element: <h1>Results</h1> },
+    ],
+    { initialEntries: ["/ddieruf/charge-card@1.0.0"] },
   );
+  const screen = await render(<RouterProvider router={router} />);
+  return Object.assign(screen, { router });
+}
+
+type Rendered = Awaited<ReturnType<typeof renderSidebar>>;
+
+/** The search the router's current address holds, once it has moved to /search. */
+async function searchOpened({ router, getByRole }: Rendered) {
+  await expect
+    .element(getByRole("heading", { level: 1, name: "Results" }))
+    .toBeVisible();
+  expect(router.state.location.pathname).toBe("/search");
+  return readSearch(new URLSearchParams(router.state.location.search));
 }
 
 /** The About card's rows, as [term, value] pairs in the order they show. */
@@ -63,7 +88,7 @@ test("the SDK row names each SDK's package", async () => {
   }
 });
 
-test("several integrations and dependencies are listed in order, as plain text with no link", async () => {
+test("several integrations and dependencies are listed in order, and each integration is a link", async () => {
   const screen = await renderSidebar({
     integrations: ["Stripe", "Slack"],
     dependencies: ["stripe", "slack_sdk"],
@@ -73,7 +98,77 @@ test("several integrations and dependencies are listed in order, as plain text w
   const rows = aboutRows(about.element() as HTMLElement);
   expect(rows).toContainEqual(["Integrates with", "Stripe, Slack"]);
   expect(rows).toContainEqual(["Dependencies", "stripe, slack_sdk"]);
-  await expect.element(about.getByRole("link")).not.toBeInTheDocument();
+  expect(
+    about
+      .getByRole("link")
+      .elements()
+      .map((link) => link.textContent),
+  ).toEqual(["Stripe", "Slack"]);
+  await expect
+    .element(about.getByRole("link", { name: "stripe", exact: true }))
+    .not.toBeInTheDocument();
+});
+
+test("each integration links to the results for that integration alone", async () => {
+  const screen = await renderSidebar({
+    integrations: ["Stripe", "Amazon S3", "Slack"],
+  });
+
+  const about = screen.getByRole("region", { name: "About" });
+  for (const integration of ["Stripe", "Amazon S3", "Slack"] as const) {
+    expect(
+      about
+        .getByRole("link", { name: integration, exact: true })
+        .element()
+        .getAttribute("href"),
+    ).toBe(searchAddress({ integrations: [integration] }));
+  }
+});
+
+test("clicking an integration opens /search for that integration", async () => {
+  const screen = await renderSidebar({ integrations: ["Stripe", "Slack"] });
+
+  await screen
+    .getByRole("region", { name: "About" })
+    .getByRole("link", { name: "Slack", exact: true })
+    .click();
+
+  expect(await searchOpened(screen)).toEqual({
+    words: "",
+    sdks: [],
+    integrations: ["Slack"],
+  });
+});
+
+test("an integration name with a space builds an address that reads back unchanged", async () => {
+  const screen = await renderSidebar({ integrations: ["Amazon S3"] });
+
+  const link = screen
+    .getByRole("region", { name: "About" })
+    .getByRole("link", { name: "Amazon S3", exact: true });
+  const href = link.element().getAttribute("href") ?? "";
+  expect(href).not.toContain(" ");
+  expect(() => new URL(href, "https://durables.dev")).not.toThrow();
+  await link.click();
+
+  expect((await searchOpened(screen)).integrations).toEqual(["Amazon S3"]);
+});
+
+test("an integration not on the shared list shows as plain text", async () => {
+  const screen = await renderSidebar({ integrations: ["Stripe", "Twilio"] });
+
+  const about = screen.getByRole("region", { name: "About" });
+  expect(aboutRows(about.element() as HTMLElement)).toContainEqual([
+    "Integrates with",
+    "Stripe, Twilio",
+  ]);
+  await expect
+    .element(about.getByRole("link", { name: "Stripe", exact: true }))
+    .toBeVisible();
+  await expect.element(about.getByText("Twilio")).toBeVisible();
+  await expect
+    .element(about.getByRole("link", { name: "Twilio" }))
+    .not.toBeInTheDocument();
 });
 
 test("a version with no integrations hides the Integrates with row", async () => {
@@ -87,6 +182,7 @@ test("a version with no integrations hides the Integrates with row", async () =>
   expect(
     aboutRows(about.element() as HTMLElement).map(([term]) => term),
   ).toEqual(["SDK", "Dependencies", "Published", "License"]);
+  await expect.element(about.getByRole("link")).not.toBeInTheDocument();
 });
 
 test('a version with no dependencies says "None beyond the SDK"', async () => {
@@ -137,15 +233,18 @@ test("a long dependency list wraps inside the card", async () => {
   expect(box.height).toBeGreaterThan(license.height * 2);
 });
 
-test("the Publisher card shows the initial in a circle and the handle as plain text, with no link", async () => {
+test("the Publisher card shows the initial in a circle and the handle, which links to the publisher's activities", async () => {
   const screen = await renderSidebar();
 
   const publisher = screen.getByRole("region", { name: "Publisher" });
   await expect
     .element(publisher.getByRole("heading", { level: 2, name: "Publisher" }))
     .toBeVisible();
-  const handle = publisher.getByText("ddieruf", { exact: true });
+  const handle = publisher.getByRole("link", { name: "ddieruf", exact: true });
   await expect.element(handle).toBeVisible();
+  expect(handle.element().getAttribute("href")).toBe(
+    searchAddress({ publisher: "ddieruf" }),
+  );
   const initial = handle.element().previousElementSibling;
   expect(initial).toBeInstanceOf(HTMLElement);
   if (!(initial instanceof HTMLElement)) return;
@@ -154,11 +253,75 @@ test("the Publisher card shows the initial in a circle and the handle as plain t
   const circle = initial.getBoundingClientRect();
   expect(circle.width).toBe(circle.height);
   expect(getComputedStyle(initial).borderRadius).not.toBe("0px");
-  expect(handle.element().closest("a")).toBeNull();
-  await expect.element(publisher.getByRole("link")).not.toBeInTheDocument();
-  await expect
-    .element(screen.getByText(/search all activities/i))
-    .not.toBeInTheDocument();
+});
+
+test('the Publisher card has a "Search all activities by" link to the publisher\'s activities', async () => {
+  const screen = await renderSidebar();
+
+  const publisher = screen.getByRole("region", { name: "Publisher" });
+  const search = publisher.getByRole("link", {
+    name: "Search all activities by ddieruf",
+    exact: true,
+  });
+  await expect.element(search).toBeVisible();
+  expect(search.element().getAttribute("href")).toBe(
+    searchAddress({ publisher: "ddieruf" }),
+  );
+  // It sits under the handle.
+  const handle = publisher.getByRole("link", { name: "ddieruf", exact: true });
+  expect(search.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    handle.element().getBoundingClientRect().bottom,
+  );
+});
+
+test('clicking "Search all activities by" opens /search for that publisher', async () => {
+  const screen = await renderSidebar();
+
+  await screen
+    .getByRole("link", { name: "Search all activities by ddieruf" })
+    .click();
+
+  expect(await searchOpened(screen)).toEqual({
+    words: "",
+    sdks: [],
+    integrations: [],
+    publisher: "ddieruf",
+  });
+});
+
+test("clicking the handle opens the same results as Search all activities by", async () => {
+  const screen = await renderSidebar();
+
+  const publisher = screen.getByRole("region", { name: "Publisher" });
+  const searchHref = publisher
+    .getByRole("link", { name: "Search all activities by ddieruf" })
+    .element()
+    .getAttribute("href");
+  await publisher.getByRole("link", { name: "ddieruf", exact: true }).click();
+
+  expect(await searchOpened(screen)).toEqual({
+    words: "",
+    sdks: [],
+    integrations: [],
+    publisher: "ddieruf",
+  });
+  expect(
+    `${screen.router.state.location.pathname}${screen.router.state.location.search}`,
+  ).toBe(searchHref);
+});
+
+test("a handle with a hyphen builds an address that reads back unchanged", async () => {
+  const screen = await renderSidebar({ handle: "data-loom" });
+
+  const search = screen.getByRole("link", {
+    name: "Search all activities by data-loom",
+  });
+  expect(search.element().getAttribute("href")).toBe(
+    searchAddress({ publisher: "data-loom" }),
+  );
+  await search.click();
+
+  expect((await searchOpened(screen)).publisher).toBe("data-loom");
 });
 
 test("the no-review note shows under the cards", async () => {
@@ -186,7 +349,12 @@ test("the sidebar has no Report this activity link and no Provenance card", asyn
     .toBeVisible();
   await expect.element(screen.getByText(/report/i)).not.toBeInTheDocument();
   await expect.element(screen.getByText(/provenance/i)).not.toBeInTheDocument();
-  await expect.element(screen.getByRole("link")).not.toBeInTheDocument();
+  expect(
+    screen
+      .getByRole("link")
+      .elements()
+      .map((link) => link.textContent),
+  ).toEqual(["Stripe", "ddieruf", "Search all activities by ddieruf"]);
   await expect.element(screen.getByRole("button")).not.toBeInTheDocument();
   expect(
     screen

@@ -1,7 +1,5 @@
+import type { Sdk } from "@durables/schemas";
 import type { CodeLanguage } from "./highlighter";
-
-/** The Temporal SDKs an activity can be written for, as the API names them. */
-export type Sdk = "Python" | "TypeScript" | ".NET";
 
 const languages: Readonly<Record<Sdk, CodeLanguage>> = {
   Python: "python",

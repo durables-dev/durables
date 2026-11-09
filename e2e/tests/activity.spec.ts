@@ -270,7 +270,17 @@ test.describe("as an anonymous visitor", () => {
 
         const publisher = page.getByRole("region", { name: "Publisher" });
         await expect(publisher).toContainText(listing.handle);
-        await expect(publisher.getByRole("link")).toHaveCount(0);
+        // The handle and "Search all activities by" both open that publisher's activities.
+        const publisherSearchPath = `/search?publisher=${listing.handle}`;
+        await expect(publisher.getByRole("link")).toHaveCount(2);
+        await expect(
+          publisher.getByRole("link", { name: listing.handle, exact: true }),
+        ).toHaveAttribute("href", publisherSearchPath);
+        await expect(
+          publisher.getByRole("link", {
+            name: `Search all activities by ${listing.handle}`,
+          }),
+        ).toHaveAttribute("href", publisherSearchPath);
 
         await expect(
           page.getByText(noReviewNote, { exact: true }),
@@ -381,7 +391,7 @@ test.describe("as an anonymous visitor", () => {
       "Published",
       "License",
     ]);
-    await expect(about.getByRole("definition").nth(1)).toHaveText("AWS S3");
+    await expect(about.getByRole("definition").nth(1)).toHaveText("Amazon S3");
     await expect(
       main(page).getByRole("tablist", { name: "Files" }).getByRole("tab"),
     ).toHaveText(["activities.ts", "workflows.ts", "worker.ts", "start.ts"]);

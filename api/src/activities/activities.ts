@@ -14,6 +14,7 @@ import { checkCode } from "../checks/pipeline";
 import { codeTooLarge } from "../checks/refusals";
 import {
   listingCacheControl,
+  noStoreCacheControl,
   versionCacheControl,
   versionCacheName,
 } from "../http/cache-control";
@@ -21,6 +22,8 @@ import { ProblemError } from "../http/problem";
 import { publisherLimitKey } from "../http/rate-limits";
 import { problemOnInvalid } from "../http/validation";
 import { generateSnippets } from "../snippets/snippets";
+import { encodeBrowseCursor } from "./browse-cursor";
+import { BROWSE_BATCH_SIZE, browseQuery, browseSort } from "./browse-request";
 import {
   addressTaken,
   handleNotChosen,
@@ -35,11 +38,13 @@ import {
 } from "./publish-request";
 import { publishVersion } from "./publish-version";
 import {
+  activityCard,
   formatAddress,
   listingResponse,
   publishResponse,
   versionLocation,
   versionResponse,
+  type BrowseResponse,
   type ListingResponse,
   type PublishResponse,
   type VersionResponse,
@@ -89,6 +94,42 @@ const noSuchListing = (handle: string, name: string) =>
  * handle or name is never lowercased, so it finds nothing and answers 404.
  */
 export const activities = new Hono<AppEnv>()
+  // Browse and search read the database on every request and are never cached or rate-limited
+  // (ADR 0005, 0006), so a newly published activity or a changed description shows at once.
+  .get("/", zValidator("query", browseQuery, problemOnInvalid), async (c) => {
+    const {
+      q: words = [],
+      sdk: sdks,
+      integration: integrations,
+      publisher,
+      cursor: after,
+    } = c.req.valid("query");
+    const sort = browseSort(words);
+    // One card more than a batch shows whether another batch follows.
+    const { listings, count } = await c.var.storage.browseListings({
+      words,
+      sdks,
+      integrations,
+      publisher,
+      after,
+      limit: BROWSE_BATCH_SIZE + 1,
+    });
+    const batch = listings.slice(0, BROWSE_BATCH_SIZE);
+    const last = batch.at(-1);
+    c.header("Cache-Control", noStoreCacheControl);
+    return c.json<BrowseResponse>(
+      {
+        activities: batch.map(activityCard),
+        count,
+        sort,
+        nextCursor:
+          listings.length > BROWSE_BATCH_SIZE && last !== undefined
+            ? encodeBrowseCursor({ ...last, sort })
+            : null,
+      },
+      200,
+    );
+  })
   .post(
     "/",
     requirePublisher(),
