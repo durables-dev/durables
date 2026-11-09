@@ -14,6 +14,7 @@ import { handleAvailability } from "../handles/availability";
 import { ProblemError } from "../http/problem";
 import { problemOnInvalid } from "../http/validation";
 import type { Provider } from "../storage/storage";
+import { sessionHandle } from "./session-handle";
 
 /** The signed-in publisher, as web sees them. The email is never part of it. */
 export interface SessionUser {
@@ -26,7 +27,10 @@ export interface SessionUser {
    * the account has nothing that cleans to a valid handle.
    */
   suggestedHandle?: string;
-  /** The handle chosen on the handle step, or null before one is chosen. */
+  /**
+   * The account's handle once the account exists. Before that, the handle chosen on the handle
+   * step, or null before one is chosen.
+   */
   handle: string | null;
   /** True once the provider account is linked to a Durables account. */
   accountExists: boolean;
@@ -84,8 +88,7 @@ export const session = new Hono<AppEnv>()
           ...(current.suggestedHandle === undefined
             ? {}
             : { suggestedHandle: current.suggestedHandle }),
-          handle: current.handle,
-          accountExists: account !== undefined,
+          ...sessionHandle(current, account),
         },
       },
       200,

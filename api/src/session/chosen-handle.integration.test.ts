@@ -264,7 +264,8 @@ describe("PUT /api/session/handle", () => {
 
     expect(response.status).toBe(409);
     expect(response.headers.get("Content-Type")).toBe(problemContentType);
-    await expectSessionUnchanged(response, cookie, null);
+    // The session read returns the account's handle once the account exists (DUR-73).
+    await expectSessionUnchanged(response, cookie, seeded.handle);
   });
 
   test("does not write to the account or handle tables", async () => {
