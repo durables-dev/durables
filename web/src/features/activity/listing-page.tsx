@@ -78,7 +78,7 @@ export function ListingPage({ address }: ListingPageProps) {
             publishedAt={version.data.publishedAt}
           />
         }
-        publisher={
+        publisherBar={
           isListingPublisher(user, listing.data.handle) ? (
             <PublisherBar />
           ) : null
