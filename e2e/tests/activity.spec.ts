@@ -1,5 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, sample, test, type PublishDetails } from "../fixtures";
+import {
+  expect,
+  publisherInitials,
+  sample,
+  test,
+  type PublishDetails,
+} from "../fixtures";
 
 const python = sample("python");
 
@@ -13,6 +19,11 @@ const slackListing: PublishDetails = {
 
 /** The Implement files for a Python activity, in the order their tabs show. */
 const pythonFiles = ["activities.py", "workflows.py", "worker.py", "start.py"];
+
+/** A description of the Slack activity before the publisher corrects it. */
+const savedDescription = "Posts a message to a Slack channel.";
+
+const barText = "You published this activity. Only you see these controls.";
 
 const noReviewNote =
   "Durables doesn't review published code. You are responsible for what you run.";
@@ -37,6 +48,56 @@ function codeBlock(page: Page, label: string) {
 
 function copyButton(page: Page, label: string) {
   return main(page).getByRole("button", { name: `Copy ${label}`, exact: true });
+}
+
+/**
+ * The header's account menu. It shows once the session read answers, in the same render that
+ * decides the publisher bar, so a test waits for it before asserting there is no bar.
+ */
+function accountMenu(page: Page) {
+  return page.getByRole("banner").getByRole("button", { name: "Account menu" });
+}
+
+/** Waits for the page's read of the session, which decides whether the publisher bar shows. */
+function sessionRead(page: Page) {
+  return page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/session",
+  );
+}
+
+function publisherBar(page: Page) {
+  return main(page).getByRole("region", { name: "Your listing controls" });
+}
+
+function updateDialog(page: Page) {
+  return page.getByRole("dialog", { name: "Update listing" });
+}
+
+function descriptionField(page: Page) {
+  return updateDialog(page).getByLabel("One-line description", {
+    exact: true,
+  });
+}
+
+/** Opens the Update dialog from the publisher bar, with the saved description in the field. */
+async function openUpdate(page: Page, description: string) {
+  await publisherBar(page).getByRole("button", { name: "Update" }).click();
+  await expect(updateDialog(page)).toBeVisible();
+  await expect(descriptionField(page)).toHaveValue(description);
+}
+
+/**
+ * Asserts the listing still holds its saved description: on the page, and after a reload,
+ * which reads it from the API again.
+ */
+async function expectDescriptionKept(page: Page, description: string) {
+  await expect(
+    main(page).getByText(description, { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    main(page).getByText(description, { exact: true }),
+  ).toBeVisible();
 }
 
 /** The gutter's numbers for the code: one per line, from 1, as the gutter's text joins them. */
@@ -396,5 +457,181 @@ test.describe("as an anonymous visitor", () => {
       main(page).getByRole("tablist", { name: "Files" }).getByRole("tab"),
     ).toHaveText(["activities.ts", "workflows.ts", "worker.ts", "start.ts"]);
     await expectAccessible();
+  });
+});
+
+test.describe("the publisher bar and Update dialog", () => {
+  const ownListing: PublishDetails = {
+    ...slackListing,
+    description: savedDescription,
+  };
+
+  test.describe("as an anonymous visitor", () => {
+    test.use({ storageState: { cookies: [], origins: [] } });
+
+    test("a signed-out visitor sees no publisher bar and no Update button", async ({
+      page,
+      expectAccessible,
+      publishListing,
+    }) => {
+      const listing = await publishListing(ownListing);
+      const session = sessionRead(page);
+
+      await page.goto(`/${listing.address}`);
+
+      expect((await session).status()).toBe(200);
+      await expect(
+        main(page).getByRole("heading", { level: 1, name: ownListing.title }),
+      ).toBeVisible();
+      await expect(
+        main(page).getByText(savedDescription, { exact: true }),
+      ).toBeVisible();
+      await expect(accountMenu(page)).toHaveCount(0);
+      await expect(publisherBar(page)).toHaveCount(0);
+      await expect(page.getByText(barText)).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Update" })).toHaveCount(0);
+      await expectAccessible();
+    });
+  });
+
+  test("a visitor signed in with an account under another handle sees no publisher bar", async ({
+    page,
+    expectAccessible,
+    publishListing,
+    signInWithAccount,
+  }) => {
+    const listing = await publishListing(ownListing);
+    const account = await signInWithAccount();
+    expect(account.handle).not.toBe(listing.handle);
+
+    await page.goto(`/${listing.address}`);
+
+    await expect(
+      main(page).getByRole("heading", { level: 1, name: ownListing.title }),
+    ).toBeVisible();
+    await expect(accountMenu(page)).toHaveText(publisherInitials);
+    await expect(publisherBar(page)).toHaveCount(0);
+    await expect(page.getByText(barText)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Update" })).toHaveCount(0);
+    await expectAccessible();
+  });
+
+  test("a visitor signed in with no account yet sees no publisher bar", async ({
+    page,
+    publishListing,
+  }) => {
+    const listing = await publishListing(ownListing);
+
+    await page.goto(`/${listing.address}`);
+
+    await expect(
+      main(page).getByRole("heading", { level: 1, name: ownListing.title }),
+    ).toBeVisible();
+    await expect(accountMenu(page)).toHaveText(publisherInitials);
+    await expect(publisherBar(page)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Update" })).toHaveCount(0);
+  });
+
+  test("a returning publisher who signed in again sees the publisher bar on their own listing", async ({
+    page,
+    expectAccessible,
+    publishOwnListing,
+    signIn,
+  }) => {
+    const listing = await publishOwnListing(ownListing);
+    // A fresh sign-in by the same identity: the account exists and no handle is chosen.
+    await signIn({
+      name: listing.identity.name,
+      providerAccountId: listing.identity.providerAccountId,
+    });
+
+    await page.goto(`/${listing.address}`);
+
+    await expect(publisherBar(page).getByText(barText)).toBeVisible();
+    await expect(
+      publisherBar(page).getByRole("button", { name: "Update" }),
+    ).toBeVisible();
+    await expectAccessible();
+  });
+
+  for (const close of ["Cancel", "Close", "Escape"] as const) {
+    test(`closing the Update dialog with ${close === "Close" ? "×" : close} after editing keeps the saved description`, async ({
+      page,
+      publishOwnListing,
+    }) => {
+      const listing = await publishOwnListing(ownListing);
+      const abandoned = "A description the publisher thought better of.";
+      await page.goto(`/${listing.address}`);
+      await openUpdate(page, savedDescription);
+
+      await descriptionField(page).fill(abandoned);
+      if (close === "Escape") {
+        await descriptionField(page).press("Escape");
+      } else {
+        await updateDialog(page).getByRole("button", { name: close }).click();
+      }
+
+      await expect(updateDialog(page)).toBeHidden();
+      await expect(
+        main(page).getByText(abandoned, { exact: true }),
+      ).toHaveCount(0);
+      await expectDescriptionKept(page, savedDescription);
+    });
+  }
+
+  test("saving an empty description shows Enter a description. and keeps the dialog open", async ({
+    page,
+    expectAccessible,
+    publishOwnListing,
+  }) => {
+    const listing = await publishOwnListing(ownListing);
+    await page.goto(`/${listing.address}`);
+    await openUpdate(page, savedDescription);
+
+    await descriptionField(page).fill("");
+    await updateDialog(page)
+      .getByRole("button", { name: "Save changes" })
+      .click();
+
+    await expect(
+      updateDialog(page).getByText("Enter a description.", { exact: true }),
+    ).toBeVisible();
+    await expect(descriptionField(page)).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    await expect(updateDialog(page)).toBeVisible();
+    await expectAccessible();
+    await expectDescriptionKept(page, savedDescription);
+  });
+
+  test("a description over 160 characters shows Use at most 160 characters. and saves nothing", async ({
+    page,
+    expectAccessible,
+    publishOwnListing,
+  }) => {
+    const listing = await publishOwnListing(ownListing);
+    const tooLong = `${savedDescription} ${"x".repeat(161)}`.slice(0, 161);
+    await page.goto(`/${listing.address}`);
+    await openUpdate(page, savedDescription);
+
+    await descriptionField(page).fill(tooLong);
+
+    const message = updateDialog(page).getByText(
+      "Use at most 160 characters.",
+      { exact: true },
+    );
+    await expect(message).toBeVisible();
+    await expect(descriptionField(page)).toHaveValue(tooLong);
+
+    await updateDialog(page)
+      .getByRole("button", { name: "Save changes" })
+      .click();
+
+    await expect(message).toBeVisible();
+    await expect(updateDialog(page)).toBeVisible();
+    await expect(descriptionField(page)).toHaveValue(tooLong);
+    await expectAccessible();
+    await expectDescriptionKept(page, savedDescription);
   });
 });
