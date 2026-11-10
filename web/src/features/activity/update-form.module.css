@@ -62,9 +62,12 @@
   line-height: 1.6;
 }
 
+/* Text colour, underlined: Tangerine Deep on the Gold notice falls below AA under Cream. */
 .link {
-  color: var(--link);
+  color: var(--fg);
   font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .actions {
