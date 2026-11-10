@@ -100,8 +100,8 @@ export const seedVersion = async (
 };
 
 /**
- * Changes a listing's current description. Editing a description is a later increment, so
- * tests change it here.
+ * Changes a listing's current description directly, so a test that reads the listing need not
+ * sign in and save it.
  */
 export const seedDescription = async (
   database: D1Database,

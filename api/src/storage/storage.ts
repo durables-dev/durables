@@ -607,6 +607,29 @@ export class Storage {
   }
 
   /**
+   * Changes the current description of the listing at a handle and name, and returns the
+   * listing as stored, or undefined when no listing is there. Only the description column
+   * changes. Version rows and version documents are never touched (ADR 0006). Handles and
+   * names match exactly.
+   */
+  async updateListingDescription({
+    handle,
+    name,
+    description,
+  }: ListingDescription): Promise<ListingDescription | undefined> {
+    return this.#db
+      .update(listings)
+      .set({ description })
+      .where(and(eq(listings.handle, handle), eq(listings.name, name)))
+      .returning({
+        handle: listings.handle,
+        name: listings.name,
+        description: listings.description,
+      })
+      .get();
+  }
+
+  /**
    * Writes a version's document, create-only. When a document already exists at the
    * address, nothing is written and the outcome is already-exists. The conditional put this
    * rests on is an accepted risk (ADR 0005, Notes).
