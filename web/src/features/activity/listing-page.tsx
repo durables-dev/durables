@@ -80,7 +80,10 @@ export function ListingPage({ address }: ListingPageProps) {
         }
         publisherBar={
           isListingPublisher(user, listing.data.handle) ? (
-            <PublisherBar />
+            <PublisherBar
+              address={address}
+              description={listing.data.description}
+            />
           ) : null
         }
         implement={
