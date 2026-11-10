@@ -483,3 +483,138 @@ test(
     });
   },
 );
+
+test(
+  "a publisher updates their listing's description from the publisher bar and sees it on the page, after a reload, on an older version's page and on their search result card",
+  { tag: "@journey" },
+  async ({
+    page,
+    expectAccessible,
+    publishOwnListing,
+    seedVersion,
+    uniqueWord,
+  }) => {
+    const word = uniqueWord();
+    const title = `Post slack message ${word}`;
+    const before = "Posts a message to a Slack channel.";
+    const after =
+      "Posts a message to a Slack channel and returns its reference.";
+    const listing = await publishOwnListing({
+      code: sample("python"),
+      title,
+      name: "post-slack-message",
+      description: before,
+    });
+    // The card links to the highest version, so the publisher lands on 1.1.0 and 1.0.0 is the
+    // older one.
+    const latest = await seedVersion(listing, "1.1.0");
+    const older = listing.address;
+
+    const main = page.getByRole("main");
+    const resultCard = main.getByRole("article", { name: title, exact: true });
+    const bar = main.getByRole("region", { name: "Your listing controls" });
+    const dialog = page.getByRole("dialog", { name: "Update listing" });
+    const field = dialog.getByLabel("One-line description", { exact: true });
+    const fixedNote = dialog.getByText(
+      "Can't change here: the code, its detected facts and its address. Those are fixed when a version is published.",
+      { exact: true },
+    );
+
+    await test.step("find the listing in search results with its description", async () => {
+      await page.goto(`/search?q=${word}`);
+
+      await expect(resultCard).toContainText(before);
+      await expectAccessible();
+    });
+
+    await test.step("open the listing and see the publisher bar with Update", async () => {
+      await resultCard.getByRole("link", { name: "View" }).click();
+
+      await expect(page).toHaveURL(`/${latest}`);
+      await expect(
+        main.getByRole("heading", { level: 1, name: title }),
+      ).toBeVisible();
+      await expect(main.getByText(before, { exact: true })).toBeVisible();
+      await expect(
+        bar.getByText(
+          "You published this activity. Only you see these controls.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      // The closed dialog inside the bar is hidden, so Update is the bar's only button.
+      await expect(bar.getByRole("button")).toHaveText(["Update"]);
+      await expectAccessible();
+    });
+
+    await test.step("open the Update dialog and see the description and what can't be changed", async () => {
+      await bar.getByRole("button", { name: "Update" }).click();
+
+      await expect(dialog).toBeVisible();
+      await expect(
+        dialog.getByRole("heading", { level: 2, name: "Update listing" }),
+      ).toBeVisible();
+      await expect(dialog).toHaveAccessibleDescription(
+        "This changes on every version's page right away. Anything about how the activity behaves needs a new version instead.",
+      );
+      await expect(field).toHaveValue(before);
+      await expect(
+        dialog.getByText(
+          `Shown on search results. ${160 - before.length} characters left.`,
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(fixedNote).toBeVisible();
+      await expect(fixedNote.getByRole("link")).toHaveCount(0);
+      await expectAccessible();
+    });
+
+    await test.step("change the description, save, and see it on the page as the dialog closes", async () => {
+      await field.fill(after);
+      await dialog.getByRole("button", { name: "Save changes" }).click();
+
+      await expect(dialog).toBeHidden();
+      await expect(main.getByText(after, { exact: true })).toBeVisible();
+      await expect(main.getByText(before, { exact: true })).toHaveCount(0);
+      await expect(page.getByText(/^Saved/)).toHaveCount(0);
+      await expectAccessible();
+    });
+
+    await test.step("go back to search in the same visit and see the new text on the card", async () => {
+      await page.goBack();
+
+      await expect(page).toHaveURL(`/search?q=${word}`);
+      await expect(resultCard).toContainText(after);
+      await expect(resultCard).not.toContainText(before);
+    });
+
+    await test.step("reload the search results and still see the new text on the card", async () => {
+      await page.reload();
+
+      await expect(resultCard).toContainText(after);
+      await expect(resultCard).not.toContainText(before);
+    });
+
+    await test.step("reload the listing and still see the new description", async () => {
+      await page.goto(`/${latest}`);
+      await page.reload();
+
+      await expect(
+        main.getByRole("heading", { level: 1, name: title }),
+      ).toBeVisible();
+      await expect(main.getByText(after, { exact: true })).toBeVisible();
+      await expect(main.getByText(before, { exact: true })).toHaveCount(0);
+    });
+
+    await test.step("open the older version's page and see the new description", async () => {
+      await page.goto(`/${older}`);
+
+      await expect(
+        main.getByRole("heading", { level: 1, name: title }),
+      ).toBeVisible();
+      await expect(main.getByText(older, { exact: true })).toBeVisible();
+      await expect(main.getByText(after, { exact: true })).toBeVisible();
+      await expect(main.getByText(before, { exact: true })).toHaveCount(0);
+      await expectAccessible();
+    });
+  },
+);
