@@ -1,11 +1,18 @@
 import { useRef } from "react";
+import type { ListingAddress } from "./listing-address";
 import styles from "./publisher-bar.module.css";
 import { UpdateDialog } from "./update-dialog";
 
 // The bar above the section bar that only the listing's publisher sees, and the Update dialog
 // it opens. The dialog is a native <dialog> opened with showModal(), as the contribute flow's
 // published-code dialog is. However it closes, focus goes back to Update.
-export function PublisherBar() {
+export interface PublisherBarProps {
+  address: ListingAddress;
+  /** The listing's saved description, which the dialog's field starts with. */
+  description: string;
+}
+
+export function PublisherBar({ address, description }: PublisherBarProps) {
   const opener = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
 
@@ -27,6 +34,8 @@ export function PublisherBar() {
       </button>
       <UpdateDialog
         dialogRef={dialog}
+        address={address}
+        description={description}
         onClose={() => {
           opener.current?.focus();
         }}

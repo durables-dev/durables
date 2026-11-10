@@ -1,24 +1,31 @@
-import { useId, type ReactNode, type RefObject } from "react";
+import { useId, useState, type RefObject } from "react";
+import type { ListingAddress } from "./listing-address";
 import styles from "./update-dialog.module.css";
+import { UpdateForm } from "./update-form";
 
 export interface UpdateDialogProps {
   /** The <dialog> element, which the publisher bar opens with showModal(). */
   dialogRef: RefObject<HTMLDialogElement | null>;
-  /** Runs however the dialog closed: Cancel, the close button, or Escape. */
+  /** Runs however the dialog closed: Cancel, the close button, Escape, or a save. */
   onClose: () => void;
-  /** The one-line description field, between the intro and the note. */
-  children?: ReactNode;
+  address: ListingAddress;
+  /** The listing's saved description. */
+  description: string;
 }
 
-// "Update listing": the heading, the intro, the description field, and the note on what can't
-// be changed here. Cancel, the close button and Escape all close it without saving.
+// "Update listing": the heading, the intro, then the description field, the note on what
+// can't be changed here and the buttons. Cancel, the close button and Escape all close it
+// without saving. Each close starts the form afresh, so the next opening shows the saved
+// description rather than an abandoned edit.
 export function UpdateDialog({
   dialogRef,
   onClose,
-  children,
+  address,
+  description,
 }: UpdateDialogProps) {
   const titleId = useId();
   const introId = useId();
+  const [opening, setOpening] = useState(0);
 
   function close() {
     dialogRef.current?.close();
@@ -30,7 +37,10 @@ export function UpdateDialog({
       aria-labelledby={titleId}
       aria-describedby={introId}
       className={styles["dialog"]}
-      onClose={onClose}
+      onClose={() => {
+        setOpening((count) => count + 1);
+        onClose();
+      }}
     >
       <div className={styles["header"]}>
         <h2 id={titleId} className={styles["title"]}>
@@ -60,16 +70,13 @@ export function UpdateDialog({
         This changes on every version&apos;s page right away. Anything about how
         the activity behaves needs a new version instead.
       </p>
-      {children}
-      <p className={styles["fixed"]}>
-        Can&apos;t change here: the code, its detected facts and its address.
-        Those are fixed when a version is published.
-      </p>
-      <div className={styles["actions"]}>
-        <button type="button" className={styles["cancel"]} onClick={close}>
-          Cancel
-        </button>
-      </div>
+      <UpdateForm
+        key={opening}
+        address={address}
+        description={description}
+        onCancel={close}
+        onSaved={close}
+      />
     </dialog>
   );
 }
