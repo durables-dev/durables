@@ -18,7 +18,10 @@ export interface MigrationsProps {
 // Applies D1 migrations in deployment (ADR 0003): Wrangler's migration command, run from the
 // deploying machine, before the new Worker version is deployed. Wrangler deploys no code.
 // api/wrangler.toml is local-only (its database id is a placeholder), so the step writes a
-// migrations-only config with the real id and points Wrangler at it.
+// migrations-only config with the real id and points Wrangler at it. The file is named
+// wrangler.toml because Wrangler picks the format from the extension, and the id is passed to
+// printf as an argument because the single-quoted format does not expand $DATABASE_ID. The
+// migrations path is an argument too, so printf never reads its characters as escapes.
 export class Migrations extends Construct {
   readonly resource: TerraformResource;
 
@@ -29,8 +32,8 @@ export class Migrations extends Construct {
       "[[d1_databases]]",
       `binding = "DB"`,
       `database_name = "${databaseName}"`,
-      `database_id = "$DATABASE_ID"`,
-      `migrations_dir = "${props.migrationsDir}"`,
+      `database_id = "%s"`,
+      `migrations_dir = "%s"`,
       "",
     ].join("\\n");
 
@@ -45,7 +48,8 @@ export class Migrations extends Construct {
             DATABASE_ID: props.databaseId,
           },
           command:
-            `CONFIG=$(mktemp) && printf '${config}' > "$CONFIG" && ` +
+            `CONFIG="$(mktemp -d)/wrangler.toml" && ` +
+            `printf '${config}' "$DATABASE_ID" "${props.migrationsDir}" > "$CONFIG" && ` +
             `npx wrangler d1 migrations apply ${databaseName} --remote -c "$CONFIG"`,
         },
       ],

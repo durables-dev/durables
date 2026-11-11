@@ -82,7 +82,8 @@ class DurablesStack extends TerraformStack {
       accountId,
       zoneId,
       workerName,
-      dependsOn: [worker.worker],
+      // Cloudflare refuses a custom domain for a Worker with no deployment.
+      dependsOn: [worker.deployment],
     });
     new Analytics(this, "analytics", { accountId, zoneId });
   }
