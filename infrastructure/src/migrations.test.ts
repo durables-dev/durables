@@ -40,8 +40,11 @@ test("runs Wrangler's migration command against a generated config", () => {
   const [step] = Object.values(stack.resource.terraform_data);
   if (!step) throw new Error("no migration step synthesized");
 
-  expect(step.provisioner[0]?.["local-exec"].command).toContain(
-    "wrangler d1 migrations apply durables --remote",
-  );
+  const command = step.provisioner[0]?.["local-exec"].command;
+  expect(command).toContain("wrangler d1 migrations apply durables --remote");
+  // Wrangler reads the format from the extension, and the id is printf's argument.
+  expect(command).toContain('/wrangler.toml"');
+  expect(command).toContain('database_id = "%s"');
+  expect(command).toContain(`' "$DATABASE_ID" "${dir}" >`);
   expect(step.triggers_replace).toBe(migrationsHash(dir));
 });

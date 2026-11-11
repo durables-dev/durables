@@ -31,6 +31,8 @@ export interface WorkerProps {
 export class Worker extends Construct {
   readonly worker: CloudflareWorker;
   readonly version: WorkerVersion;
+  /** Cloudflare attaches a custom domain only to a Worker that has a deployment. */
+  readonly deployment: WorkersDeployment;
 
   constructor(scope: Construct, id: string, props: WorkerProps) {
     super(scope, id);
@@ -86,7 +88,7 @@ export class Worker extends Construct {
     // list of path rules; the override writes the list the typed API cannot express.
     this.version.addOverride("assets.config.run_worker_first", ["/api/*"]);
 
-    new WorkersDeployment(this, "deployment", {
+    this.deployment = new WorkersDeployment(this, "deployment", {
       accountId,
       scriptName: this.worker.name,
       strategy: "percentage",
