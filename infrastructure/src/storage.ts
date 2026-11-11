@@ -21,6 +21,9 @@ export class Storage extends Construct {
       accountId,
       name: databaseName,
       primaryLocationHint: "wnam",
+      // Cloudflare reports this once the database exists; left unset, the provider tries to clear
+      // it on the next apply and the API rejects the null.
+      readReplication: { mode: "disabled" },
     });
 
     this.documents = new R2Bucket(this, "documents", {
