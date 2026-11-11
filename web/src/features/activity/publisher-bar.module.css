@@ -1,0 +1,38 @@
+.bar {
+  margin-bottom: 18px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-small);
+}
+
+.lead {
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+
+.update {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}

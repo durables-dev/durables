@@ -1,0 +1,47 @@
+.header {
+  height: 60px;
+  padding: 0 16px 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.home {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: var(--text-wordmark);
+  font-weight: 600;
+  letter-spacing: -0.023em;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.contribute {
+  height: 40px;
+  padding: 0 23px;
+  border-radius: var(--radius-pill);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: var(--text-small);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}

@@ -141,3 +141,28 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Wrangler local state and local secrets
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# CDK Terrain synthesized output, generated provider bindings, Terraform state
+cdktf.out/
+.gen/
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+
+# api type declarations emitted for web
+api/dist-types/
+
+# Terraform variable files and CDK Terrain logs: values are supplied through the environment
+*.tfvars
+*.tfvars.json
+cdktf.log

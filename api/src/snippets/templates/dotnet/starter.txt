@@ -1,0 +1,15 @@
+using Temporalio.Client;
+
+public static class Starter
+{
+    public static async Task RunAsync()
+    {
+        var client = await TemporalClient.ConnectAsync(new("localhost:7233"));
+        // Fill in the input to pass to {{activity}}.
+        {{inputType}} input = default!;
+        {{resultAssignment}}await client.ExecuteWorkflowAsync(
+            ({{workflowClass}} workflow) => workflow.RunAsync(input),
+            new(id: {{workflowId}}, taskQueue: {{taskQueue}}));
+        {{printResult}}
+    }
+}

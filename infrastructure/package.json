@@ -1,0 +1,25 @@
+{
+  "name": "@durables/infrastructure",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "get": "cdktn get",
+    "synth": "cdktn synth",
+    "diff": "cdktn diff",
+    "deploy": "cdktn deploy",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cdktn": "0.24.0",
+    "constructs": "~10.7.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "cdktn-cli": "0.24.0",
+    "jest": "^30.5.0",
+    "ts-jest": "^29.4.14",
+    "tsx": "^4.20.0"
+  }
+}

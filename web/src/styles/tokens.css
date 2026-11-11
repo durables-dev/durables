@@ -1,0 +1,140 @@
+/* Design tokens from the brand guide (docs/durables-brand-guide.pdf). Every colour, font,
+   size and radius in a component comes from here. Dark first: Ink is the default, Cream
+   under a light preference. */
+:root {
+  color-scheme: dark light;
+
+  /* Brand palette */
+  --color-tangerine: #ff5a1f;
+  --color-tangerine-deep: #c9481a;
+  --color-gold: #ffb700;
+  --color-ember: #ee1c3a;
+  --color-ink: #0b0806;
+  --color-cream: #fffbf5;
+  --color-sand: #f1e8dd;
+  --color-lagoon: #4fbdb7;
+  --color-lagoon-deep: #0f7471;
+
+  /* Semantic colours, dark theme */
+  --bg: var(--color-ink);
+  --fg: var(--color-cream);
+  --fg-muted: #b0a597;
+  --surface: #1a1512;
+  /* A panel that carries link-coloured text. Tangerine Deep fails AA on Sand, so on Cream
+     the panel stays Cream and a border sets it apart. */
+  --surface-link: var(--surface);
+  --footer: #17120d;
+  --accent: var(--color-tangerine);
+  --on-accent: var(--color-ink);
+  --link: var(--color-tangerine);
+  --focus: var(--color-gold);
+  --border: #6e6255;
+  --rule: #3a322a;
+  --selected: #2a231c;
+  --positive: var(--color-lagoon);
+  /* The tint behind a positive tag, such as the SDK on a listing. */
+  --positive-tint: rgb(79 189 183 / 18%);
+  /* The same tag on a surface panel, such as the SDK on a result card. It is opaque because
+     the translucent tint over Sand drops Lagoon Deep below AA, so on Cream it is the tint
+     over Cream instead. */
+  --positive-tag: #243330;
+  /* The tint behind an accent mark, such as the default activity icon. */
+  --accent-tint: rgb(255 90 31 / 16%);
+  /* The round mark behind a publisher's initial, as the activity page shows it. Gold under
+     both themes. */
+  --publisher-badge: var(--color-gold);
+  --on-publisher-badge: var(--color-ink);
+  /* A result card's icon tile: one brand colour for the icon, on a tint of the same colour.
+     The card picks one pair by title and publisher. Decoration only, never meaning. */
+  --tile-tangerine: var(--color-tangerine);
+  --tile-tangerine-tint: rgb(255 90 31 / 16%);
+  --tile-gold: var(--color-gold);
+  --tile-gold-tint: rgb(255 183 0 / 22%);
+  --tile-ember: var(--color-ember);
+  --tile-ember-tint: rgb(238 28 58 / 14%);
+  --tile-lagoon: var(--color-lagoon);
+  --tile-lagoon-tint: rgb(79 189 183 / 18%);
+  /* The Gold tint behind a message that needs the reader's attention, such as a refused
+     file. Never Ember. */
+  --notice: rgb(255 183 0 / 14%);
+  /* The dimmed page behind a dialog. Ink at 60% under both themes. */
+  --scrim: rgb(11 8 6 / 60%);
+
+  /* The code panel. It is Ink under both themes, so no theme block changes these. */
+  --code-background: var(--color-ink);
+  --code-foreground: var(--color-cream);
+  --code-muted: #8a7f71;
+
+  /* Sign-in providers' own colours (DUR-2). They are the providers', so no theme changes them. */
+  --provider-github-bg: #24292f;
+  --provider-github-fg: #ffffff;
+  --provider-gitlab-bg: #171321;
+  --provider-gitlab-fg: #ffffff;
+  --provider-gitlab-edge: #fc6d26;
+  --provider-google-bg: #ffffff;
+  --provider-google-fg: #1f1f1f;
+  --provider-google-border: #747775;
+  --provider-microsoft-bg: #ffffff;
+  --provider-microsoft-fg: #5e5e5e;
+  --provider-microsoft-border: #8c8c8c;
+
+  /* Code panel and syntax colours. The panel is dark under both themes, so these are not
+     overridden for Cream. The highlighter's theme reads the --code-token-* names. */
+  --code-background: var(--color-ink);
+  --code-foreground: var(--color-cream);
+  --code-muted: #b0a597;
+  --code-token-keyword: var(--color-tangerine);
+  --code-token-string: var(--color-gold);
+  --code-token-string-expression: var(--color-gold);
+  --code-token-constant: var(--color-gold);
+  --code-token-comment: var(--code-muted);
+  --code-token-function: var(--color-cream);
+  --code-token-parameter: var(--color-cream);
+  --code-token-punctuation: var(--color-cream);
+  --code-token-link: var(--color-tangerine);
+
+  /* Type */
+  --font-display: "Space Grotesk Variable", sans-serif;
+  --font-body: "IBM Plex Sans Variable", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --text-display: 44px;
+  --text-wordmark: 20px;
+  --text-h1: 32px;
+  --text-h2: 24px;
+  --text-h3: 18px;
+  --text-body: 16px;
+  --text-small: 14px;
+  --text-code: 14px;
+  --text-label: 13px;
+  --text-caption: 12px;
+
+  /* Layout */
+  --measure-prose: 72ch;
+
+  /* Corners */
+  --radius-panel: 12px;
+  --radius-control: 8px;
+  --radius-tag: 6px;
+  --radius-pill: 9999px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: var(--color-cream);
+    --fg: var(--color-ink);
+    --fg-muted: #5e5448;
+    --surface: var(--color-sand);
+    --surface-link: var(--color-cream);
+    --footer: var(--color-sand);
+    --link: var(--color-tangerine-deep);
+    --border: #9a8d7c;
+    --rule: #e3d8ca;
+    --selected: var(--color-sand);
+    --positive: var(--color-lagoon-deep);
+    --positive-tint: rgb(15 116 113 / 12%);
+    --positive-tag: #e2ebe5;
+    --tile-lagoon: var(--color-lagoon-deep);
+    --tile-lagoon-tint: rgb(15 116 113 / 12%);
+    --notice: rgb(255 183 0 / 16%);
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "language": "typescript",
+  "app": "npx tsx main.ts",
+  "output": "cdktf.out",
+  "codeMakerOutput": ".gen",
+  "projectId": "durables",
+  "sendCrashReports": false,
+  "targetVersions": {
+    "terraform": ">=1.11.0"
+  },
+  "validateInstalledBinary": true,
+  "terraformProviders": ["cloudflare/cloudflare@5.27.0"],
+  "terraformModules": [],
+  "context": {}
+}

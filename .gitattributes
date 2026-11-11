@@ -1,0 +1,3 @@
+# Check out every text file with LF, on Windows too. Prettier and the Linux dev container
+# both expect LF; a CRLF checkout fails format:check and breaks shell scripts.
+* text=auto eol=lf

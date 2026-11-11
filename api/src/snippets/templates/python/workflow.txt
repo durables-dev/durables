@@ -1,0 +1,18 @@
+from datetime import timedelta
+
+from temporalio import workflow
+
+with workflow.unsafe.imports_passed_through():
+    from activities import {{imports}}
+
+
+@workflow.defn
+class {{workflowClass}}:
+    @workflow.run
+    async def run(self, input: {{inputType}}){{returns}}:
+        return await workflow.execute_activity(
+            {{activity}},
+            input,
+            # Temporal requires a start-to-close timeout. Set it for your activity.
+            start_to_close_timeout=timedelta(seconds=30),
+        )

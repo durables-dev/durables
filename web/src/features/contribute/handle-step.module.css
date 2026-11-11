@@ -1,0 +1,142 @@
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.intro,
+.field,
+.preview {
+  max-width: 560px;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lede {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.lede strong {
+  font-weight: 600;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+/* The fixed prefix sits inside the field's border, ahead of what the publisher types. */
+.control {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.control:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.prefix {
+  padding: 0 4px 0 12px;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+}
+
+.input {
+  flex-grow: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+}
+
+/* The ring is drawn around the whole field, prefix included. */
+.input:focus-visible {
+  outline: none;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 20px;
+}
+
+.status {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.status[data-kind="available"] {
+  color: var(--positive);
+}
+
+.retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--link);
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.help {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+
+.preview {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface-link);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.preview-label {
+  margin: 0;
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.address {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  overflow-wrap: anywhere;
+}
+
+.address-handle {
+  color: var(--link);
+  font-weight: 600;
+}

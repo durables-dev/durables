@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node", "jest"],
+    // The generated provider bindings in .gen/ cannot satisfy these two flags, and they are
+    // not ours to fix. Everything else in @tsconfig/strictest applies.
+    "exactOptionalPropertyTypes": false,
+    "noImplicitOverride": false
+  },
+  "include": ["main.ts", "src", "test", ".gen"]
+}

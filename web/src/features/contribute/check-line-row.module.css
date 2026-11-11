@@ -1,0 +1,40 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* The status region stays in the layout while empty, so a screen reader announces what is
+   put into it. Empty, it has no height. */
+.status {
+  flex-grow: 1;
+}
+
+.checking,
+.found,
+.refused,
+.failed {
+  margin: 0;
+  font-size: var(--text-label);
+  line-height: 1.5;
+}
+
+.checking,
+.failed {
+  color: var(--fg-muted);
+}
+
+.found {
+  color: var(--positive);
+  font-weight: 600;
+}
+
+/* Refusals are Gold tint, never Ember (DUR-2, API map row D35). */
+.refused {
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--notice);
+  color: var(--fg);
+}

@@ -1,0 +1,8 @@
+# Headers for every page and asset the Worker serves (web/CONVENTIONS.md, docs/adr/0009).
+# Pages never pass through the Worker's code, so this file is the only place to set them.
+# The CSP allows our origin and Cloudflare Web Analytics; inline styles are Shiki's output.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

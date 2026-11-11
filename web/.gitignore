@@ -1,0 +1,3 @@
+# Vitest browser mode writes these when a test fails. They are not baselines.
+.vitest-attachments/
+__screenshots__/

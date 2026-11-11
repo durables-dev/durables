@@ -1,0 +1,22 @@
+import { Client, Connection } from "@temporalio/client";
+
+{{typeImport}}
+import { {{workflowFunction}} } from "./workflows";
+
+async function run() {
+    const connection = await Connection.connect({ address: "localhost:7233" });
+    const client = new Client({ connection });
+    // Fill in the input to pass to {{activity}}.
+    const input = {} as {{inputType}};
+    const result = await client.workflow.execute({{workflowFunction}}, {
+        args: [input],
+        taskQueue: {{taskQueue}},
+        workflowId: {{workflowId}},
+    });
+    console.log(result);
+}
+
+run().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+});

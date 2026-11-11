@@ -1,0 +1,41 @@
+.page {
+  max-width: var(--measure-prose);
+  padding: 48px 24px;
+}
+
+.heading {
+  font-size: var(--text-h1);
+  font-weight: 600;
+  letter-spacing: -0.023em;
+}
+
+.updated {
+  margin: 8px 0 0;
+  color: var(--fg-muted);
+  font-size: var(--text-small);
+}
+
+.body {
+  margin-top: 24px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+.body h2 {
+  margin: 32px 0 12px;
+  font-size: var(--text-h2);
+  font-weight: 600;
+}
+
+.body p,
+.body ul {
+  margin: 0 0 16px;
+}
+
+.body ul {
+  padding-left: 24px;
+}
+
+.body li + li {
+  margin-top: 4px;
+}

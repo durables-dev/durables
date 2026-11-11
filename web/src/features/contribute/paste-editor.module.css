@@ -1,0 +1,80 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+/* The code panel is dark under both themes. The focus ring is drawn around the whole panel,
+   gutter included. */
+.panel {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--code-background);
+  overflow: hidden;
+}
+
+.panel:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The gutter and the textarea share font, size, line height and top padding, so each number
+   sits on its line. */
+.gutter,
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  line-height: 1.6;
+  padding-top: 12px;
+}
+
+/* Size containment keeps the numbers from setting the panel's height, so the textarea alone
+   sets it and the gutter stretches to match. Its width comes from the longest number. The
+   extra bottom padding lets the gutter scroll as far as the textarea does when a sideways
+   scrollbar takes space at the textarea's foot. */
+.gutter {
+  flex-shrink: 0;
+  contain: size;
+  width: calc(var(--gutter-digits) * 1ch + 20px);
+  padding-right: 10px;
+  padding-bottom: 48px;
+  padding-left: 10px;
+  overflow: hidden;
+  color: var(--code-muted);
+  text-align: right;
+  white-space: pre;
+  user-select: none;
+}
+
+.code {
+  flex-grow: 1;
+  min-width: 0;
+  margin: 0;
+  padding-right: 14px;
+  padding-bottom: 12px;
+  padding-left: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--code-foreground);
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 4;
+  overflow: auto;
+  resize: none;
+}
+
+.code::placeholder {
+  color: var(--code-muted);
+  opacity: 1;
+}
+
+/* The ring is drawn around the whole panel. */
+.code:focus-visible {
+  outline: none;
+}

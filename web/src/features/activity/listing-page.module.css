@@ -1,0 +1,28 @@
+.loading {
+  margin: 0;
+  padding: 48px 24px;
+  color: var(--fg-muted);
+}
+
+.retry {
+  margin-top: 16px;
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retry:disabled {
+  cursor: default;
+  color: var(--fg-muted);
+}
+
+.failure {
+  margin: 0;
+}

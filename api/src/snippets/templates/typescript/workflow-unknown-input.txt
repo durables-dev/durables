@@ -1,0 +1,17 @@
+import { proxyActivities } from "@temporalio/workflow";
+
+import type * as activities from "./activities";
+{{typeImport}}
+
+const proxies = proxyActivities<typeof activities>({
+    // Temporal requires a start-to-close timeout. Set it for your activity.
+    startToCloseTimeout: "30 seconds",
+});
+
+// Detection couldn't read what {{activity}} takes, so the workflow takes the same
+// arguments. Fill them in in start.ts.
+export async function {{workflowFunction}}(
+    ...args: Parameters<typeof activities.{{activity}}>
+){{returns}} {
+    return await proxies.{{activity}}(...args);
+}

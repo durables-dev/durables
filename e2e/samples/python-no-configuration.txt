@@ -1,0 +1,36 @@
+"""Turn a title into a URL slug, using only the standard library."""
+
+import re
+import unicodedata
+from dataclasses import dataclass
+
+from temporalio import activity
+
+MAX_LENGTH = 80
+
+
+@dataclass
+class SlugRequest:
+    title: str
+    max_length: int = MAX_LENGTH
+
+
+@dataclass
+class Slug:
+    value: str
+    truncated: bool
+
+
+@activity.defn
+def slugify_title(request: SlugRequest) -> Slug:
+    ascii_title = (
+        unicodedata.normalize("NFKD", request.title)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
+    words = re.findall(r"[a-z0-9]+", ascii_title.lower())
+    slug = "-".join(words)
+    truncated = len(slug) > request.max_length
+    if truncated:
+        slug = slug[: request.max_length].rstrip("-")
+    return Slug(value=slug, truncated=truncated)

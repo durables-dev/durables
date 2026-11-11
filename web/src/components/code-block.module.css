@@ -1,0 +1,91 @@
+/* The panel is dark under both themes (the --code-* tokens are not overridden for Cream). */
+.block {
+  border: 1px solid var(--surface);
+  border-radius: var(--radius-panel);
+  background: var(--code-background);
+  color: var(--code-foreground);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 8px 8px 0 16px;
+}
+
+/* Sits at the left; the status and Copy stay at the right. */
+.caption {
+  min-width: 0;
+  margin: 0 auto 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  color: var(--code-muted);
+  overflow-wrap: anywhere;
+}
+
+.status {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--code-foreground);
+}
+
+.copy {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--code-background);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scroller {
+  display: flex;
+  overflow-x: auto;
+  padding: 8px 0 16px;
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  line-height: 1.6;
+}
+
+.scroller:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Stays at the left while long lines scroll sideways beneath it. */
+.gutter {
+  position: sticky;
+  left: 0;
+  flex: none;
+  min-width: 48px;
+  padding: 0 14px 0 12px;
+  background: var(--code-background);
+  color: var(--code-muted);
+  text-align: right;
+  user-select: none;
+}
+
+.number {
+  display: block;
+}
+
+.code {
+  flex: 1 0 auto;
+  margin: 0;
+  padding: 0 20px 0 0;
+  font: inherit;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.code code {
+  font: inherit;
+}
+
+.line {
+  white-space: pre;
+}

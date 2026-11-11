@@ -1,0 +1,4 @@
+temporal server start-dev
+{{environment}}
+dotnet run
+dotnet run -- start

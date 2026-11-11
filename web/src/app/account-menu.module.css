@@ -1,0 +1,83 @@
+.opener {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.badge {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The menu opens in the top layer, so it is placed against the page: under the initials,
+   which always sit at the header's right edge. */
+.menu {
+  position: absolute;
+  inset: auto;
+  top: 54px;
+  right: 16px;
+  margin: 0;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius-tag);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  text-align: left;
+  cursor: pointer;
+}
+
+.item:hover {
+  background: var(--selected);
+}
+
+.item:disabled {
+  color: var(--fg-muted);
+  cursor: progress;
+}
+
+.status {
+  margin: 0;
+  padding: 4px 12px 8px;
+  max-width: 220px;
+  color: var(--fg-muted);
+  font-size: var(--text-caption);
+}
+
+.status:empty {
+  padding: 0;
+}

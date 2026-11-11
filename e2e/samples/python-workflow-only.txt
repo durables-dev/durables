@@ -1,0 +1,18 @@
+from datetime import timedelta
+
+from temporalio import workflow
+
+with workflow.unsafe.imports_passed_through():
+    from .activities import SlackMessage, post_slack_message
+
+
+@workflow.defn
+class NotifyChannelWorkflow:
+    @workflow.run
+    async def run(self, message: SlackMessage) -> str:
+        ref = await workflow.execute_activity(
+            post_slack_message,
+            message,
+            start_to_close_timeout=timedelta(seconds=30),
+        )
+        return ref.ts
