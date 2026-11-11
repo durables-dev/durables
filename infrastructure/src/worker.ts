@@ -6,11 +6,13 @@ import {
   type WorkerVersionBindings,
 } from "../.gen/providers/cloudflare/worker-version";
 import { WorkersDeployment } from "../.gen/providers/cloudflare/workers-deployment";
-import { accountId, workerName } from "./config";
+import { workerName } from "./config";
 import type { Storage } from "./storage";
 import type { WranglerConfig } from "./wrangler-config";
 
 export interface WorkerProps {
+  /** The Cloudflare account, supplied at deploy. */
+  readonly accountId: string;
   /** Values shared with api/wrangler.toml (ADR 0004). */
   readonly wrangler: WranglerConfig;
   readonly storage: Storage;
@@ -32,6 +34,7 @@ export class Worker extends Construct {
 
   constructor(scope: Construct, id: string, props: WorkerProps) {
     super(scope, id);
+    const { accountId } = props;
 
     this.worker = new CloudflareWorker(this, "worker", {
       accountId,

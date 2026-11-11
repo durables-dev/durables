@@ -3,9 +3,11 @@ import { Construct } from "constructs";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { accountId, databaseName } from "./config";
+import { databaseName } from "./config";
 
 export interface MigrationsProps {
+  /** The Cloudflare account, supplied at deploy. */
+  readonly accountId: string;
   /** api/migrations/, whose contents trigger a run. */
   readonly migrationsDir: string;
   /** The D1 database's id, known once Terraform has created it. */
@@ -39,7 +41,7 @@ export class Migrations extends Construct {
         {
           type: "local-exec",
           environment: {
-            CLOUDFLARE_ACCOUNT_ID: accountId,
+            CLOUDFLARE_ACCOUNT_ID: props.accountId,
             DATABASE_ID: props.databaseId,
           },
           command:

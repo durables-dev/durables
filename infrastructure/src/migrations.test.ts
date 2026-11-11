@@ -20,6 +20,7 @@ test("the hash changes when a migration's contents change", () => {
 test("runs Wrangler's migration command against a generated config", () => {
   const synthesized = Testing.synthScope((scope) => {
     new Migrations(scope, "migrations", {
+      accountId: "account-id",
       migrationsDir: dir,
       databaseId: "db-id",
       dependsOn: [],

@@ -24,12 +24,13 @@ writeFileSync(join(siteDir, "_headers"), "/*\n  X-Test: 1\n");
 
 function synthWorker() {
   return Testing.synthScope((scope) => {
-    const storage = new Storage(scope, "storage");
+    const storage = new Storage(scope, "storage", { accountId: "account-id" });
     const secret = new TerraformVariable(scope, "session_signing_key", {
       sensitive: true,
     });
     const plain = new TerraformVariable(scope, "github_client_id", {});
     new Worker(scope, "worker", {
+      accountId: "account-id",
       wrangler,
       storage,
       apiBundleDir,

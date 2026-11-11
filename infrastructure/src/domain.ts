@@ -1,9 +1,12 @@
 import type { ITerraformDependable } from "cdktn";
 import { Construct } from "constructs";
 import { WorkersCustomDomain } from "../.gen/providers/cloudflare/workers-custom-domain";
-import { accountId, hostname, zoneId } from "./config";
+import { hostname } from "./config";
 
 export interface DomainProps {
+  /** The Cloudflare account and the durables.dev zone, supplied at deploy. */
+  readonly accountId: string;
+  readonly zoneId: string;
   readonly workerName: string;
   /** The domain names the Worker as a string, so the dependency must be explicit. */
   readonly dependsOn: ITerraformDependable[];
@@ -16,8 +19,8 @@ export class Domain extends Construct {
     super(scope, id);
 
     new WorkersCustomDomain(this, "apex", {
-      accountId,
-      zoneId,
+      accountId: props.accountId,
+      zoneId: props.zoneId,
       hostname,
       service: props.workerName,
       dependsOn: props.dependsOn,

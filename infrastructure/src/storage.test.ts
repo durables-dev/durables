@@ -6,7 +6,7 @@ import { Storage } from "./storage";
 
 test("creates the database and the documents bucket", () => {
   const synthesized = Testing.synthScope((scope) => {
-    new Storage(scope, "storage");
+    new Storage(scope, "storage", { accountId: "account-id" });
   });
 
   expect(synthesized).toHaveResourceWithProperties(D1Database, {

@@ -1,11 +1,7 @@
-// Non-secret values that identify and size the deployment. Secrets are TerraformVariables
-// (see main.ts); nothing here is read from the environment. Anything the Worker shares with
-// local development (bindings, compatibility settings, rate limits) comes from
-// api/wrangler.toml instead, through wrangler-config.ts.
-
-/** The Cloudflare account and the durables.dev zone. Set once, when the account is known. */
-export const accountId = "REPLACE_WITH_ACCOUNT_ID";
-export const zoneId = "REPLACE_WITH_ZONE_ID";
+// Non-secret values that identify and size the deployment. Secrets, and the Cloudflare
+// account and zone IDs, are TerraformVariables (see main.ts); nothing here is read from the
+// environment. Anything the Worker shares with local development (bindings, compatibility
+// settings, rate limits) comes from api/wrangler.toml instead, through wrangler-config.ts.
 
 export const hostname = "durables.dev";
 export const workerName = "durables";
