@@ -2,13 +2,10 @@
   // The supported way to develop and test Durables (docs/adr/0011). Needs only Docker
   // and an editor that opens dev containers, or the devcontainer CLI.
   "name": "Durables",
-  "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
+  // The Node.js image plus Terraform, installed in the Dockerfile.
+  "build": { "dockerfile": "Dockerfile" },
   "features": {
-    "ghcr.io/devcontainers/features/terraform:1": {
-      "version": "1.15.8",
-      "tflint": "none",
-      "terragrunt": "none"
-    }
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   // Installed packages and Wrangler's local D1/R2 state live in volumes, not the
   // source mount: native binaries stay Linux-only, and SQLite never sits on a
