@@ -5,7 +5,7 @@ The rules for working in `infrastructure/`: the CDK Terrain project that defines
 ## Status
 
 - Branch from `mvp` and open pull requests into `mvp`. `main` is the release branch, and merging to it deploys to production (ADR 0001).
-- `main.ts` and `src/` are real: the stack, its backend, and one construct per concern are the shape to mirror. `src/config.ts` holds placeholder account and zone IDs until the account is known.
+- `main.ts` and `src/` are real: the stack, its backend, and one construct per concern are the shape to mirror. The Cloudflare account and zone IDs are deploy-time variables, not constants in `src/config.ts`.
 - Nothing has been deployed yet. The first `cdktn deploy` is the first time this code meets Cloudflare; its `diff` is reviewed line by line.
 
 ## Orientation
@@ -22,7 +22,8 @@ The rules for working in `infrastructure/`: the CDK Terrain project that defines
 ## Where things go
 
 - One construct per concern in `src/`, named for what it holds: `storage.ts` (D1 and R2), `worker.ts` (worker, version, deployment, bindings, assets, observability), `domain.ts`, `analytics.ts`, `migrations.ts`. `main.ts` composes them and declares every variable; constructs never declare variables themselves.
-- `src/config.ts` holds every non-secret value that is this project's own: IDs, names, the hostname. A construct never hard-codes a name.
+- `src/config.ts` holds every non-secret value that is this project's own: names and the hostname. A construct never hard-codes a name.
+- The Cloudflare account and zone IDs are not secret but are kept out of the repo. `main.ts` declares them as plain `TerraformVariable`s (`cloudflare_account_id`, `cloudflare_zone_id`) and passes them to each construct as props.
 - `src/wrangler-config.ts` reads `api/wrangler.toml` at synth. The compatibility date, flags, binding names and rate limits come from there, never from a second copy here (ADR 0004).
 - One stack, `durables`, production only. There is no staging environment; the dev container is the pre-production environment (ADR 0011).
 - Tests sit next to the construct: `storage.test.ts` beside `storage.ts`.
@@ -46,7 +47,7 @@ The rules for working in `infrastructure/`: the CDK Terrain project that defines
 
 ## Configuration and secrets
 
-- Secrets are sensitive `TerraformVariable`s declared in `main.ts` and supplied as `TF_VAR_*` environment variables at deploy. Provider and backend credentials (`CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SSE_CUSTOMER_KEY`) are read by Terraform, never by TypeScript.
+- Secrets are sensitive `TerraformVariable`s declared in `main.ts` and supplied as `TF_VAR_*` environment variables at deploy. Provider and backend settings (`CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SSE_CUSTOMER_KEY`, and `AWS_ENDPOINT_URL_S3`, the R2 endpoint `https://<account-id>.r2.cloudflarestorage.com`) are read by Terraform, never by TypeScript. A backend cannot read Terraform variables, so the endpoint is an environment variable.
 - Nothing in TypeScript reads the environment or a file for a secret, token or ID. What TypeScript reads lands in `cdktf.out`.
 - State is in R2 (`S3Backend` in `main.ts`), with lockfile locking and a customer-supplied encryption key. The state bucket and its token exist outside this project and are created by hand. Reading state is reading production's secrets; the token is scoped to that bucket alone.
 - The deploy token carries only what the resources need: Workers, D1 (including write, for migrations), R2, DNS, Account Settings (analytics). The R2 state token is a separate token.

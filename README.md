@@ -41,7 +41,7 @@ Both ports are forwarded to your machine. Installed packages and local D1/R2 dat
 
 Everything deployed is defined in `infrastructure/` (see `docs/adr/0003-infrastructure-as-code.md`). Merging to `main` deploys through the GitHub Actions workflow in `.github/workflows/ci.yml`, which runs the same dev container.
 
-To deploy by hand from the container, with the same environment variables the workflow uses (`CLOUDFLARE_API_TOKEN`, the R2 state token as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `AWS_SSE_CUSTOMER_KEY`, and the `TF_VAR_*` secrets):
+To deploy by hand from the container, with the same environment variables the workflow uses (`CLOUDFLARE_API_TOKEN`, the R2 state token as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `AWS_SSE_CUSTOMER_KEY`, `AWS_ENDPOINT_URL_S3` set to `https://<account-id>.r2.cloudflarestorage.com`, and the `TF_VAR_*` values, including `TF_VAR_cloudflare_account_id` and `TF_VAR_cloudflare_zone_id`):
 
 ```
 npm run build

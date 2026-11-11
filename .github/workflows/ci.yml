@@ -50,6 +50,9 @@ jobs:
             AWS_ACCESS_KEY_ID
             AWS_SECRET_ACCESS_KEY
             AWS_SSE_CUSTOMER_KEY
+            AWS_ENDPOINT_URL_S3
+            TF_VAR_cloudflare_account_id
+            TF_VAR_cloudflare_zone_id
             TF_VAR_github_client_id
             TF_VAR_gitlab_client_id
             TF_VAR_google_client_id
@@ -68,6 +71,9 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
           AWS_SSE_CUSTOMER_KEY: ${{ secrets.STATE_ENCRYPTION_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ vars.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
           TF_VAR_github_client_id: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}
           TF_VAR_gitlab_client_id: ${{ vars.OAUTH_GITLAB_CLIENT_ID }}
           TF_VAR_google_client_id: ${{ vars.OAUTH_GOOGLE_CLIENT_ID }}

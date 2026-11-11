@@ -3,7 +3,7 @@ import type { Construct } from "constructs";
 import { fileURLToPath } from "node:url";
 import { CloudflareProvider } from "./.gen/providers/cloudflare/provider";
 import { Analytics } from "./src/analytics";
-import { accountId, stateBucketName, workerName } from "./src/config";
+import { stateBucketName, workerName } from "./src/config";
 import { Domain } from "./src/domain";
 import { Migrations } from "./src/migrations";
 import { Storage } from "./src/storage";
@@ -19,13 +19,13 @@ class DurablesStack extends TerraformStack {
   constructor(scope: Construct, id: string) {
     super(scope, id);
 
-    // State in R2 (ADR 0003). Credentials and the encryption key come from Terraform's own
-    // environment variables; see README.
+    // State in R2 (ADR 0003). Credentials, the encryption key and the R2 endpoint
+    // (AWS_ENDPOINT_URL_S3, which names the account) come from Terraform's own environment
+    // variables; see README. A backend cannot read Terraform variables.
     new S3Backend(this, {
       bucket: stateBucketName,
       key: "durables.tfstate",
       region: "auto",
-      endpoints: { s3: `https://${accountId}.r2.cloudflarestorage.com` },
       useLockfile: true,
       usePathStyle: true,
       skipCredentialsValidation: true,
@@ -43,15 +43,21 @@ class DurablesStack extends TerraformStack {
     const plain = (name: string) =>
       new TerraformVariable(this, name, { type: "string" });
 
-    const storage = new Storage(this, "storage");
+    // The Cloudflare account and the durables.dev zone. Not secret, but kept out of the repo.
+    const accountId = plain("cloudflare_account_id").stringValue;
+    const zoneId = plain("cloudflare_zone_id").stringValue;
+
+    const storage = new Storage(this, "storage", { accountId });
 
     const migrations = new Migrations(this, "migrations", {
+      accountId,
       migrationsDir: repo("api/migrations"),
       databaseId: storage.database.id,
       dependsOn: [storage.database],
     });
 
     const worker = new Worker(this, "worker", {
+      accountId,
       wrangler: readWranglerConfig(repo("api/wrangler.toml")),
       storage,
       apiBundleDir: repo("api/dist"),
@@ -72,8 +78,13 @@ class DurablesStack extends TerraformStack {
     });
     worker.version.node.addDependency(migrations.resource);
 
-    new Domain(this, "domain", { workerName, dependsOn: [worker.worker] });
-    new Analytics(this, "analytics");
+    new Domain(this, "domain", {
+      accountId,
+      zoneId,
+      workerName,
+      dependsOn: [worker.worker],
+    });
+    new Analytics(this, "analytics", { accountId, zoneId });
   }
 }
 
