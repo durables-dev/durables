@@ -1,15 +1,18 @@
 import { PageMessage } from "@/components/page-message";
 import { PageTitle } from "@/components/page-title";
 import { problemFrom } from "@/lib/problem";
+import { useSessionUser } from "@/lib/use-session-user";
 import { useQuery } from "@tanstack/react-query";
 import { ConfigureSection } from "./configure-section";
 import { ImplementSection } from "./implement-section";
+import { isListingPublisher } from "./is-listing-publisher";
 import type { ListingAddress } from "./listing-address";
 import { ListingLayout } from "./listing-layout";
 import styles from "./listing-page.module.css";
 import { listingQuery, versionQuery } from "./listing-queries";
 import { ListingSidebar } from "./listing-sidebar";
 import { ListingTop } from "./listing-top";
+import { PublisherBar } from "./publisher-bar";
 import { SourceSection } from "./source-section";
 
 export interface ListingPageProps {
@@ -25,6 +28,7 @@ function isNotFound(error: Error | null): boolean {
 export function ListingPage({ address }: ListingPageProps) {
   const version = useQuery(versionQuery(address));
   const listing = useQuery(listingQuery(address));
+  const user = useSessionUser();
 
   if (isNotFound(version.error) || isNotFound(listing.error)) {
     return <PageMessage heading="Page not found" />;
@@ -73,6 +77,14 @@ export function ListingPage({ address }: ListingPageProps) {
             handle={version.data.handle}
             publishedAt={version.data.publishedAt}
           />
+        }
+        publisherBar={
+          isListingPublisher(user, listing.data.handle) ? (
+            <PublisherBar
+              address={address}
+              description={listing.data.description}
+            />
+          ) : null
         }
         implement={
           <ImplementSection version={version.data} sdk={version.data.sdk} />

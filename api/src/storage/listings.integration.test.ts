@@ -259,6 +259,82 @@ describe("finding a listing's description", () => {
   });
 });
 
+describe("changing a listing's description", () => {
+  test("changes the description and returns the listing as stored", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+
+    const result = await storage().updateListingDescription({
+      handle: listing.handle,
+      name: listing.name,
+      description: "Posts a message and returns its timestamp.",
+    });
+
+    const stored = {
+      handle: listing.handle,
+      name: listing.name,
+      description: "Posts a message and returns its timestamp.",
+    };
+    expect(result).toEqual(stored);
+    expect(await storage().findListingDescription(listing)).toEqual(stored);
+  });
+
+  test("changes only the description of the matching handle and name", async () => {
+    const listing = await newListing();
+    const sibling = await newListing({ handle: listing.handle });
+    const sameName = await newListing({ name: listing.name });
+    for (const each of [listing, sibling, sameName]) {
+      await storage().createListing(each);
+    }
+    const before = await readAllRows(env.DB);
+
+    await storage().updateListingDescription({
+      handle: listing.handle,
+      name: listing.name,
+      description: "Posts a message and returns its timestamp.",
+    });
+
+    const after = await readAllRows(env.DB);
+    const isChanged = (row: unknown) => {
+      const { handle, name } = row as { handle: string; name: string };
+      return handle === listing.handle && name === listing.name;
+    };
+    expect(after["listings"]?.filter((row) => !isChanged(row))).toEqual(
+      before["listings"]?.filter((row) => !isChanged(row)),
+    );
+    expect(after["listings"]?.filter(isChanged)).toEqual([
+      {
+        handle: listing.handle,
+        name: listing.name,
+        description: "Posts a message and returns its timestamp.",
+      },
+    ]);
+    for (const table of Object.keys(before).filter((t) => t !== "listings")) {
+      expect(after[table]).toEqual(before[table]);
+    }
+  });
+
+  test("returns nothing and writes nothing for an unknown or wrong-case listing", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+    const before = await readAllRows(env.DB);
+
+    for (const address of [
+      { handle: listing.handle, name: "no-such-activity" },
+      { handle: listing.handle.toUpperCase(), name: listing.name },
+      { handle: listing.handle, name: listing.name.toUpperCase() },
+    ]) {
+      expect(
+        await storage().updateListingDescription({
+          ...address,
+          description: "Posts a message and returns its timestamp.",
+        }),
+      ).toBeUndefined();
+    }
+    expect(await readAllRows(env.DB)).toEqual(before);
+  });
+});
+
 describe("the listing and version tables", () => {
   test("accept a second version under an existing listing", async () => {
     const listing = await newListing();

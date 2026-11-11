@@ -9,7 +9,10 @@ import {
 } from "@playwright/test";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -48,6 +51,12 @@ export interface PublishResponse {
 export interface PublishedListing extends PublishResponse {
   /** The address the listing opens at: `handle/name@version`. */
   address: string;
+}
+
+/** A listing published by the test page's own signed-in publisher, as `publishOwnListing` returns it. */
+export interface OwnListing extends PublishedListing {
+  /** The identity the publisher signed in with, to sign in as them again. */
+  identity: FakeIdentity & { providerAccountId: string };
 }
 
 /** An account seeded straight into local D1, as publishing will create one. */
@@ -104,6 +113,20 @@ interface Fixtures {
    * visit the listing as anyone, including an anonymous visitor.
    */
   publishListing: (details: PublishDetails) => Promise<PublishedListing>;
+  /**
+   * Signs the page's browser context in as a new publisher with a unique handle, chooses that
+   * handle and publishes an activity through the API, the way the Contribute flow does. The
+   * page then visits as the listing's publisher, with an account. It counts towards their
+   * publish rate limit.
+   */
+  publishOwnListing: (details: PublishDetails) => Promise<OwnListing>;
+  /**
+   * Adds another version under a published listing, the way a later publish will. Publishing
+   * creates only a listing's first version, so the version's row is written to local D1 and its
+   * document is a copy of the first version's in local R2, pointing at its own address. It
+   * returns the version's address: `handle/name@version`.
+   */
+  seedVersion: (listing: PublishedListing, version: string) => Promise<string>;
   /**
    * Publishes several activities through the API, in the order given, as one new publisher of
    * its own, the way publishListing publishes one. At most ten, the publish rate limit.
@@ -181,8 +204,9 @@ async function publishAs(
   return (await response.json()) as PublishResponse;
 }
 
-// Seeding writes to the same local D1 the running Worker reads (ADR 0004). There is no API
-// that creates an account until publishing exists, so rows are written with Wrangler.
+// Seeding writes to the same local D1 and R2 the running Worker reads (ADR 0004). There is no
+// API that creates an account until publishing exists, and none that publishes a later version,
+// so rows and documents are written with Wrangler.
 const apiDirectory = fileURLToPath(new URL("../api", import.meta.url));
 const run = promisify(execFile);
 
@@ -194,9 +218,40 @@ async function executeSql(sql: string): Promise<void> {
   );
 }
 
+/** The bucket that holds version documents (api: wrangler.toml, DOCUMENTS). */
+const documentsBucket = "durables-documents";
+
+/** Where a version's document is kept (api: storage/version-document, versionDocumentKey). */
+function versionDocumentPath(handle: string, name: string, version: string) {
+  return `${documentsBucket}/versions/${encodeURIComponent(handle)}/${encodeURIComponent(name)}@${encodeURIComponent(version)}.json`;
+}
+
+async function r2Object(
+  command: "get" | "put",
+  objectPath: string,
+  file: string,
+  ...options: string[]
+): Promise<void> {
+  await run(
+    "npx",
+    [
+      "wrangler",
+      "r2",
+      "object",
+      command,
+      objectPath,
+      "--local",
+      "--file",
+      file,
+      ...options,
+    ],
+    { cwd: apiDirectory },
+  );
+}
+
 /** Only generated values reach the SQL, and this guards that they stay plain. */
 function sqlValue(value: string): string {
-  if (!/^[a-z0-9-]+$/i.test(value)) {
+  if (!/^[a-z0-9.-]+$/i.test(value)) {
     throw new Error(`Refusing to seed an unexpected value: ${value}`);
   }
   return `'${value}'`;
@@ -322,6 +377,59 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
       const [published] = await publishListings([details]);
       if (published === undefined) throw new Error("Nothing was published.");
       return published;
+    });
+  },
+
+  // The publisher signs in on the page's own context, so the page visits as them.
+  publishOwnListing: async ({ page, uniqueHandle }, use) => {
+    await use(async (details) => {
+      const handle = uniqueHandle("own");
+      const identity = {
+        name: publisherName,
+        username: handle,
+        providerAccountId: `e2e-${randomUUID()}`,
+      };
+      await signInAs(page.request, identity);
+      const chosen = await page.request.put(chosenHandlePath, {
+        data: { handle },
+        headers: sameOrigin,
+      });
+      expect(chosen.status(), await chosen.text()).toBe(200);
+      const response = await publishAs(page.request, details);
+      return {
+        ...response,
+        address: `${response.handle}/${response.name}@${response.version}`,
+        identity,
+      };
+    });
+  },
+
+  // eslint-disable-next-line no-empty-pattern -- Playwright reads the fixtures a fixture needs from this pattern; this one needs none.
+  seedVersion: async ({}, use) => {
+    await use(async ({ handle, name, version: first, address }, version) => {
+      const later = `${handle}/${name}@${version}`;
+      const directory = await mkdtemp(join(tmpdir(), "durables-e2e-"));
+      try {
+        const file = join(directory, "document.json");
+        await r2Object("get", versionDocumentPath(handle, name, first), file);
+        const document = await readFile(file, "utf8");
+        await writeFile(file, document.replaceAll(address, later));
+        await r2Object(
+          "put",
+          versionDocumentPath(handle, name, version),
+          file,
+          "--content-type",
+          "application/json",
+        );
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+      // The document is written before the row, as publishing does, so the row never points at
+      // a missing document.
+      await executeSql(
+        `INSERT INTO versions (handle, name, version, title, sdk, integrations) SELECT handle, name, ${sqlValue(version)}, title, sdk, integrations FROM versions WHERE handle = ${sqlValue(handle)} AND name = ${sqlValue(name)} AND version = ${sqlValue(first)};`,
+      );
+      return later;
     });
   },
 

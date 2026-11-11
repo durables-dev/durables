@@ -24,6 +24,7 @@ import { problemOnInvalid } from "../http/validation";
 import { generateSnippets } from "../snippets/snippets";
 import { encodeBrowseCursor } from "./browse-cursor";
 import { BROWSE_BATCH_SIZE, browseQuery, browseSort } from "./browse-request";
+import { descriptionBody } from "./description-request";
 import {
   addressTaken,
   handleNotChosen,
@@ -50,11 +51,12 @@ import {
   type VersionResponse,
 } from "./responses";
 
-// Publishing an activity and reading it back (ADR 0005, 0006, 0008). The version and the
-// listing are read at separate endpoints so each carries its own cache rule: the version's
-// fields never change and are cached for good, and the listing's description can change and
-// is cached briefly. Publishing runs the checks again and never accepts detection results
-// from the client. Nothing here logs the code, and no error carries it.
+// Publishing an activity, reading it back, and saving its listing's description (ADR 0005,
+// 0006, 0008). The version and the listing are read at separate endpoints so each carries its
+// own cache rule: the version's fields never change and are cached for good, and the listing's
+// description can change and is cached briefly. Publishing runs the checks again and never
+// accepts detection results from the client. Nothing here logs the code, and no error
+// carries it.
 
 /** Answers 413 Problem Details, the same refusal as oversized code, when the body is too large. */
 const publishBodyLimit = () =>
@@ -87,6 +89,33 @@ const noSuchListing = (handle: string, name: string) =>
   new ProblemError({
     status: 404,
     detail: `No activity is listed at ${handle}/${name}.`,
+  });
+
+/**
+ * Answers 403 when the signed-in publisher's account handle is not the address's handle, then
+ * 404 when the account has no listing at that name. A session with no account owns nothing.
+ * It runs before the body is validated, so ownership is answered first.
+ */
+const requireListingOwner = () =>
+  createMiddleware<AppEnv & PublisherVariables>(async (c, next) => {
+    const handle = c.req.param("handle");
+    const name = c.req.param("name");
+    if (handle === undefined || name === undefined) {
+      throw new Error("The listing owner check is mounted without an address.");
+    }
+    const { publisher, storage } = c.var;
+    const account = await storage.findAccountByProviderIdentity(publisher);
+    if (account?.handle !== handle) {
+      throw new ProblemError({
+        status: 403,
+        detail: "Only the listing's publisher can change it.",
+      });
+    }
+    const listing = await storage.findListingDescription({ handle, name });
+    if (listing === undefined) {
+      throw noSuchListing(handle, name);
+    }
+    await next();
   });
 
 /**
@@ -227,4 +256,28 @@ export const activities = new Hono<AppEnv>()
     }
     c.header("Cache-Control", listingCacheControl);
     return c.json<ListingResponse>(listingResponse(listing), 200);
-  });
+  })
+  // Saving the description changes the listing row only. The version documents are never
+  // rewritten, because version responses are cached for good (ADR 0006). The listing read is
+  // never stored through the Cache API, so there is nothing to clear. Checks run in order:
+  // signed in (401), owner (403), listing exists (404), then the description (400).
+  .patch(
+    "/:handle/:name",
+    requirePublisher(),
+    requireListingOwner(),
+    zValidator("json", descriptionBody, problemOnInvalid),
+    async (c) => {
+      const { handle, name } = c.req.param();
+      const { description } = c.req.valid("json");
+      const listing = await c.var.storage.updateListingDescription({
+        handle,
+        name,
+        description,
+      });
+      if (listing === undefined) {
+        throw noSuchListing(handle, name);
+      }
+      c.header("Cache-Control", noStoreCacheControl);
+      return c.json<ListingResponse>(listingResponse(listing), 200);
+    },
+  );
