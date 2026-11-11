@@ -11,6 +11,7 @@ test("creates the database and the documents bucket", () => {
 
   expect(synthesized).toHaveResourceWithProperties(D1Database, {
     name: databaseName,
+    read_replication: { mode: "disabled" },
   });
   expect(synthesized).toHaveResourceWithProperties(R2Bucket, {
     name: documentsBucketName,
