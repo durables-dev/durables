@@ -55,7 +55,7 @@ The rules for working in `infrastructure/`: the CDK Terrain project that defines
 ## Deploying
 
 - `npm run build` at the root, then `npm run diff --workspace infrastructure`, review, then `npm run deploy --workspace infrastructure`. A deploy without a reviewed diff does not happen.
-- Merging to `main` deploys through `.github/workflows/ci.yml`, in the dev container, after every check passes. The workflow's plan output is the reviewed diff for CI deploys.
+- Merging to `main` deploys through `.github/workflows/ci.yml`, in the dev container, after every check passes. Before merging, run the **Plan** workflow (`.github/workflows/plan.yml`) from the Actions tab: it runs `diff` against production with the deploy's own settings and never deploys. Its log is the reviewed diff for CI deploys.
 - Only this project changes Cloudflare resources. The exceptions, owned by the dashboard, are the state bucket, the Workers Paid subscription and the budget alert (ADR 0002).
 
 ## Dependencies

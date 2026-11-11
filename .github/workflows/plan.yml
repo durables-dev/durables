@@ -1,0 +1,60 @@
+# Shows what a deploy would change in production, without changing anything (docs/adr/0003).
+# Run it by hand from the Actions tab before merging to main, and review the plan in its log.
+# It reads the same production environment as the deploy job in ci.yml, and never deploys.
+name: Plan
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    environment: production
+    # Shares the deploy job's group, so a plan and a deploy never hold the state lock together.
+    concurrency: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          env: |
+            CLOUDFLARE_API_TOKEN
+            AWS_ACCESS_KEY_ID
+            AWS_SECRET_ACCESS_KEY
+            AWS_SSE_CUSTOMER_KEY
+            AWS_ENDPOINT_URL_S3
+            TF_VAR_cloudflare_account_id
+            TF_VAR_cloudflare_zone_id
+            TF_VAR_github_client_id
+            TF_VAR_gitlab_client_id
+            TF_VAR_google_client_id
+            TF_VAR_microsoft_client_id
+            TF_VAR_github_client_secret
+            TF_VAR_gitlab_client_secret
+            TF_VAR_google_client_secret
+            TF_VAR_microsoft_client_secret
+            TF_VAR_session_signing_key
+          runCmd: |
+            set -eu
+            npm run build
+            npm run diff --workspace infrastructure
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+          AWS_SSE_CUSTOMER_KEY: ${{ secrets.STATE_ENCRYPTION_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ vars.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          TF_VAR_github_client_id: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}
+          TF_VAR_gitlab_client_id: ${{ vars.OAUTH_GITLAB_CLIENT_ID }}
+          TF_VAR_google_client_id: ${{ vars.OAUTH_GOOGLE_CLIENT_ID }}
+          TF_VAR_microsoft_client_id: ${{ vars.OAUTH_MICROSOFT_CLIENT_ID }}
+          TF_VAR_github_client_secret: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+          TF_VAR_gitlab_client_secret: ${{ secrets.OAUTH_GITLAB_CLIENT_SECRET }}
+          TF_VAR_google_client_secret: ${{ secrets.OAUTH_GOOGLE_CLIENT_SECRET }}
+          TF_VAR_microsoft_client_secret: ${{ secrets.OAUTH_MICROSOFT_CLIENT_SECRET }}
+          TF_VAR_session_signing_key: ${{ secrets.SESSION_SIGNING_KEY }}
