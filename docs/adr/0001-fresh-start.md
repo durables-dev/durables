@@ -1,6 +1,6 @@
 # ADR 0001: Build from scratch on the `mvp` branch
 
-**Status:** accepted, 2026-10-08. **Decided by:** David Dieruf.
+**Status:** accepted, 2026-10-08. **Decided by:** David Dieruf. The branch rule is superseded by [ADR 0012](0012-work-on-main.md): work now happens on `main`, and `mvp` and `p-o-c` are deleted.
 
 ## Decision
 

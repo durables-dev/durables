@@ -35,7 +35,7 @@ Both ports are forwarded to your machine. Installed packages and local D1/R2 dat
 
 ## Branches
 
-`mvp` is the default branch: branch from it and open pull requests into it. `main` is the release branch. It receives `mvp` once at the first release, and merging to it deploys to production (`docs/adr/0001-fresh-start.md`).
+`main` is the default and only long-lived branch: branch from it and open pull requests into it. Merging into `main` deploys to production (`docs/adr/0012-work-on-main.md`).
 
 ## Deploying
 
