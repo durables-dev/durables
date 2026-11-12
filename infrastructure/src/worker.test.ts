@@ -20,6 +20,7 @@ const siteDir = join(tmpdir(), "durables-test-web-dist");
 mkdirSync(apiBundleDir, { recursive: true });
 mkdirSync(siteDir, { recursive: true });
 writeFileSync(join(apiBundleDir, "index.js"), "export default {};");
+writeFileSync(join(apiBundleDir, "abc123-install.txt"), "npm install");
 writeFileSync(join(siteDir, "_headers"), "/*\n  X-Test: 1\n");
 
 function synthWorker() {
@@ -82,6 +83,28 @@ test("the version carries wrangler.toml's compatibility date and bindings (ADR 0
       ...wrangler.rateLimits.map((limit) => limit.name),
       "SESSION_SIGNING_KEY",
       "GITHUB_CLIENT_ID",
+    ]),
+  );
+});
+
+test("uploads the bundle's text modules beside index.js", () => {
+  const stack = JSON.parse(synthWorker()) as {
+    resource: {
+      cloudflare_worker_version: Record<
+        string,
+        { modules: { name: string; content_type: string }[] }
+      >;
+    };
+  };
+  const [config] = Object.values(stack.resource.cloudflare_worker_version);
+  if (!config) throw new Error("no worker version synthesized");
+
+  expect(config.modules).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: "abc123-install.txt",
+        content_type: "text/plain",
+      }),
     ]),
   );
 });

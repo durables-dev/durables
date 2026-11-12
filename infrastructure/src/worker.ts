@@ -1,5 +1,6 @@
 import { AssetType, TerraformAsset, type TerraformVariable } from "cdktn";
 import { Construct } from "constructs";
+import { readdirSync } from "node:fs";
 import { Worker as CloudflareWorker } from "../.gen/providers/cloudflare/worker";
 import {
   WorkerVersion,
@@ -69,6 +70,16 @@ export class Worker extends Construct {
           contentType: "application/javascript+module",
           contentFile: `${bundle.path}/index.js`,
         },
+        // Wrangler's bundle imports text files (api's snippets) as separate modules beside
+        // index.js; each is uploaded as a text module under the name index.js imports.
+        ...readdirSync(props.apiBundleDir)
+          .filter((file) => file.endsWith(".txt"))
+          .sort()
+          .map((file) => ({
+            name: file,
+            contentType: "text/plain",
+            contentFile: `${bundle.path}/${file}`,
+          })),
         // Page headers (web/public/_headers) are uploaded as a module, as Cloudflare requires.
         {
           name: "_headers",
