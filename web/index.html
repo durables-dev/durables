@@ -10,5 +10,11 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Cloudflare Web Analytics (ADR 0009). The token is infrastructure's site-token output and is not a secret. -->
+    <script
+      defer
+      src="https://static.cloudflareinsights.com/beacon.min.js"
+      data-cf-beacon='{"token": "50ac328675804d96aa36a62c06888a11"}'
+    ></script>
   </body>
 </html>
