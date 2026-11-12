@@ -97,7 +97,9 @@ export class Worker extends Construct {
     });
     // run_worker_first is typed as a map in the generated binding but the provider wants a
     // list of path rules; the override writes the list the typed API cannot express.
-    this.version.addOverride("assets.config.run_worker_first", ["/api/*"]);
+    this.version.addOverride("assets.config.run_worker_first", [
+      ...props.wrangler.runWorkerFirst,
+    ]);
 
     this.deployment = new WorkersDeployment(this, "deployment", {
       accountId,

@@ -46,6 +46,7 @@ The rules for working in `api/`: the Hono API on Cloudflare Workers, with D1 and
 ## API surface
 
 - **Paths** are resource-style: plural nouns, kebab-case, nested by ownership. For example, `/api/activities/:handle/:name/versions/:version`.
+- **One route sits outside `/api`:** `/sitemap.xml`, in `src/sitemap/`, because crawlers look for it at the root. `run_worker_first` in `wrangler.toml` lists it beside `/api/*`, and `infrastructure/` reads that list.
 - **No API versioning:** no `/v1` prefix and no version header.
 - **No envelope.** A successful response returns the resource or list directly.
 - **Pagination is cursor-based.** A list response carries an opaque `nextCursor`, and the client sends it back for the next page. There is no offset pagination.

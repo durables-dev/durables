@@ -140,15 +140,20 @@ test.describe("the footer", () => {
   // The legal pages are for anyone, so the footer is tested as an anonymous visitor.
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("lists Terms, Privacy and Security, in that order", async ({
+  test("lists Terms, Privacy and Security, in that order, then GitHub", async ({
     page,
     expectAccessible,
   }) => {
     await page.goto("/");
 
-    await expect(footerNav(page).getByRole("link")).toHaveText(
-      footerLinks.map((link) => link.name),
-    );
+    // The GitHub link is the mark alone, so its text is empty and its name is its label.
+    await expect(footerNav(page).getByRole("link")).toHaveText([
+      ...footerLinks.map((link) => link.name),
+      "",
+    ]);
+    await expect(
+      footerNav(page).getByRole("link", { name: "Durables on GitHub" }),
+    ).toHaveAttribute("href", "https://github.com/durables-dev");
     await expectAccessible();
   });
 
@@ -220,7 +225,10 @@ test.describe("the footer", () => {
       const footer = page.getByRole("contentinfo");
       await footer.scrollIntoViewIfNeeded();
       await expect(footer).toBeInViewport();
-      await expect(footer.getByRole("link")).toHaveCount(footerLinks.length);
+      // Kisasa in the credit, the legal pages, then GitHub.
+      await expect(footer.getByRole("link")).toHaveCount(
+        footerLinks.length + 2,
+      );
       await expectAccessible();
     });
   }

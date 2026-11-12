@@ -5,9 +5,10 @@ import { searchAddress, type Search } from "@/lib/search-address";
 import { activeFilterCount, everything } from "@/lib/search-filters";
 import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { BasicsLinks } from "./basics-links";
 import styles from "./home-page.module.css";
 
-// The home page (screens 1 and 2): the headline, the search box with its Filters panel, the
+// The home page (screens 1 and 2): the headline, the two short explanations, the search box with its Filters panel, the
 // Search button, and Explore All. Search opens the results with the words typed and the chips
 // picked. Explore All opens every activity.
 export function HomePage() {
@@ -30,6 +31,7 @@ export function HomePage() {
       <h1 className={styles["headline"]}>
         Temporal activities, ready to copy.
       </h1>
+      <BasicsLinks />
       <form role="search" action={submit} className={styles["form"]}>
         <SearchField className={styles["box"]}>
           <button

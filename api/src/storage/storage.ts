@@ -81,6 +81,11 @@ export interface Version extends Address {
   publishedAt: Date;
 }
 
+/** A listing's newest address, by its highest version number, and when that version was published. */
+export interface LatestAddress extends Address {
+  publishedAt: Date;
+}
+
 /** A listing's current one-line description, which can change after publishing (ADR 0006). */
 export interface ListingDescription {
   handle: string;
@@ -555,6 +560,37 @@ export class Storage {
         .where(matches),
     ]);
     return { listings: rows, count: total?.count ?? 0 };
+  }
+
+  /**
+   * Every listing's highest version, as the sitemap lists them: by handle, then name. The
+   * sitemap protocol allows 50,000 addresses in one file, far more than the registry holds.
+   */
+  async listLatestAddresses(): Promise<LatestAddress[]> {
+    const ranked = this.#db.$with("ranked").as(
+      this.#db
+        .select({
+          handle: versions.handle,
+          name: versions.name,
+          version: versions.version,
+          publishedAt: versions.publishedAt,
+          rank: sql<number>`row_number() over (partition by ${versions.handle}, ${versions.name} order by ${highestVersionFirst()})`.as(
+            "rank",
+          ),
+        })
+        .from(versions),
+    );
+    return this.#db
+      .with(ranked)
+      .select({
+        handle: ranked.handle,
+        name: ranked.name,
+        version: ranked.version,
+        publishedAt: ranked.publishedAt,
+      })
+      .from(ranked)
+      .where(eq(ranked.rank, 1))
+      .orderBy(ranked.handle, ranked.name);
   }
 
   /**

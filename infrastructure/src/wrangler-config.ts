@@ -16,6 +16,8 @@ export interface WranglerConfig {
   readonly d1Binding: string;
   readonly r2Binding: string;
   readonly assetsBinding: string;
+  /** The paths the Worker's code answers before the site's assets: the API and the sitemap. */
+  readonly runWorkerFirst: readonly string[];
   readonly rateLimits: readonly RateLimitBinding[];
 }
 
@@ -33,6 +35,7 @@ export function readWranglerConfig(path: string): WranglerConfig {
       /\[\[r2_buckets\]\][^[]*?binding\s*=\s*"([^"]+)"/,
     ),
     assetsBinding: required(toml, /\[assets\][^[]*?binding\s*=\s*"([^"]+)"/),
+    runWorkerFirst: list(toml, /^run_worker_first\s*=\s*\[([^\]]*)\]/m),
     rateLimits: rateLimits(toml),
   };
 }

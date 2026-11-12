@@ -87,6 +87,24 @@ test("the version carries wrangler.toml's compatibility date and bindings (ADR 0
   );
 });
 
+test("the Worker answers the API and the sitemap before the site's assets", () => {
+  const stack = JSON.parse(synthWorker()) as {
+    resource: {
+      cloudflare_worker_version: Record<
+        string,
+        { assets: { config: { run_worker_first: string[] } } }
+      >;
+    };
+  };
+  const [config] = Object.values(stack.resource.cloudflare_worker_version);
+  if (!config) throw new Error("no worker version synthesized");
+
+  expect(config.assets.config.run_worker_first).toEqual([
+    "/api/*",
+    "/sitemap.xml",
+  ]);
+});
+
 test("uploads the bundle's text modules beside index.js", () => {
   const stack = JSON.parse(synthWorker()) as {
     resource: {

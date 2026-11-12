@@ -155,6 +155,15 @@ test("a published listing shows its title, address and description", async () =>
     )
     .toBeVisible();
   await expect.poll(() => document.title).toBe("Charge card · Durables");
+  await expect
+    .poll(() =>
+      document.head
+        .querySelector('meta[name="description"]')
+        ?.getAttribute("content"),
+    )
+    .toBe(
+      "Charges a card with Stripe and returns the charge ID. A Python Temporal activity by ddieruf on Durables.",
+    );
 });
 
 test("the listing page sits inside the frame, with the header and footer", async () => {

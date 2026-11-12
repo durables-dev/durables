@@ -104,8 +104,17 @@ async function openFilters(opened: Opened) {
 }
 
 /** The address the router is at, once it has left the home page. */
+// Waits for the results page's browse call, so it cannot arrive after this test ends and be
+// answered by the next test's handlers.
+async function resultsAsked(calls: BrowseCall[]) {
+  await expect.poll(() => calls.length).toBe(1);
+}
+
 async function landedAt({ router }: Opened) {
-  await expect.poll(() => router.state.location.pathname).toBe("/search");
+  // The first test to arrive loads the results page's chunk, which can take over a second.
+  await expect
+    .poll(() => router.state.location.pathname, { timeout: 5000 })
+    .toBe("/search");
   return `${router.state.location.pathname}${router.state.location.search}`;
 }
 
@@ -172,13 +181,14 @@ test("pressing Enter opens /search with the words typed", async () => {
 });
 
 test("the Search button opens /search with the words typed", async () => {
-  serveNoResults();
+  const calls = serveNoResults();
   const opened = await openHome();
 
   await searchBox(opened).fill("send email");
   await searchButton(opened).click();
 
   expect(await landedAt(opened)).toBe(searchAddress({ words: "send email" }));
+  await resultsAsked(calls);
 });
 
 // Criterion 2: words and both filters are carried into the results
@@ -228,7 +238,7 @@ test("words with SDK and integration chips open results with both filters applie
 });
 
 test("filters chosen with the panel closed again are still carried", async () => {
-  serveNoResults();
+  const calls = serveNoResults();
   const opened = await openHome();
 
   await openFilters(opened);
@@ -239,6 +249,7 @@ test("filters chosen with the panel closed again are still carried", async () =>
   expect(await landedAt(opened)).toBe(
     searchAddress({ integrations: ["Slack"] }),
   );
+  await resultsAsked(calls);
 });
 
 // Criterion 3: Explore All opens every activity, newest first, with no filters
@@ -451,7 +462,7 @@ test("Clear filters shows while a filter is on and resets both filters", async (
 });
 
 test("Clear filters keeps the words typed", async () => {
-  serveNoResults();
+  const calls = serveNoResults();
   const opened = await openHome();
 
   await searchBox(opened).fill("refund");
@@ -462,6 +473,7 @@ test("Clear filters keeps the words typed", async () => {
   await searchButton(opened).click();
 
   expect(await landedAt(opened)).toBe(searchAddress({ words: "refund" }));
+  await resultsAsked(calls);
 });
 
 // Fringe cases
