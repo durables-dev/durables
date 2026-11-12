@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /contribute
+
+Sitemap: https://durables.dev/sitemap.xml

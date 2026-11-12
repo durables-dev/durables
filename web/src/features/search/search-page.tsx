@@ -18,7 +18,10 @@ export interface SearchPageProps {
 export function SearchPage({ search, onSearch }: SearchPageProps) {
   return (
     <div className={styles["page"]}>
-      <PageTitle page="Search" />
+      <PageTitle
+        page="Search"
+        description="Search Temporal activities on Durables by what they do, SDK, integration and publisher."
+      />
       <h1 className={styles["heading"]}>Search</h1>
       <div className={styles["bar"]}>
         <SearchBox

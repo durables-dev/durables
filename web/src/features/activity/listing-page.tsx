@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ConfigureSection } from "./configure-section";
 import { ImplementSection } from "./implement-section";
 import { isListingPublisher } from "./is-listing-publisher";
+import { listingSearchDescription } from "./listing-search-description";
 import type { ListingAddress } from "./listing-address";
 import { ListingLayout } from "./listing-layout";
 import styles from "./listing-page.module.css";
@@ -66,7 +67,14 @@ export function ListingPage({ address }: ListingPageProps) {
 
   return (
     <>
-      <PageTitle page={version.data.title} />
+      <PageTitle
+        page={version.data.title}
+        description={listingSearchDescription({
+          description: listing.data.description,
+          sdk: version.data.sdk,
+          handle: version.data.handle,
+        })}
+      />
       <ListingLayout
         top={
           <ListingTop

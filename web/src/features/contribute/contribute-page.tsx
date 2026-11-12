@@ -89,7 +89,10 @@ export function ContributePage() {
 function ContributeFrame({ children }: { children: ReactNode }) {
   return (
     <div className={styles["page"]}>
-      <PageTitle page="Contribute" />
+      <PageTitle
+        page="Contribute"
+        description="Publish a Temporal activity to Durables for the community to copy."
+      />
       <hgroup className={styles["heading"]}>
         <p className={styles["kicker"]}>Contribute</p>
         <h1 className={styles["title"]}>New activity</h1>

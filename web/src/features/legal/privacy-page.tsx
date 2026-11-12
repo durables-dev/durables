@@ -3,7 +3,11 @@ import { LegalPage } from "./legal-page";
 // What Durables records about visitors and publishers (ADR 0007, ADR 0009).
 export function PrivacyPage() {
   return (
-    <LegalPage title="Privacy" updated="15 October 2026">
+    <LegalPage
+      title="Privacy"
+      description="What Durables records when you visit or publish, how long it is kept, and your choices."
+      updated="15 October 2026"
+    >
       <p>
         Durables collects as little as it can. It is run by David Dieruf as an
         individual, has no income, shows no ads and sells nothing, including

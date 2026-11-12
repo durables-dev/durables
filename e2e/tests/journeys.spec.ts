@@ -74,10 +74,12 @@ test.describe("as an anonymous visitor", () => {
             name: "Temporal activities, ready to copy.",
           }),
         ).toBeVisible();
+        // The legal pages, then GitHub, which is the mark alone and so has no text.
         await expect(footer.getByRole("link")).toHaveText([
           "Terms",
           "Privacy",
           "Security",
+          "",
         ]);
         await expectAccessible();
       });
