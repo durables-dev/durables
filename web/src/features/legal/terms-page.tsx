@@ -3,7 +3,11 @@ import { LegalPage } from "./legal-page";
 // The Terms of use. Publishers agree to these before they publish.
 export function TermsPage() {
   return (
-    <LegalPage title="Terms" updated="15 October 2026">
+    <LegalPage
+      title="Terms"
+      description="The terms for using Durables and for publishing Temporal activities to it."
+      updated="15 October 2026"
+    >
       <p>
         Durables is a free community registry of Temporal activities. It is run
         by David Dieruf as an individual, not by a company, and it is not

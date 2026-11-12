@@ -1,0 +1,86 @@
+/* Laid out only while open, so the closed dialog keeps the browser's display: none. */
+.dialog {
+  width: min(560px, 100% - 40px);
+  max-width: none;
+  max-height: calc(100dvh - 120px);
+  margin: 96px auto auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dialog::backdrop {
+  background: var(--scrim);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  font-size: var(--text-h2);
+  font-weight: 600;
+  letter-spacing: -0.017em;
+}
+
+.close {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  margin: -6px -8px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  line-height: 1.6;
+}
+
+.body p {
+  margin: 0;
+}
+
+/* The closing note, such as who makes Durables, is quieter than the explanation. */
+.body p:last-child {
+  color: var(--fg-muted);
+  font-size: var(--text-small);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.docs {
+  height: 40px;
+  padding: 0 18px;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--text-small);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}

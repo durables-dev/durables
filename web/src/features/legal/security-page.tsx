@@ -3,7 +3,11 @@ import { LegalPage } from "./legal-page";
 // How Durables protects the site and its publishers, and how to report a problem.
 export function SecurityPage() {
   return (
-    <LegalPage title="Security" updated="15 October 2026">
+    <LegalPage
+      title="Security"
+      description="How Durables protects you, what to check before using published code, and how to report a problem."
+      updated="15 October 2026"
+    >
       <p>
         Durables is built to hold as little as possible that could be misused,
         and to keep what it does hold safe.

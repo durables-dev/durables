@@ -51,25 +51,39 @@ afterEach(async () => {
   await page.viewport(414, 896);
 });
 
-test('shows "© <current year> Durables" at the left and the links at the right', async () => {
+const credit =
+  "Free for the Temporal community, maintained with love by Kisasa.";
+
+const year = () => String(new Date().getFullYear());
+
+test("puts the copyright at the left, the credit in the centre and the links at the right", async () => {
   await page.viewport(1280, 800);
   const screen = await renderFooter();
 
   const footer = screen.getByRole("contentinfo");
-  const copyright = footer.getByText(
-    `© ${String(new Date().getFullYear())} Durables`,
-  );
+  const copyright = footer.getByText(`© ${year()} Durables`, { exact: true });
+  const creditLine = footer.getByText(credit, { exact: true });
   const nav = footer.getByRole("navigation", { name: "Footer" });
   await expect.element(copyright).toBeVisible();
+  await expect.element(creditLine).toBeVisible();
   await expect.element(nav).toBeVisible();
 
   const footerBox = footer.element().getBoundingClientRect();
   const copyrightBox = copyright.element().getBoundingClientRect();
+  const creditBox = creditLine.element().getBoundingClientRect();
   const navBox = nav.element().getBoundingClientRect();
   expect(copyrightBox.left - footerBox.left).toBeLessThanOrEqual(24);
   expect(footerBox.right - navBox.right).toBeLessThanOrEqual(24);
-  expect(copyrightBox.right).toBeLessThan(navBox.left);
-  expect(Math.round(copyrightBox.top)).toBe(Math.round(navBox.top));
+  expect(copyrightBox.right).toBeLessThan(creditBox.left);
+  expect(creditBox.right).toBeLessThan(navBox.left);
+  // Centred on the footer, not on the space between its neighbours.
+  const footerMiddle = footerBox.left + footerBox.width / 2;
+  const creditMiddle = creditBox.left + creditBox.width / 2;
+  expect(Math.abs(creditMiddle - footerMiddle)).toBeLessThanOrEqual(1);
+  // One line: all three share a vertical centre.
+  const middle = (box: DOMRect) => Math.round(box.top + box.height / 2);
+  expect(middle(creditBox)).toBe(middle(copyrightBox));
+  expect(middle(navBox)).toBe(middle(copyrightBox));
 });
 
 test("takes the year from the clock when it renders", async () => {
@@ -82,7 +96,7 @@ test("takes the year from the clock when it renders", async () => {
     .toHaveTextContent(/^© 2031 Durables/);
 });
 
-test("links to Terms, Privacy and Security, in that order", async () => {
+test("links to Terms, Privacy, Security and the durables-dev organization on GitHub, in that order", async () => {
   const screen = await renderFooter();
 
   const links = screen
@@ -90,12 +104,46 @@ test("links to Terms, Privacy and Security, in that order", async () => {
     .getByRole("link")
     .elements();
   expect(
-    links.map((link) => [link.textContent, link.getAttribute("href")]),
+    links.map((link) => [
+      link.getAttribute("aria-label") ?? link.textContent,
+      link.getAttribute("href"),
+    ]),
   ).toEqual([
     ["Terms", "/terms"],
     ["Privacy", "/privacy"],
     ["Security", "/security"],
+    ["Durables on GitHub", "https://github.com/durables-dev"],
   ]);
+});
+
+test("links Kisasa, in the credit, to its Temporal page", async () => {
+  const screen = await renderFooter();
+
+  const kisasa = screen
+    .getByRole("contentinfo")
+    .getByText(credit, { exact: true })
+    .getByRole("link", { name: "Kisasa", exact: true });
+  await expect
+    .element(kisasa)
+    .toHaveAttribute("href", "https://kisasa.io/temporal");
+  // It opens in a new tab, so the visitor keeps their place on Durables.
+  await expect.element(kisasa).toHaveAttribute("target", "_blank");
+  await expect.element(kisasa).toHaveAttribute("rel", "noopener noreferrer");
+});
+
+test("shows GitHub as its mark, with the link named for screen readers", async () => {
+  const screen = await renderFooter();
+
+  const github = screen
+    .getByRole("navigation", { name: "Footer" })
+    .getByRole("link", { name: "Durables on GitHub", exact: true });
+  await expect.element(github).toBeVisible();
+  expect(github.element().textContent).toBe("");
+  const mark = github.element().querySelector("svg");
+  expect(mark?.getAttribute("aria-hidden")).toBe("true");
+  const box = mark?.getBoundingClientRect();
+  expect(box?.width).toBe(16);
+  expect(box?.height).toBe(16);
 });
 
 describe.each([
@@ -120,18 +168,17 @@ describe.each([
   });
 });
 
-test("has no About or Contact link, no disclaimer and no Temporal or official wording", async () => {
+test("has no About or Contact link, no disclaimer and no official wording", async () => {
   const screen = await renderFooter();
 
   const footer = screen.getByRole("contentinfo");
   await expect.element(footer).toBeVisible();
   const text = footer.element().textContent;
-  expect(text).toBe(
-    `© ${String(new Date().getFullYear())} DurablesTermsPrivacySecurity`,
-  );
-  expect(text).not.toMatch(/about|contact|disclaim|temporal|official/i);
+  expect(text).toBe(`© ${year()} Durables${credit}TermsPrivacySecurity`);
+  expect(text).not.toMatch(/about|contact|disclaim|official|affiliat/i);
+  // The GitHub mark is the only picture.
   expect(footer.element().querySelectorAll("img, svg, picture")).toHaveLength(
-    0,
+    1,
   );
 });
 
@@ -158,25 +205,29 @@ describe.each([
   });
 });
 
-test("wraps and centres on a narrow screen, with every link still visible", async () => {
+test("stacks and centres on a narrow screen, with every link still visible", async () => {
   await page.viewport(320, 640);
   const screen = await renderFooter();
 
   const footer = screen.getByRole("contentinfo");
   await expect.element(footer).toBeVisible();
-  expect(getComputedStyle(footer.element()).justifyContent).toBe("center");
 
   const footerBox = footer.element().getBoundingClientRect();
   const copyrightBox = footer
     .getByText(/^© \d{4} Durables$/)
     .element()
     .getBoundingClientRect();
+  const creditBox = footer
+    .getByText(credit, { exact: true })
+    .element()
+    .getBoundingClientRect();
   const nav = footer.getByRole("navigation", { name: "Footer" });
   const navBox = nav.element().getBoundingClientRect();
-  // Wrapped: the links sit on their own line below the copyright.
-  expect(navBox.top).toBeGreaterThanOrEqual(copyrightBox.bottom);
+  // Stacked: copyright, then credit, then links.
+  expect(creditBox.top).toBeGreaterThanOrEqual(copyrightBox.bottom);
+  expect(navBox.top).toBeGreaterThanOrEqual(creditBox.bottom);
   // Centred: each line has equal space on both sides.
-  for (const box of [copyrightBox, navBox]) {
+  for (const box of [copyrightBox, creditBox, navBox]) {
     const left = box.left - footerBox.left;
     const right = footerBox.right - box.right;
     expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
@@ -195,9 +246,17 @@ test("each link takes keyboard focus in order and shows a visible focus ring", a
 
   const nav = screen.getByRole("navigation", { name: "Footer" });
   await expect.element(nav).toBeVisible();
-  for (const name of ["Terms", "Privacy", "Security"]) {
+  const footer = screen.getByRole("contentinfo");
+  // Kisasa, in the credit, comes before the footer's own links.
+  for (const name of [
+    "Kisasa",
+    "Terms",
+    "Privacy",
+    "Security",
+    "Durables on GitHub",
+  ]) {
     await userEvent.tab();
-    const link = nav.getByRole("link", { name });
+    const link = footer.getByRole("link", { name, exact: true });
     await expect.element(link).toHaveFocus();
     const style = getComputedStyle(link.element());
     expect(style.outlineStyle).toBe("solid");
