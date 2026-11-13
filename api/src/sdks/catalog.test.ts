@@ -2,7 +2,8 @@ import { type Sdk, sdks } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
 import type { Facts } from "../checks/facts";
 import { generateSnippets } from "../snippets/snippets";
-import { chipOrder, type SdkProfile, sdkCatalog } from "./catalog";
+import { storedSdks } from "../storage/schema";
+import { type SdkProfile, sdkCatalog } from "./catalog";
 import { registeredSdks, sdkRegistry } from "./registry";
 
 /** The catalog's SDK names, in the order it lists them. */
@@ -11,7 +12,7 @@ const names = (catalog: readonly SdkProfile[]) =>
 
 /** The registry's SDKs in chip order, worked out independently of the catalog. */
 const inChipOrder = (sdkList: readonly Sdk[]) =>
-  chipOrder.filter((sdk): sdk is Sdk =>
+  storedSdks.filter((sdk): sdk is Sdk =>
     (sdkList as readonly string[]).includes(sdk),
   );
 
@@ -32,19 +33,6 @@ const syncFacts = (sdk: Sdk): Facts => ({
 });
 
 describe("the SDK catalog", () => {
-  it("lists Temporal's eight officially supported SDKs in chip order", () => {
-    expect(chipOrder).toEqual([
-      "Go",
-      "Java",
-      "Python",
-      "TypeScript",
-      ".NET",
-      "Ruby",
-      "PHP",
-      "Rust",
-    ]);
-  });
-
   it("lists every SDK in the registry, in chip order", () => {
     const catalog = sdkCatalog(registeredSdks);
 

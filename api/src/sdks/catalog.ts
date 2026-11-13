@@ -1,23 +1,9 @@
 import type { Sdk } from "@durables/schemas";
+import { storedSdks } from "../storage/schema";
 import type { RunsAsWording, SdkEntry } from "./sdk-entry";
 
 // The SDK catalog (ADR 0013): each registry entry's display profile, as web reads it. Web
 // looks a profile up by the `sdk` it already receives, and the wording by `runsAs`.
-
-/**
- * Every SDK Temporal officially supports, in Temporal's order, which is the order the filter
- * chips show them (API map D1). An SDK in the shared list but missing here does not compile.
- */
-export const chipOrder = [
-  "Go",
-  "Java",
-  "Python",
-  "TypeScript",
-  ".NET",
-  "Ruby",
-  "PHP",
-  "Rust",
-] as const;
 
 /** One SDK in the catalog, as `GET /api/sdks` answers it. */
 export interface SdkProfile {
@@ -35,7 +21,8 @@ export interface SdkProfile {
   workerRequirements: RunsAsWording;
 }
 
-const chipPosition = (sdk: Sdk): number => chipOrder.indexOf(sdk);
+/** An SDK's place in chip order: Temporal's order, as `storedSdks` lists it (API map D1). */
+const chipPosition = (sdk: Sdk): number => storedSdks.indexOf(sdk);
 
 /** The catalog: one profile per entry, in chip order, whatever order the entries come in. */
 export const sdkCatalog = (entries: readonly SdkEntry[]): SdkProfile[] =>
