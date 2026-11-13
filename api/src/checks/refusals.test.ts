@@ -10,6 +10,7 @@ import {
   noActivity,
   notTemporalActivity,
   refusalTypes,
+  sdkChoiceNeeded,
   unacceptedSdk,
 } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
@@ -34,18 +35,38 @@ describe("refusals", () => {
   });
 
   it("are ProblemErrors, so app.onError answers them", () => {
-    expect(noActivity()).toBeInstanceOf(ProblemError);
-    expect(noActivity().name).toBe("CheckRefusal");
+    expect(noActivity("Python")).toBeInstanceOf(ProblemError);
+    expect(noActivity("Python").name).toBe("CheckRefusal");
   });
 
   it.each([
-    ["no activity", noActivity(), refusalTypes.noActivity, 422, {}],
+    [
+      "no activity",
+      noActivity(".NET"),
+      refusalTypes.noActivity,
+      422,
+      { sdk: ".NET" },
+    ],
     [
       "not a Temporal activity",
       notTemporalActivity(),
       refusalTypes.notTemporalActivity,
       422,
       {},
+    ],
+    [
+      "SDK not identified",
+      sdkChoiceNeeded("not-identified"),
+      refusalTypes.sdkChoiceNeeded,
+      422,
+      { reason: "not-identified" },
+    ],
+    [
+      "ambiguous SDK",
+      sdkChoiceNeeded("ambiguous"),
+      refusalTypes.sdkChoiceNeeded,
+      422,
+      { reason: "ambiguous" },
     ],
     [
       "unaccepted SDK",
@@ -96,8 +117,9 @@ describe("refusals", () => {
 
   it("uses a type that is a stable URI, never the title or detail", () => {
     for (const refusal of [
-      noActivity(),
+      noActivity("TypeScript"),
       notTemporalActivity(),
+      sdkChoiceNeeded("ambiguous"),
       unacceptedSdk("PHP"),
       multipleActivities(2),
       codeTooLarge(),

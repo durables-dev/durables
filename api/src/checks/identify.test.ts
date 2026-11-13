@@ -15,12 +15,13 @@ const marker = (name: string): Pattern => ({
   regex: new RegExp(name.toUpperCase().replace(/-/g, "_")),
 });
 
-/** A stand-in SDK whose markers are `<TAG>_SDK` and `<TAG>_ACTIVITY`. */
+/** A stand-in SDK whose markers are `<TAG>_SDK` and `<TAG>_ACTIVITY`, and its shape `<TAG>_SHAPE`. */
 const stub = (sdk: string, tag: string): Recognisable<string> => ({
   sdk,
   recognition: {
     sdkMarkers: [marker(`${tag}-sdk`)],
     activityMarkers: [marker(`${tag}-activity`)],
+    shapeMarkers: [marker(`${tag}-shape`)],
   },
 });
 
@@ -112,7 +113,11 @@ describe("identifySdk", () => {
       const both = marker("de-both");
       const delta: Recognisable<string> = {
         sdk: "Delta",
-        recognition: { sdkMarkers: [both], activityMarkers: [both] },
+        recognition: {
+          sdkMarkers: [both],
+          activityMarkers: [both],
+          shapeMarkers: [],
+        },
       };
       expect(identifySdk("DE_BOTH", [delta])).toMatchObject({
         sdk: "Delta",
@@ -147,6 +152,45 @@ describe("identifySdk", () => {
         });
       },
     );
+  });
+
+  describe("an inferred SDK", () => {
+    it("is the only SDK whose shape marker matches when no SDK marker does", () => {
+      expect(identifySdk("AL_SHAPE", [alpha, beta])).toEqual({
+        outcome: "identified",
+        sdk: "Alpha",
+        tier: "inferred",
+        matchedPatterns: ["al-shape"],
+      });
+    });
+
+    it("is never chosen over an SDK whose marker matches", () => {
+      expect(identifySdk("AL_SHAPE BE_SDK", [alpha, beta])).toEqual({
+        outcome: "identified",
+        sdk: "Beta",
+        tier: "detected",
+        matchedPatterns: ["be-sdk"],
+      });
+    });
+
+    it("is detected, not inferred, when its own marker and shape both match", () => {
+      expect(identifySdk("AL_SDK AL_SHAPE", [alpha, beta])).toMatchObject({
+        sdk: "Alpha",
+        tier: "detected",
+      });
+    });
+
+    it("is ambiguous when two SDKs' shape markers match, in either order", () => {
+      const expected = { outcome: "ambiguous", sdks: ["Alpha", "Beta"] };
+      expect(identifySdk("AL_SHAPE BE_SHAPE", [alpha, beta])).toEqual(expected);
+      expect(identifySdk("AL_SHAPE BE_SHAPE", [beta, alpha])).toEqual(expected);
+    });
+
+    it("is never inferred for Python, TypeScript or .NET, whose detection is unchanged", () => {
+      for (const { recognition } of registeredSdks) {
+        expect(recognition.shapeMarkers).toEqual([]);
+      }
+    });
   });
 
   describe("an ambiguous paste", () => {

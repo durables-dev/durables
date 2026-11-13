@@ -1,11 +1,12 @@
 import type { Detector } from "./detector";
-import type { AcceptedSdk, Facts } from "./facts";
+import type { AcceptedSdk, Facts, Provenance, Tier } from "./facts";
 import { identifySdk, type Recognisable } from "./identify";
 import {
   codeTooLarge,
   multipleActivities,
   noActivity,
   notTemporalActivity,
+  sdkChoiceNeeded,
   unacceptedSdk,
 } from "./refusals";
 import { isWithinSizeLimit } from "./size-limit";
@@ -55,33 +56,40 @@ const detect = (
 };
 
 /**
- * Checks pasted code and returns the activity's facts. The SDK is identified over the given
- * SDKs together with Java, Go and PHP, which are recognised so they can be refused by name.
- * Code identification can't place, or can't decide between SDKs for, is not a Temporal
- * activity.
- *
- * @throws {CheckRefusal} when the file is too large, isn't a Temporal activity, is in an SDK
- * Durables doesn't accept, or has no activity or more than one.
- * @throws {DetectorFailure} when a detector throws.
+ * How each fact was established. The SDK's tier comes from identification or declaration.
+ * The detector reads every other fact from the code, so each of those is detected.
  */
-export const checkCode = (
-  code: string,
-  checkedSdks: readonly CheckedSdk[],
-): Facts => {
-  if (!isWithinSizeLimit(code)) {
-    throw codeTooLarge();
-  }
-  if (code.trim() === "") {
-    throw notTemporalActivity();
-  }
+const provenanceFor = (sdkTier: Tier): Provenance => ({
+  sdk: sdkTier,
+  activity: "detected",
+  inputOutput: "detected",
+  runsAs: "detected",
+  nonRetryableErrors: "detected",
+  configurationRead: "detected",
+  dependencies: "detected",
+  heartbeats: "detected",
+});
 
-  const source = toSource(code);
+/** The SDK to run detection with, and how it was established. */
+interface ChosenSdk {
+  readonly checked: CheckedSdk;
+  readonly tier: Tier;
+}
+
+/**
+ * Identifies the SDK over the given SDKs together with Java, Go and PHP, which are recognised
+ * so they can be refused by name.
+ */
+const identifyChecked = (
+  source: Source,
+  checkedSdks: readonly CheckedSdk[],
+): ChosenSdk => {
   const identification = identifySdk(source.text, [
     ...checkedSdks,
     ...unacceptedSdks,
   ]);
   if (identification.outcome !== "identified") {
-    throw notTemporalActivity();
+    throw sdkChoiceNeeded(identification.outcome);
   }
   const checked = checkedSdks.find(({ sdk }) => sdk === identification.sdk);
   if (checked === undefined) {
@@ -92,14 +100,58 @@ export const checkCode = (
       ? notTemporalActivity()
       : unacceptedSdk(unaccepted.sdk);
   }
+  return { checked, tier: identification.tier };
+};
+
+/** The declared SDK's entry. Every SDK in the shared list has one in production. */
+const declaredChecked = (
+  declared: AcceptedSdk,
+  checkedSdks: readonly CheckedSdk[],
+): ChosenSdk => {
+  const checked = checkedSdks.find(({ sdk }) => sdk === declared);
+  if (checked === undefined) {
+    throw new Error(`No detector is given for the declared SDK ${declared}.`);
+  }
+  return { checked, tier: "declared" };
+};
+
+/**
+ * Checks pasted code and returns the activity's facts, with how each was established.
+ *
+ * With no declared SDK, the SDK is identified from the code. Code identification can't place,
+ * or can't decide between SDKs for, needs the publisher to choose the SDK. With a declared
+ * SDK, identification is skipped and that SDK's detector decides alone. Only the SDK is ever
+ * declared: every other fact comes from the detector.
+ *
+ * @throws {CheckRefusal} when the file is too large or empty, needs the SDK chosen, is in an
+ * SDK Durables doesn't accept, or has no activity or more than one.
+ * @throws {DetectorFailure} when a detector throws.
+ */
+export const checkCode = (
+  code: string,
+  checkedSdks: readonly CheckedSdk[],
+  declared?: AcceptedSdk,
+): Facts => {
+  if (!isWithinSizeLimit(code)) {
+    throw codeTooLarge();
+  }
+  if (code.trim() === "") {
+    throw notTemporalActivity();
+  }
+
+  const source = toSource(code);
+  const { checked, tier } =
+    declared === undefined
+      ? identifyChecked(source, checkedSdks)
+      : declaredChecked(declared, checkedSdks);
 
   const activities = detect(checked, source);
   const [only, ...rest] = activities;
   if (only === undefined) {
-    throw noActivity();
+    throw noActivity(checked.sdk);
   }
   if (rest.length > 0) {
     throw multipleActivities(activities.length);
   }
-  return { sdk: checked.sdk, ...only };
+  return { sdk: checked.sdk, ...only, provenance: provenanceFor(tier) };
 };

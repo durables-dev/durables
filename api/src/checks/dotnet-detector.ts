@@ -551,6 +551,8 @@ const firstByName = (found: readonly NamedLineRef[]) => {
 export const dotnetRecognition: SdkRecognition = {
   sdkMarkers: [dotnetSdkUsing, dotnetActivityAttribute],
   activityMarkers: [dotnetActivityAttribute],
+  // Recognised only by its markers. Inference by shape would change how it is detected.
+  shapeMarkers: [],
 };
 
 /**

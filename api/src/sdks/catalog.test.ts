@@ -1,6 +1,6 @@
 import { type Sdk, sdks } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
-import type { Facts } from "../checks/facts";
+import type { FactValues } from "../checks/facts";
 import { generateSnippets } from "../snippets/snippets";
 import { storedSdks } from "../storage/schema";
 import { type SdkProfile, sdkCatalog } from "./catalog";
@@ -20,7 +20,7 @@ const inChipOrder = (sdkList: readonly Sdk[]) =>
 const threadPool = /thread[ _]?pool/i;
 
 /** A sync activity's facts, enough to generate an SDK's worker. */
-const syncFacts = (sdk: Sdk): Facts => ({
+const syncFacts = (sdk: Sdk): FactValues => ({
   sdk,
   activity: { name: "ChargeCard", line: 1 },
   input: "ChargeRequest",

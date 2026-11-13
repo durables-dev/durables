@@ -1,3 +1,4 @@
+import { sdkSchema } from "@durables/schemas";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -25,8 +26,14 @@ interface ChecksEnv {
   Variables: AppEnv["Variables"] & { publisher: Session };
 }
 
-/** The body of a check. Any other field, such as facts sent by the client, is dropped. */
-const checkBody = z.object({ code: z.string() });
+/**
+ * The body of a check. `declaredSdk` is the SDK the publisher chose; the api runs its detector
+ * itself. Any other field, such as facts sent by the client, is dropped.
+ */
+const checkBody = z.object({
+  code: z.string(),
+  declaredSdk: sdkSchema.optional(),
+});
 
 /** Answers 413 Problem Details, the same refusal as oversized code, when the body is too large. */
 const checkBodyLimit = () =>
@@ -64,8 +71,8 @@ export const createChecks = (checkedSdks: readonly CheckedSdk[]) =>
     previewRateLimit(),
     zValidator("json", checkBody, problemOnInvalid),
     (c) => {
-      const { code } = c.req.valid("json");
-      const facts = checkCode(code, checkedSdks);
+      const { code, declaredSdk } = c.req.valid("json");
+      const facts = checkCode(code, checkedSdks, declaredSdk);
       c.header("Cache-Control", "no-store");
       return c.json<Facts>(facts, 200);
     },

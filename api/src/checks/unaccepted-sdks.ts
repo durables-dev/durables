@@ -72,6 +72,7 @@ export const unacceptedSdks: readonly Recognisable<UnacceptedSdk>[] = [
     recognition: {
       sdkMarkers: [javaSdkImport],
       activityMarkers: [javaActivityAnnotation],
+      shapeMarkers: [],
     },
   },
   {
@@ -79,6 +80,7 @@ export const unacceptedSdks: readonly Recognisable<UnacceptedSdk>[] = [
     recognition: {
       sdkMarkers: [goSdkImport],
       activityMarkers: [goActivityImport, goActivityFunction],
+      shapeMarkers: [],
     },
   },
   {
@@ -86,6 +88,7 @@ export const unacceptedSdks: readonly Recognisable<UnacceptedSdk>[] = [
     recognition: {
       sdkMarkers: [phpSdkUse],
       activityMarkers: [phpActivityAttribute],
+      shapeMarkers: [],
     },
   },
 ];
