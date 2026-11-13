@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { dotnet } from "./dotnet";
 import { python } from "./python";
 import { registeredSdks, sdkRegistry } from "./registry";
+import { rust } from "./rust";
 import type { SdkEntry, SdkRegistry } from "./sdk-entry";
 import { type Sdk, sdks } from "./sdk-list";
 import { typescript } from "./typescript";
@@ -60,7 +61,7 @@ describe("the SDK registry", () => {
 
   it("lists its entries in the api's list's order", () => {
     expect(registeredSdks.map(({ sdk }) => sdk)).toEqual([...sdks]);
-    expect(registeredSdks).toEqual([python, typescript, dotnet]);
+    expect(registeredSdks).toEqual([python, typescript, dotnet, rust]);
   });
 
   it("gives every entry recognition patterns with unique names across the registry", () => {
@@ -82,6 +83,9 @@ describe("the SDK registry", () => {
       ["TypeScript", "pg", "pg"],
       [".NET", "Npgsql", "npgsql"],
       [".NET", "SlackNet", "slacknet"],
+      ["Rust", "aws-sdk-s3", "aws_sdk_s3"],
+      ["Rust", "aws_sdk_s3", "aws_sdk_s3"],
+      ["Rust", "Async-Stripe", "async_stripe"],
     ] as const)(
       "maps the %s dependency %s to the integration key %s",
       (sdk, name, key) => {
@@ -106,6 +110,11 @@ describe("the SDK registry", () => {
       [".NET", "Microsoft", true],
       [".NET", "Npgsql", false],
       [".NET", "Temporalio", false],
+      ["Rust", "std", true],
+      ["Rust", "core", true],
+      ["Rust", "alloc", true],
+      ["Rust", "serde", false],
+      ["Rust", "temporalio_sdk", false],
     ] as const)(
       "reads the %s dependency %s as standard library: %s",
       (sdk, name, expected) => {
@@ -119,6 +128,7 @@ describe("the SDK registry", () => {
       ["Python", "activities.py", "temporalio", "python"],
       ["TypeScript", "activities.ts", "@temporalio/activity", "typescript"],
       [".NET", "Activities.cs", "Temporalio", "csharp"],
+      ["Rust", "activities.rs", "temporalio-sdk", "rust"],
     ] as const)(
       "gives %s the activity file %s, the package %s and the highlight language %s",
       (sdk, activityFileName, sdkPackage, highlightLanguage) => {
@@ -157,6 +167,11 @@ describe("the SDK registry", () => {
         "Synchronous: the .NET SDK runs it for you",
         "This is a synchronous activity. The .NET SDK runs it for you, so your worker needs no special setup.",
       ],
+      [
+        "Rust",
+        "Synchronous: the worker needs no special setup",
+        "This is a synchronous activity. Your worker needs no special setup to run it.",
+      ],
     ] as const)(
       "gives %s the Runs as wording %j for sync, and its Worker requirements",
       (sdk, syncRunsAs, syncWorker) => {
@@ -168,5 +183,18 @@ describe("the SDK registry", () => {
         });
       },
     );
+
+    it("never names a thread pool in Rust's wording, whatever the activity", () => {
+      const { runsAs, workerRequirements } = sdkRegistry.Rust.display;
+      for (const wording of [
+        runsAs.sync,
+        runsAs.async,
+        workerRequirements.sync,
+        workerRequirements.async,
+      ]) {
+        expect(wording).not.toMatch(/thread/i);
+      }
+      expect(workerRequirements.async).toContain("no special setup");
+    });
   });
 });

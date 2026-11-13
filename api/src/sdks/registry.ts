@@ -1,5 +1,6 @@
 import { dotnet } from "./dotnet";
 import { python } from "./python";
+import { rust } from "./rust";
 import type { SdkEntry, SdkRegistry } from "./sdk-entry";
 import { sdks } from "./sdk-list";
 import { typescript } from "./typescript";
@@ -11,6 +12,7 @@ export const sdkRegistry: SdkRegistry = {
   Python: python,
   TypeScript: typescript,
   ".NET": dotnet,
+  Rust: rust,
 };
 
 /** Every registry entry, in the api's SDK list's order. */

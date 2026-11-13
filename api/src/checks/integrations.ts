@@ -11,8 +11,8 @@ interface IntegrationPackages {
   readonly integration: Integration;
   /**
    * The integration keys of this integration's client libraries: package names for Python and
-   * TypeScript, the namespace root of a `using` for .NET. A dependency implies the integration
-   * when its SDK's normaliser gives one of these keys. Keys are compared without regard to case.
+   * TypeScript, the namespace root of a `using` for .NET, crate names for Rust. A dependency
+   * implies the integration when its SDK's normaliser gives it the same key as one of these.
    */
   readonly packages: readonly string[];
 }
@@ -24,24 +24,33 @@ interface IntegrationPackages {
 export const integrationPackages: readonly IntegrationPackages[] = [
   {
     integration: "Amazon S3",
-    packages: ["boto3", "@aws-sdk/client-s3"],
+    packages: ["boto3", "@aws-sdk/client-s3", "aws-sdk-s3", "rusoto_s3"],
   },
   {
     integration: "Postgres",
-    packages: ["psycopg", "psycopg2", "asyncpg", "pg", "Npgsql"],
+    packages: [
+      "psycopg",
+      "psycopg2",
+      "asyncpg",
+      "pg",
+      "Npgsql",
+      "tokio-postgres",
+    ],
   },
   {
     integration: "Slack",
-    packages: ["slack_sdk", "@slack/web-api", "SlackNet"],
+    packages: ["slack_sdk", "@slack/web-api", "SlackNet", "slack-morphism"],
   },
-  // "stripe" is also the Stripe.net package's .NET namespace root.
-  { integration: "Stripe", packages: ["stripe"] },
+  // "stripe" is also the Stripe.net package's .NET namespace root, and the crate name Rust code
+  // uses async-stripe by.
+  { integration: "Stripe", packages: ["stripe", "async-stripe"] },
 ];
 
 /**
- * The integrations an SDK's detected third-party imports imply, each once. Each dependency
- * goes through the SDK's normaliser first. The order is the order of `integrationPackages`,
- * whatever order the imports came in. Empty when no import implies an integration.
+ * The integrations an SDK's detected third-party imports imply, each once. Each dependency and
+ * each package goes through the SDK's normaliser, so the two compare as that SDK reads them.
+ * The order is the order of `integrationPackages`, whatever order the imports came in. Empty
+ * when no import implies an integration.
  */
 export const integrationsFor = (
   sdk: Sdk,
@@ -53,7 +62,7 @@ export const integrationsFor = (
   );
   return integrationPackages
     .filter(({ packages }) =>
-      packages.some((name) => imported.has(name.toLowerCase())),
+      packages.some((name) => imported.has(normaliseDependency(name))),
     )
     .map(({ integration }) => integration);
 };

@@ -1,0 +1,40 @@
+use temporalio_client::{
+    Client, ClientOptions, Connection,
+    envconfig::LoadClientConfigProfileOptions,
+};
+use temporalio_sdk::{Runtime, Worker, WorkerOptions};
+
+mod activities;
+mod starter;
+mod workflows;
+
+use crate::activities::Activities;
+use crate::workflows::{{workflowClass}};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().nth(1).as_deref() == Some("start") {
+        return starter::run().await;
+    }
+
+    let runtime = Runtime::from_current_tokio(Default::default())?;
+
+    let (connection_options, client_options) = ClientOptions::load_from_config(
+        LoadClientConfigProfileOptions::default(),
+    )?;
+
+    let connection = Connection::connect(connection_options).await?;
+    let client = Client::new(connection, client_options)?;
+
+    // Activities stands in for the type whose #[activities] impl declares {{activity}}.
+    // Change it to your type's name, and pass it what your activities need.
+    let worker_options = WorkerOptions::new({{taskQueue}})
+        .register_activities(Activities)
+        .register_workflow::<{{workflowClass}}>()?
+        .build();
+
+    let mut worker = Worker::new(&runtime, client, worker_options)?;
+    worker.run().await?;
+
+    Ok(())
+}

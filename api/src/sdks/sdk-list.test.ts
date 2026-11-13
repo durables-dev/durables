@@ -4,8 +4,8 @@ import type { SdkRegistry } from "./sdk-entry";
 import { type Sdk, sdkSchema, sdks } from "./sdk-list";
 
 describe("the api's SDK list", () => {
-  it("holds Python, TypeScript and .NET, in that order", () => {
-    expect(sdks).toEqual(["Python", "TypeScript", ".NET"]);
+  it("holds Python, TypeScript, .NET and Rust, in that order", () => {
+    expect(sdks).toEqual(["Python", "TypeScript", ".NET", "Rust"]);
   });
 
   it("keys the registry, so each SDK in it needs an entry", () => {
