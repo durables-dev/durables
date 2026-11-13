@@ -11,6 +11,8 @@ import {
   typescript,
   type TestVersion,
 } from "./test-versions";
+import { TestProviders } from "../../../test/test-providers";
+import { failCatalog } from "../../../test/serve-sdk-catalog";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -21,6 +23,7 @@ async function renderImplement(version: TestVersion = python) {
     <section>
       <ImplementSection version={version} sdk={version.sdk} />
     </section>,
+    { wrapper: TestProviders },
   );
   await expect
     .element(screen.getByRole("heading", { level: 2, name: "Implement" }))
@@ -203,6 +206,36 @@ test("arrow keys, Home and End move between tabs, and only the selected tab is i
       .elements()
       .map((tab) => tab.tabIndex),
   ).toEqual([0, -1, -1, -1]);
+});
+
+/** How many coloured tokens the selected file's code block holds. */
+function colouredIn(screen: Screen) {
+  return screen
+    .getByRole("tabpanel")
+    .element()
+    .querySelectorAll("code span[style]").length;
+}
+
+test.each([
+  ["Python", python],
+  ["TypeScript", typescript],
+  [".NET", dotnet],
+] as const)(
+  "%s files are highlighted in the language the catalog names",
+  async (_sdk, version) => {
+    const screen = await renderImplement(version);
+
+    await expect.poll(() => colouredIn(screen)).toBeGreaterThan(0);
+  },
+);
+
+test("when the catalog cannot be read, the files show as plain text, unchanged", async () => {
+  const failed = failCatalog();
+  const screen = await renderImplement();
+  await failed;
+
+  expect(colouredIn(screen)).toBe(0);
+  expect((await codeBlock(screen, "activities.py")).text).toBe(pythonCode);
 });
 
 test("the run commands show in a code block with line numbers", async () => {

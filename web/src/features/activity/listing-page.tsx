@@ -1,6 +1,7 @@
 import { PageMessage } from "@/components/page-message";
 import { PageTitle } from "@/components/page-title";
 import { problemFrom } from "@/lib/problem";
+import { sdkCatalogQuery } from "@/lib/sdk-catalog";
 import { useSessionUser } from "@/lib/use-session-user";
 import { useQuery } from "@tanstack/react-query";
 import { ConfigureSection } from "./configure-section";
@@ -25,10 +26,13 @@ function isNotFound(error: Error | null): boolean {
 }
 
 // The Activity page: the version and the listing, read as two queries, shown in the page
-// shell. Each section story fills in its own slot of the layout below.
+// shell. Each section story fills in its own slot of the layout below. The SDK catalog is read
+// alongside them, so the SDK's details show with the rest of the page. A catalog that cannot
+// be read does not stop the page: the sections show the SDK's name without its details.
 export function ListingPage({ address }: ListingPageProps) {
   const version = useQuery(versionQuery(address));
   const listing = useQuery(listingQuery(address));
+  const catalog = useQuery(sdkCatalogQuery);
   const user = useSessionUser();
 
   if (isNotFound(version.error) || isNotFound(listing.error)) {
@@ -57,7 +61,11 @@ export function ListingPage({ address }: ListingPageProps) {
     );
   }
 
-  if (version.data === undefined || listing.data === undefined) {
+  if (
+    version.data === undefined ||
+    listing.data === undefined ||
+    catalog.isPending
+  ) {
     return (
       <p className={styles["loading"]} role="status">
         Loading the listing…

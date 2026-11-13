@@ -8,6 +8,12 @@ import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
+import {
+  failCatalog,
+  rustProfile,
+  serveCatalog,
+} from "../../../test/serve-sdk-catalog";
+import { testCatalog } from "../../../test/sdk-catalog";
 import { python } from "./test-versions";
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
@@ -813,5 +819,117 @@ test("the sidebar shows the version's About and Publisher cards and the no-revie
     .not.toBeInTheDocument();
   await expect
     .element(screen.getByRole("main").getByText(/provenance/i))
+    .not.toBeInTheDocument();
+});
+
+/** The About card's rows, as [term, value] pairs in the order they show. */
+function aboutRowsOf(screen: Awaited<ReturnType<typeof openAt>>["screen"]) {
+  const about = screen
+    .getByRole("complementary")
+    .getByRole("region", { name: "About" });
+  return [...about.element().querySelectorAll("dt")].map((term) => [
+    term.textContent,
+    term.nextElementSibling?.textContent,
+  ]);
+}
+
+/** The SDK tag beside the title: its text and how it looks. */
+async function sdkTag(
+  screen: Awaited<ReturnType<typeof openAt>>["screen"],
+  sdk: string,
+) {
+  const top = await topOfPage(screen);
+  const tag = top.getByText(sdk, { exact: true });
+  await expect.element(tag).toBeVisible();
+  const style = getComputedStyle(tag.element());
+  return {
+    background: style.backgroundColor,
+    color: style.color,
+    radius: style.borderRadius,
+    font: `${style.fontSize} ${style.fontWeight}`,
+  };
+}
+
+test("an activity page for an SDK web has no code for shows the SDK and the catalog's package and wording", async () => {
+  publishChargeCard();
+  serveCatalog([...testCatalog, rustProfile]);
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({
+        ...chargeCard,
+        sdk: "Rust",
+        code: "pub async fn charge_card() {}",
+        activityFileName: "activities.rs",
+      }),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  await sdkTag(screen, "Rust");
+  expect(aboutRowsOf(screen)[0]).toEqual(["SDK", "Rust, temporalio-sdk"]);
+  await expect
+    .element(screen.getByText(rustProfile.workerRequirements.sync))
+    .toBeVisible();
+  await expect
+    .element(screen.getByText("activities.rs · 1 line"))
+    .toBeVisible();
+});
+
+test("the SDK tag beside the title looks the same for every SDK", async () => {
+  publishChargeCard();
+  serveCatalog([...testCatalog, rustProfile]);
+  const python = await openAt("/ddieruf/charge-card@1.0.0");
+  const pythonTag = await sdkTag(python.screen, "Python");
+  await python.screen.unmount();
+
+  for (const sdk of [".NET", "TypeScript", "Rust"]) {
+    worker.use(
+      http.get(versionPath, () => HttpResponse.json({ ...chargeCard, sdk })),
+    );
+    const opened = await openAt("/ddieruf/charge-card@1.0.0");
+    expect(await sdkTag(opened.screen, sdk)).toEqual(pythonTag);
+    await opened.screen.unmount();
+  }
+});
+
+test("when the catalog cannot be read, the page still renders and shows the SDK's name without its details", async () => {
+  publishChargeCard();
+  const failed = failCatalog();
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+  await failed;
+
+  await expect
+    .element(screen.getByRole("heading", { level: 1, name: "Charge card" }))
+    .toBeVisible();
+  await sdkTag(screen, "Python");
+  expect(aboutRowsOf(screen)[0]).toEqual(["SDK", "Python"]);
+  await expect
+    .element(screen.getByRole("heading", { name: "Worker requirements" }))
+    .not.toBeInTheDocument();
+  await expect.element(screen.getByText(/thread pool/)).not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("tab", { name: "activities.py" }))
+    .toBeVisible();
+  await expect
+    .element(screen.getByText(/^activities\.py · \d+ lines$/))
+    .toBeVisible();
+});
+
+test("an SDK the catalog does not list shows its name only, and the page still renders", async () => {
+  publishChargeCard();
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({ ...chargeCard, sdk: "Zig" }),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  await sdkTag(screen, "Zig");
+  expect(aboutRowsOf(screen)[0]).toEqual(["SDK", "Zig"]);
+  await expect
+    .element(screen.getByRole("heading", { name: "Worker requirements" }))
     .not.toBeInTheDocument();
 });

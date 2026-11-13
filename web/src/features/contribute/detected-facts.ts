@@ -1,3 +1,4 @@
+import type { SdkProfile } from "@/lib/sdk-catalog";
 import type { CheckedFacts } from "./check-result";
 
 // The eight facts on the Detected step's "What we found" card, as the publisher reads them.
@@ -35,16 +36,20 @@ function inputOutput({ input, output }: CheckedFacts): FactRow {
   return found(label, `${input ?? unreadable} → ${output ?? unreadable}`);
 }
 
-function runsAs({ runsAs }: CheckedFacts): FactRow {
+/** How an activity runs, before the SDK catalog's wording says what its worker needs. */
+const plainRunsAs = { async: "Async", sync: "Synchronous" } as const;
+
+/**
+ * The SDK catalog's wording for how the activity runs, looked up by `runsAs`. Without the
+ * SDK's profile it says only whether the activity is async or synchronous.
+ */
+function runsAs(
+  { runsAs }: CheckedFacts,
+  profile: SdkProfile | undefined,
+): FactRow {
   const label = "Runs as";
-  switch (runsAs) {
-    case "async":
-      return found(label, "Async");
-    case "sync":
-      return found(label, "Synchronous: the worker needs a thread pool");
-    case null:
-      return fallback(label, unreadable);
-  }
+  if (runsAs === null) return fallback(label, unreadable);
+  return found(label, profile?.runsAs[runsAs] ?? plainRunsAs[runsAs]);
 }
 
 function nonRetryableErrors({ nonRetryableErrors }: CheckedFacts): FactRow {
@@ -80,13 +85,19 @@ function heartbeats({ heartbeats }: CheckedFacts): FactRow {
     : found(label, `Yes, ${lineList(heartbeats)}`);
 }
 
-/** The card's eight facts, in the order screen 12 shows them: left column, then right. */
-export function factRows(facts: CheckedFacts): FactRow[] {
+/**
+ * The card's eight facts, in the order screen 12 shows them: left column, then right.
+ * `profile` is the SDK catalog's profile for the facts' SDK, when it is to hand.
+ */
+export function factRows(
+  facts: CheckedFacts,
+  profile: SdkProfile | undefined,
+): FactRow[] {
   return [
     found("SDK", facts.sdk),
     found("Activity", facts.activity.name),
     inputOutput(facts),
-    runsAs(facts),
+    runsAs(facts, profile),
     nonRetryableErrors(facts),
     configurationRead(facts),
     dependencies(facts),

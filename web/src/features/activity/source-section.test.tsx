@@ -2,6 +2,9 @@ import "@/styles/global.css";
 import { afterEach, expect, test, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { SourceSection, type SourceSectionProps } from "./source-section";
+import { TestProviders } from "../../../test/test-providers";
+import { failCatalog, serveCatalog } from "../../../test/serve-sdk-catalog";
+import { testCatalog } from "../../../test/sdk-catalog";
 
 const CHARGE_CARD = [
   "import os",
@@ -42,7 +45,9 @@ afterEach(() => {
 });
 
 async function renderSource(props: Partial<SourceSectionProps> = {}) {
-  const screen = await render(<SourceSection {...chargeCard} {...props} />);
+  const screen = await render(<SourceSection {...chargeCard} {...props} />, {
+    wrapper: TestProviders,
+  });
   const region = screen.getByRole("region", { name: "published code" });
   await expect.element(region).toBeVisible();
   const element = region.element();
@@ -127,6 +132,51 @@ test("highlighted code is still exactly the published code", async () => {
 
   await expect.poll(block.coloured).toBeGreaterThan(0);
   expect(block.code()).toBe(CHARGE_CARD);
+});
+
+test("the code is highlighted in the language the catalog names for the SDK", async () => {
+  // A catalog that names no language Durables highlights for Python leaves its code plain.
+  serveCatalog(
+    testCatalog.map((profile) =>
+      profile.name === "Python"
+        ? { ...profile, highlightLanguage: "plaintext" }
+        : profile,
+    ),
+  );
+  const screen = await render(
+    <>
+      <section aria-label="Python">
+        <SourceSection {...chargeCard} />
+      </section>
+      <section aria-label="TypeScript">
+        <SourceSection
+          sdk="TypeScript"
+          code="export async function charge(): Promise<void> {}"
+          activityFileName="activities.ts"
+        />
+      </section>
+    </>,
+    { wrapper: TestProviders },
+  );
+  const coloured = (sdk: string) =>
+    screen
+      .getByRole("region", { name: sdk })
+      .element()
+      .querySelectorAll("code span[style]").length;
+
+  // Both read the same catalog, so once TypeScript is coloured, Python has its profile too.
+  await expect.poll(() => coloured("TypeScript")).toBeGreaterThan(0);
+  expect(coloured("Python")).toBe(0);
+});
+
+test("when the catalog cannot be read, the code shows as plain text, unchanged", async () => {
+  const failed = failCatalog();
+  const block = await renderSource();
+  await failed;
+
+  expect(block.coloured()).toBe(0);
+  expect(block.code()).toBe(CHARGE_CARD);
+  expect(block.numbers()).toHaveLength(12);
 });
 
 test("tabs and odd indentation are shown unchanged, and a final line break is not counted as a line", async () => {

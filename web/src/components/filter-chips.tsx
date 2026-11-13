@@ -4,7 +4,9 @@ import {
   withIntegrationToggled,
   withSdkToggled,
 } from "@/lib/search-filters";
-import { integrations, sdks } from "@durables/schemas";
+import { catalogSdks, sdkCatalogQuery } from "@/lib/sdk-catalog";
+import { integrations } from "@durables/schemas";
+import { useQuery } from "@tanstack/react-query";
 import { useId, type ReactNode } from "react";
 import styles from "./filter-chips.module.css";
 
@@ -18,13 +20,16 @@ export interface FilterChipsProps {
 }
 
 // The Temporal SDK and Integrates with chips, shared by the home page's Filters panel and the
-// results page's sidebar. The chips come from the shared lists. Any is on when no SDK is
-// picked; picking Any clears the SDKs. Several SDKs and several integrations can be on.
+// results page's sidebar. The SDK chips come from the SDK catalog, in its order, and the
+// integration chips from the shared list. Any is on when no SDK is picked; picking Any clears
+// the SDKs. Several SDKs and several integrations can be on. While the catalog loads, or when
+// it cannot be read, Any is the only SDK chip.
 export function FilterChips({
   search,
   onChange,
   groupClassName,
 }: FilterChipsProps) {
+  const { data: catalog } = useQuery(sdkCatalogQuery);
   return (
     <>
       <ChipGroup
@@ -39,7 +44,7 @@ export function FilterChips({
             onChange(withAnySdk(search));
           }}
         />
-        {sdks.map((sdk) => (
+        {catalogSdks(catalog).map((sdk) => (
           <Chip
             key={sdk}
             label={sdk}
