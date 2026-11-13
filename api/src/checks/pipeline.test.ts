@@ -43,6 +43,7 @@ const stub = (
     ],
   },
   detector: { detect: () => activities },
+  isStandardLibrary: () => false,
 });
 
 /** An SDK whose detector reports one activity per `STUB_ACTIVITY name` line, at that line. */
@@ -290,6 +291,28 @@ describe("checkCode", () => {
   });
 
   describe("an accepted file", () => {
+    it("passes the SDK's own standard-library check to its detector", () => {
+      const received: unknown[] = [];
+      const isStandardLibrary = (name: string) => name === "os";
+      const recording: CheckedSdk = {
+        ...stub([], ".NET"),
+        detector: {
+          detect: (_source, check) => {
+            received.push(check);
+            return [facts("post_slack_message")];
+          },
+        },
+        isStandardLibrary,
+      };
+      const other: CheckedSdk = {
+        ...stub([], "TypeScript", "OTHER"),
+        isStandardLibrary: () => true,
+      };
+      checkCode("STUB_SDK", [other, recording]);
+      expect(received).toEqual([isStandardLibrary]);
+      expect(received[0]).toBe(isStandardLibrary);
+    });
+
     it("passes the detector's result through unchanged, with its SDK", () => {
       const found = facts("post_slack_message", 25);
       expect(checkCode("STUB_SDK", [stub([found], ".NET")])).toEqual({

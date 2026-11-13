@@ -28,11 +28,6 @@ export interface SdkEntry<S extends Sdk = Sdk> extends CheckedSdk {
   /** Generates the Implement snippets. Its templates live beside it in `snippets/templates/`. */
   readonly snippets: SnippetGenerator;
   /**
-   * Whether a dependency name, as the detector reports it, is part of the language's own
-   * library rather than a third-party package. Detection leaves these out of Dependencies.
-   */
-  readonly isStandardLibrary: (name: string) => boolean;
-  /**
    * The integration key for a dependency name, as the detector reports it. Integration
    * matching compares this key with each integration's packages.
    */

@@ -8,7 +8,8 @@ import { CheckRefusal, refusalTypes } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
 import { toSource } from "./source";
 
-const detect = (code: string) => pythonDetector.detect(toSource(code));
+const detect = (code: string) =>
+  pythonDetector.detect(toSource(code), sdkRegistry.Python.isStandardLibrary);
 
 const lines = (...code: string[]) => code.join("\n");
 

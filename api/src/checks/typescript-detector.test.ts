@@ -10,7 +10,11 @@ import { toSource } from "./source";
 import { typescriptDetector, typescriptPatterns } from "./typescript-detector";
 import { unacceptedSdks } from "./unaccepted-sdks";
 
-const detect = (code: string) => typescriptDetector.detect(toSource(code));
+const detect = (code: string) =>
+  typescriptDetector.detect(
+    toSource(code),
+    sdkRegistry.TypeScript.isStandardLibrary,
+  );
 
 const lines = (...code: string[]) => code.join("\n");
 

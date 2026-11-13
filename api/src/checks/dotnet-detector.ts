@@ -558,7 +558,7 @@ export const dotnetRecognition: SdkRecognition = {
  * dependencies and heartbeats) are read from the whole file and reported on every activity.
  */
 export const dotnetDetector: Detector = {
-  detect(source) {
+  detect(source, isStandardLibrary) {
     const { text } = source;
     const lineOf = lineFinder(text);
     const ignored = ignoredSpans(text);
@@ -591,7 +591,7 @@ export const dotnetDetector: Detector = {
         const root = match[1];
         return root === undefined ||
           root === temporalSdkNamespace ||
-          isDotnetFrameworkNamespace(root)
+          isStandardLibrary(root)
           ? []
           : [{ name: root, line: lineOf(match.index) }];
       }),

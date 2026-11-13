@@ -30,14 +30,25 @@ export class DetectorFailure extends Error {
   }
 }
 
-/** What the pipeline needs of an accepted SDK: how to recognise it, and its detector. */
+/**
+ * What the pipeline needs of an accepted SDK: how to recognise it, its detector and its
+ * standard-library check.
+ */
 export interface CheckedSdk extends Recognisable<AcceptedSdk> {
   readonly detector: Detector;
+  /**
+   * Whether a dependency name, as the detector reports it, is part of the language's own
+   * library rather than a third-party package. Detection leaves these out of Dependencies.
+   */
+  readonly isStandardLibrary: (name: string) => boolean;
 }
 
-const detect = ({ sdk, detector }: CheckedSdk, source: Source) => {
+const detect = (
+  { sdk, detector, isStandardLibrary }: CheckedSdk,
+  source: Source,
+) => {
   try {
-    return detector.detect(source);
+    return detector.detect(source, isStandardLibrary);
   } catch (error) {
     throw new DetectorFailure(sdk, error);
   }

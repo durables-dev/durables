@@ -1,7 +1,6 @@
 import type { Detector } from "./detector";
 import type { ActivityFacts, LineRef, NamedLineRef } from "./facts";
 import type { SdkRecognition } from "./identify";
-import { isNodeBuiltin } from "./node-builtins";
 import type { Pattern } from "./pattern";
 import {
   allMatches,
@@ -12,7 +11,6 @@ import {
   lineFinder,
   type Span,
 } from "./scan";
-import type { Source } from "./source";
 
 // TypeScript detection (ADR 0008). Every pattern below is part of the published rubric. A
 // match only counts when it starts in code: a pattern that starts inside a comment or a string
@@ -536,6 +534,7 @@ const readDependencies = (
   text: string,
   lineOf: LineOf,
   inCode: (match: RegExpExecArray) => boolean,
+  isStandardLibrary: (name: string) => boolean,
 ): NamedLineRef[] => {
   const imported = [typescriptImportFrom, typescriptSideEffectImport].flatMap(
     (pattern) =>
@@ -550,7 +549,8 @@ const readDependencies = (
   );
   const thirdParty = imported
     .filter(
-      ({ name }) => !name.startsWith(temporalSdkScope) && !isNodeBuiltin(name),
+      ({ name }) =>
+        !name.startsWith(temporalSdkScope) && !isStandardLibrary(name),
     )
     .sort((a, b) => a.offset - b.offset)
     .map(({ name, offset }) => ({ name, line: lineOf(offset) }));
@@ -617,7 +617,7 @@ export const typescriptRecognition: SdkRecognition = {
  * dependencies and heartbeats) are read from the whole file and reported on every activity.
  */
 export const typescriptDetector: Detector = {
-  detect(source: Source) {
+  detect(source, isStandardLibrary) {
     const { text } = source;
     const ignored = ignoredSpans(text);
     const enclosing = enclosingBrackets(text, ignored);
@@ -672,7 +672,12 @@ export const typescriptDetector: Detector = {
         line: lineOf(match.index),
       })),
     );
-    const dependencies = readDependencies(text, lineOf, inCode);
+    const dependencies = readDependencies(
+      text,
+      lineOf,
+      inCode,
+      isStandardLibrary,
+    );
     const heartbeats: LineRef[] = found(typescriptHeartbeatCall).map(
       (match) => ({ line: lineOf(match.index) }),
     );

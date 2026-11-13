@@ -6,7 +6,8 @@ import { checkCode } from "./pipeline";
 import { CheckRefusal, refusalTypes } from "./refusals";
 import { toSource } from "./source";
 
-const detect = (code: string) => dotnetDetector.detect(toSource(code));
+const detect = (code: string) =>
+  dotnetDetector.detect(toSource(code), sdkRegistry[".NET"].isStandardLibrary);
 
 const lines = (...code: string[]) => code.join("\n");
 

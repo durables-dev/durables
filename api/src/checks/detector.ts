@@ -6,6 +6,13 @@ import type { Source } from "./source";
  * file's activities in it.
  */
 export interface Detector {
-  /** Every activity in the file, in the order they appear. Empty when there is none. */
-  detect(source: Source): readonly ActivityFacts[];
+  /**
+   * Every activity in the file, in the order they appear. Empty when there is none.
+   * `isStandardLibrary` is the SDK entry's standard-library check; Dependencies leaves out
+   * every name it accepts.
+   */
+  detect(
+    source: Source,
+    isStandardLibrary: (name: string) => boolean,
+  ): readonly ActivityFacts[];
 }

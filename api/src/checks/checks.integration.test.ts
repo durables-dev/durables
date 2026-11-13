@@ -396,6 +396,7 @@ describe("POST /api/checks", () => {
             throw new Error(source.text);
           },
         },
+        isStandardLibrary: () => false,
       };
       const app = createApp().route("/api/checks", createChecks([failing]));
       const cookie = await signIn();
