@@ -175,8 +175,9 @@ export const activities = new Hono<AppEnv>()
       if (handle === null) {
         throw handleNotChosen();
       }
-      // The publish-time run is the only one stored (ADR 0008).
-      const facts = checkCode(body.code, registeredSdks);
+      // The publish-time run is the only one stored (ADR 0008). A declared SDK is re-run with
+      // its own detector, as the check does.
+      const facts = checkCode(body.code, registeredSdks, body.declaredSdk);
       const { title, name, description } = acceptListing(body);
       const address = { handle, name, version: FIRST_VERSION };
       const integrations = integrationsFor(facts.sdk, facts.dependencies);

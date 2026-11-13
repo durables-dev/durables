@@ -1,4 +1,4 @@
-import type { Facts } from "../checks/facts";
+import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
@@ -60,7 +60,10 @@ export const pythonWorkflowClass = (activity: string) => {
 };
 
 /** The Implement snippets for a Python activity, in the order the Activity page shows them. */
-export const pythonSnippets = (facts: Facts, address: Address): Snippet[] => {
+export const pythonSnippets = (
+  facts: FactValues,
+  address: Address,
+): Snippet[] => {
   const activity = facts.activity.name;
   const workflowClass = pythonWorkflowClass(activity);
   const inputNames = importedNames(

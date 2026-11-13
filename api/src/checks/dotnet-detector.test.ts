@@ -134,6 +134,16 @@ describe("dotnetDetector", () => {
         configurationRead: [{ name: "STRIPE_API_KEY", line: 16 }],
         dependencies: [{ name: "Stripe", line: 3 }],
         heartbeats: [{ line: 21 }],
+        provenance: {
+          sdk: "detected",
+          activity: "detected",
+          inputOutput: "detected",
+          runsAs: "detected",
+          nonRetryableErrors: "detected",
+          configurationRead: "detected",
+          dependencies: "detected",
+          heartbeats: "detected",
+        },
       });
     });
 

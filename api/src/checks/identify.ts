@@ -1,3 +1,4 @@
+import type { Tier } from "./facts";
 import { matchesAny, type Pattern } from "./pattern";
 
 // Identification: which SDK pasted code is written in. One function runs over every SDK the
@@ -12,6 +13,12 @@ export interface SdkRecognition {
    * when a file has markers for more than one.
    */
   readonly activityMarkers: readonly Pattern[];
+  /**
+   * Patterns that recognise an activity in this SDK's language by the function's shape alone,
+   * with no Temporal marker. They are tried only when no SDK's markers match, and an SDK
+   * recognised by one is inferred. Empty when the SDK is only ever recognised by its markers.
+   */
+  readonly shapeMarkers: readonly Pattern[];
 }
 
 /** An SDK identification can recognise. */
@@ -21,10 +28,10 @@ export interface Recognisable<S extends string> {
 }
 
 /**
- * How an identified SDK was established. Every SDK is recognised by its markers today, so it
- * is always detected. The inferred tier arrives with fact provenance.
+ * How an identified SDK was established: `detected` by its Temporal markers, or `inferred`
+ * from the function's shape with no Temporal marker.
  */
-export type IdentificationTier = "detected";
+export type IdentificationTier = Extract<Tier, "detected" | "inferred">;
 
 /** One SDK was identified. */
 export interface Identified<S extends string> {
@@ -32,8 +39,9 @@ export interface Identified<S extends string> {
   readonly sdk: S;
   readonly tier: IdentificationTier;
   /**
-   * The names of the SDK's recognition patterns that matched, SDK markers first, each once,
-   * in the order the SDK lists them.
+   * The names of the SDK's recognition patterns that matched, each once, in the order the SDK
+   * lists them. For a detected SDK these are its SDK markers, then its activity markers. For
+   * an inferred SDK they are its shape markers.
    */
   readonly matchedPatterns: readonly string[];
 }
@@ -56,25 +64,55 @@ export type Identification<S extends string> =
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 const identified = <S extends string>(
-  { sdk, recognition }: Recognisable<S>,
+  sdk: S,
+  tier: IdentificationTier,
+  patterns: readonly Pattern[],
   text: string,
 ): Identified<S> => {
-  const matched = [...recognition.sdkMarkers, ...recognition.activityMarkers]
+  const matched = patterns
     .filter((pattern) => pattern.regex.test(text))
     .map(({ name }) => name);
   return {
     outcome: "identified",
     sdk,
-    tier: "detected",
+    tier,
     matchedPatterns: [...new Set(matched)],
   };
 };
 
+const ambiguous = <S extends string>(
+  tied: readonly Recognisable<S>[],
+): Ambiguous<S> => ({
+  outcome: "ambiguous",
+  sdks: tied.map(({ sdk }) => sdk).sort(byName),
+});
+
+/**
+ * Infers the SDK from the function's shape, when no SDK's markers matched. One SDK whose shape
+ * markers match is inferred. Several are ambiguous. None is not identified.
+ */
+const inferSdk = <S extends string>(
+  text: string,
+  candidates: readonly Recognisable<S>[],
+): Identification<S> => {
+  const shaped = candidates.filter(({ recognition }) =>
+    matchesAny(recognition.shapeMarkers, text),
+  );
+  const [only, ...rest] = shaped;
+  if (only === undefined) {
+    return { outcome: "not-identified" };
+  }
+  if (rest.length > 0) {
+    return ambiguous(shaped);
+  }
+  return identified(only.sdk, "inferred", only.recognition.shapeMarkers, text);
+};
+
 /**
  * Identifies the SDK of the text. An SDK matches when one of its SDK markers does. One
- * matching SDK is that SDK. Among several, the one SDK whose activity markers also match is
- * chosen. Otherwise nothing decides between them, and the text is ambiguous. No match at all
- * is not identified.
+ * matching SDK is that SDK, detected. Among several, the one SDK whose activity markers also
+ * match is chosen. Otherwise nothing decides between them, and the text is ambiguous. When no
+ * SDK marker matches at all, the SDK is inferred from the shape markers instead.
  */
 export const identifySdk = <S extends string>(
   text: string,
@@ -84,7 +122,7 @@ export const identifySdk = <S extends string>(
     matchesAny(recognition.sdkMarkers, text),
   );
   if (marked.length === 0) {
-    return { outcome: "not-identified" };
+    return inferSdk(text, candidates);
   }
   const deciding =
     marked.length === 1
@@ -94,11 +132,13 @@ export const identifySdk = <S extends string>(
         );
   const [only, ...rest] = deciding;
   if (only !== undefined && rest.length === 0) {
-    return identified(only, text);
+    const { sdkMarkers, activityMarkers } = only.recognition;
+    return identified(
+      only.sdk,
+      "detected",
+      [...sdkMarkers, ...activityMarkers],
+      text,
+    );
   }
-  const tied = deciding.length > 1 ? deciding : marked;
-  return {
-    outcome: "ambiguous",
-    sdks: tied.map(({ sdk }) => sdk).sort(byName),
-  };
+  return ambiguous(deciding.length > 1 ? deciding : marked);
 };

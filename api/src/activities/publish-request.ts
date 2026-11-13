@@ -4,6 +4,7 @@ import {
   publishConfirmationKeys,
   type PublishConfirmationKey,
   publishConfirmationsSchema,
+  sdkSchema,
 } from "@durables/schemas";
 import { z } from "zod";
 import { fieldErrors } from "../http/validation";
@@ -11,8 +12,9 @@ import { MAX_CODE_BYTES } from "../checks/size-limit";
 import { invalidListing } from "./publish-problems";
 
 // The publish request. Its shape is checked by the validator, which answers 400. Its content
-// is checked by the shared listing rules, which answer 422. Only the code is taken from the
-// client: detection results, integrations, snippets and the version are never read from it.
+// is checked by the shared listing rules, which answer 422. Only the code and the declared SDK
+// are taken from the client: detection results, integrations, snippets and the version are
+// never read from it.
 
 /**
  * The largest publish request body, in bytes. It fits code of `MAX_CODE_BYTES` even when JSON
@@ -35,6 +37,8 @@ const confirmationShape = Object.fromEntries(
 export const publishBody = z.object({
   /** The code exactly as pasted. */
   code: z.string(),
+  /** The SDK the publisher chose. Publishing runs its detector instead of identifying one. */
+  declaredSdk: sdkSchema.optional(),
   title: z.string(),
   name: z.string(),
   description: z.string(),

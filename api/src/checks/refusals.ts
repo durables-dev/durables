@@ -1,5 +1,5 @@
 import { type ProblemDetails, ProblemError } from "../http/problem";
-import type { UnacceptedSdk } from "./facts";
+import type { AcceptedSdk, UnacceptedSdk } from "./facts";
 import { MAX_CODE_BYTES } from "./size-limit";
 
 // Why the pipeline refused a file. Each refusal is thrown as a CheckRefusal, a ProblemError
@@ -13,21 +13,37 @@ const problemType = (slug: string) => `https://durables.dev/problems/${slug}`;
 export const refusalTypes = {
   noActivity: problemType("no-activity"),
   notTemporalActivity: problemType("not-a-temporal-activity"),
+  sdkChoiceNeeded: problemType("sdk-choice-needed"),
   unacceptedSdk: problemType("unaccepted-sdk"),
   multipleActivities: problemType("multiple-activities"),
   codeTooLarge: problemType("code-too-large"),
 } as const;
 
-/** The SDK was recognised, but the file has no activity in it. */
+/** The SDK was identified or declared, but its detector found no activity in the file. */
 export interface NoActivityProblem extends ProblemDetails {
   type: typeof refusalTypes.noActivity;
   status: 422;
+  /** The SDK whose detector found no activity. */
+  sdk: AcceptedSdk;
 }
 
-/** The file has no Temporal SDK markers, or is empty. */
+/** The file is empty or only whitespace. */
 export interface NotTemporalActivityProblem extends ProblemDetails {
   type: typeof refusalTypes.notTemporalActivity;
   status: 422;
+}
+
+/**
+ * Why the publisher must choose the SDK: no SDK could be identified, or several matched and
+ * nothing decided between them.
+ */
+export type SdkChoiceReason = "not-identified" | "ambiguous";
+
+/** The SDK couldn't be identified, and none was declared. The publisher must choose one. */
+export interface SdkChoiceNeededProblem extends ProblemDetails {
+  type: typeof refusalTypes.sdkChoiceNeeded;
+  status: 422;
+  reason: SdkChoiceReason;
 }
 
 /** The file is a Temporal activity in an SDK Durables doesn't accept. */
@@ -57,6 +73,7 @@ export interface CodeTooLargeProblem extends ProblemDetails {
 export type RefusalProblem =
   | NoActivityProblem
   | NotTemporalActivityProblem
+  | SdkChoiceNeededProblem
   | UnacceptedSdkProblem
   | MultipleActivitiesProblem
   | CodeTooLargeProblem;
@@ -77,12 +94,13 @@ export class CheckRefusal extends ProblemError {
   }
 }
 
-export const noActivity = () =>
+export const noActivity = (sdk: AcceptedSdk) =>
   new CheckRefusal({
     type: refusalTypes.noActivity,
     status: 422,
     title: "No activity found",
-    detail: "The file uses a Temporal SDK but has no activity in it.",
+    detail: `No ${sdk} activity was found in the file.`,
+    sdk,
   });
 
 export const notTemporalActivity = () =>
@@ -92,6 +110,22 @@ export const notTemporalActivity = () =>
     title: "Not a Temporal activity",
     detail:
       "The file doesn't look like a Python, TypeScript or .NET Temporal activity.",
+  });
+
+const sdkChoiceDetails: Record<SdkChoiceReason, string> = {
+  "not-identified":
+    "Durables couldn't tell which SDK the file is written for. Choose the SDK and check again.",
+  ambiguous:
+    "The file matches more than one SDK. Choose the SDK it's written for and check again.",
+};
+
+export const sdkChoiceNeeded = (reason: SdkChoiceReason) =>
+  new CheckRefusal({
+    type: refusalTypes.sdkChoiceNeeded,
+    status: 422,
+    title: "Choose an SDK",
+    detail: sdkChoiceDetails[reason],
+    reason,
   });
 
 export const unacceptedSdk = (sdk: UnacceptedSdk) =>

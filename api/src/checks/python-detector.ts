@@ -469,6 +469,8 @@ const readDependencies = (
 export const pythonRecognition: SdkRecognition = {
   sdkMarkers: [pythonSdkImport, pythonActivityDecorator],
   activityMarkers: [pythonActivityDecorator],
+  // Recognised only by its markers. Inference by shape would change how it is detected.
+  shapeMarkers: [],
 };
 
 /**

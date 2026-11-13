@@ -1,4 +1,4 @@
-import type { Facts } from "../checks/facts";
+import type { StoredFacts } from "../checks/facts";
 import { sdkRegistry } from "../sdks/registry";
 import type {
   Snippet,
@@ -20,8 +20,11 @@ export interface VersionResponse extends Address {
   address: string;
   title: string;
   sdk: Sdk;
-  /** The facts the publish-time checks detected. */
-  facts: Facts;
+  /**
+   * The facts the publish-time checks detected. A version published before fact provenance
+   * carries none.
+   */
+  facts: StoredFacts;
   /** The code exactly as published, byte for byte. Never reindented. */
   code: string;
   /** The file the published code is saved as, which names the Implement activity file. */

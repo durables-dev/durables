@@ -255,6 +255,9 @@ const refusals = [
     code: sample("not-temporal"),
     message:
       "This doesn't look like a Python, TypeScript or .NET Temporal activity.",
+    // The api now answers this paste with sdk-choice-needed (DUR-82), which web can't show
+    // until DUR-90 adds the must-choose control. DUR-92 rewrites this case for that control.
+    fixme: "Waits for DUR-90 and DUR-92: the api asks for the SDK to be chosen",
   },
   {
     file: "a Java activity",
@@ -387,6 +390,7 @@ test.describe("the Code step", () => {
       paste,
       signInWithAccount,
     }) => {
+      test.fixme(refusal.fixme !== undefined, refusal.fixme);
       await signInWithAccount();
       await openCodeStep(page);
 
