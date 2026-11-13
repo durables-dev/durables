@@ -122,10 +122,49 @@ describe("the SDK registry", () => {
     ] as const)(
       "gives %s the activity file %s, the package %s and the highlight language %s",
       (sdk, activityFileName, sdkPackage, highlightLanguage) => {
-        expect(sdkRegistry[sdk].display).toEqual({
+        const { runsAs, workerRequirements, ...shown } =
+          sdkRegistry[sdk].display;
+        expect(shown).toEqual({
           package: sdkPackage,
           highlightLanguage,
           activityFileName,
+        });
+        expect(Object.keys(runsAs).sort()).toEqual(["async", "sync"]);
+        expect(Object.keys(workerRequirements).sort()).toEqual([
+          "async",
+          "sync",
+        ]);
+      },
+    );
+
+    const asyncRunsAs = "Async";
+    const asyncWorker =
+      "This is an async activity. Your worker needs no special setup to run it.";
+
+    it.each([
+      [
+        "Python",
+        "Synchronous: the worker needs a thread pool",
+        "This is a synchronous activity. Your worker needs a thread pool to run it, which the worker file in Implement already sets up.",
+      ],
+      [
+        "TypeScript",
+        "Synchronous: the worker needs no special setup",
+        "This is a synchronous activity. Your worker needs no special setup to run it.",
+      ],
+      [
+        ".NET",
+        "Synchronous: the .NET SDK runs it for you",
+        "This is a synchronous activity. The .NET SDK runs it for you, so your worker needs no special setup.",
+      ],
+    ] as const)(
+      "gives %s the Runs as wording %j for sync, and its Worker requirements",
+      (sdk, syncRunsAs, syncWorker) => {
+        const { runsAs, workerRequirements } = sdkRegistry[sdk].display;
+        expect(runsAs).toEqual({ sync: syncRunsAs, async: asyncRunsAs });
+        expect(workerRequirements).toEqual({
+          sync: syncWorker,
+          async: asyncWorker,
         });
       },
     );

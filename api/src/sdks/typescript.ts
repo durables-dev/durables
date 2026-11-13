@@ -19,5 +19,16 @@ export const typescript: SdkEntry<"TypeScript"> = {
     package: "@temporalio/activity",
     highlightLanguage: "typescript",
     activityFileName: "activities.ts",
+    // Detection always reads a TypeScript activity as async. The sync wording is there so every
+    // SDK answers both, and names no thread pool because the generated worker sets up none.
+    runsAs: {
+      sync: "Synchronous: the worker needs no special setup",
+      async: "Async",
+    },
+    workerRequirements: {
+      sync: "This is a synchronous activity. Your worker needs no special setup to run it.",
+      async:
+        "This is an async activity. Your worker needs no special setup to run it.",
+    },
   },
 };
