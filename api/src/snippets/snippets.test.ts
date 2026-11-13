@@ -1,8 +1,8 @@
-import { sdks } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
 import type { AcceptedSdk, FactValues } from "../checks/facts";
 import { checkCode } from "../checks/pipeline";
 import { registeredSdks, sdkRegistry } from "../sdks/registry";
+import { sdks } from "../sdks/sdk-list";
 import type { Address, Snippet } from "../storage/version-document";
 import { installLabel, runLabel } from "./labels";
 import { generateSnippets } from "./snippets";

@@ -1,4 +1,3 @@
-import { sdkSchema } from "@durables/schemas";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -11,6 +10,7 @@ import { ProblemError } from "../http/problem";
 import { publisherLimitKey } from "../http/rate-limits";
 import { problemOnInvalid } from "../http/validation";
 import { registeredSdks } from "../sdks/registry";
+import { sdkSchema } from "../sdks/sdk-list";
 import type { Facts } from "./facts";
 import { type CheckedSdk, checkCode } from "./pipeline";
 import { codeTooLarge } from "./refusals";

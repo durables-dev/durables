@@ -1,6 +1,6 @@
-import type { Sdk } from "@durables/schemas";
+import type { Sdk } from "../sdks/sdk-list";
 
-/** The SDKs Durables accepts activities from: the shared SDK list. */
+/** The SDKs Durables accepts activities from: the api's SDK list. */
 export type AcceptedSdk = Sdk;
 
 /** Temporal SDKs Durables recognises but does not accept. */

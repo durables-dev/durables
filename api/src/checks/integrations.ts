@@ -1,5 +1,6 @@
-import type { Integration, Sdk } from "@durables/schemas";
+import type { Integration } from "@durables/schemas";
 import { sdkRegistry } from "../sdks/registry";
+import type { Sdk } from "../sdks/sdk-list";
 import type { NamedLineRef } from "./facts";
 
 // "Integrates with" is what detection can tell from the code's imports (PM decision,

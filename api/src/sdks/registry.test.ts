@@ -1,9 +1,9 @@
-import { type Sdk, sdks } from "@durables/schemas";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { dotnet } from "./dotnet";
 import { python } from "./python";
 import { registeredSdks, sdkRegistry } from "./registry";
 import type { SdkEntry, SdkRegistry } from "./sdk-entry";
+import { type Sdk, sdks } from "./sdk-list";
 import { typescript } from "./typescript";
 
 /** The keys of T that may be left out. */
@@ -30,7 +30,7 @@ describe("the SDK registry", () => {
       >();
     });
 
-    it("requires an entry for every SDK in the shared list", () => {
+    it("requires an entry for every SDK in the api's list", () => {
       expectTypeOf<keyof SdkRegistry>().toEqualTypeOf<Sdk>();
       expectTypeOf<OptionalKeys<SdkRegistry>>().toEqualTypeOf<never>();
     });
@@ -51,14 +51,14 @@ describe("the SDK registry", () => {
     });
   });
 
-  it("has an entry for every SDK in the shared list, filed under its own name", () => {
+  it("has an entry for every SDK in the api's list, filed under its own name", () => {
     expect(Object.keys(sdkRegistry).sort()).toEqual([...sdks].sort());
     for (const sdk of sdks) {
       expect(sdkRegistry[sdk].sdk).toBe(sdk);
     }
   });
 
-  it("lists its entries in the shared list's order", () => {
+  it("lists its entries in the api's list's order", () => {
     expect(registeredSdks.map(({ sdk }) => sdk)).toEqual([...sdks]);
     expect(registeredSdks).toEqual([python, typescript, dotnet]);
   });

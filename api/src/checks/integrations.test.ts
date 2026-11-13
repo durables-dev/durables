@@ -1,6 +1,7 @@
-import { integrations, sdks } from "@durables/schemas";
+import { integrations } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
 import { registeredSdks } from "../sdks/registry";
+import { sdks } from "../sdks/sdk-list";
 import { integrationPackages, integrationsFor } from "./integrations";
 import { checkCode } from "./pipeline";
 

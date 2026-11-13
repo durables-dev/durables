@@ -4,7 +4,7 @@
 
 ## Decision
 
-- **Web holds nothing SDK-specific.** Package names, highlight languages, activity file names, and the Runs as and Worker requirements wording all come from the api. This applies to every SDK, including Python, TypeScript and .NET.
+- **Web holds nothing SDK-specific.** Package names, highlight languages, activity file names, and the Runs as and Worker requirements wording all come from the api. This applies to every SDK, including Python, TypeScript and .NET. Web imports no SDK list or type. It receives SDK names in api responses and from the SDK catalog.
 - **Every SDK's specifics live in one place in the api: the SDK registry** (`api/src/sdks/`). Each SDK has one entry, which holds:
   - its recognition patterns
   - its detector
@@ -13,7 +13,7 @@
   - its dependency normaliser
   - its display profile
 
-  The entry type makes every capability required. The registry is keyed by the shared SDK list (`packages/schemas`), so an SDK with a missing piece does not compile. Detection and integration matching use what the entry declares, not copies of it.
+  The entry type makes every capability required. The registry is keyed by the api's own SDK list (`api/src/sdks/sdk-list.ts`), so an SDK with a missing piece does not compile. Detection and integration matching use what the entry declares, not copies of it.
 
 - **Identification is one generic function** that runs over every entry. It returns:
   - the SDK
@@ -44,7 +44,7 @@ Identification used to prefer whichever SDK was listed first when several matche
 
 ## Consequences
 
-- Adding an SDK is one registry entry and its name in the shared SDK list.
+- Adding an SDK is one registry entry and its name in the api's SDK list.
 - Integration matching goes through each SDK's dependency normaliser.
 - A paste with activity markers from two SDKs is no longer resolved by list order. Until declaring an SDK is available, the check refuses it as not a Temporal activity. After that, it asks the publisher to choose.
 - Web reads SDK display details from the catalog endpoint. The version response keeps carrying the activity file name, so published pages are unchanged.
