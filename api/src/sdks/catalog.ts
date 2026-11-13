@@ -1,6 +1,6 @@
-import type { Sdk } from "@durables/schemas";
 import { storedSdks } from "../storage/schema";
 import type { RunsAsWording, SdkEntry } from "./sdk-entry";
+import type { Sdk } from "./sdk-list";
 
 // The SDK catalog (ADR 0013): each registry entry's display profile, as web reads it. Web
 // looks a profile up by the `sdk` it already receives, and the wording by `runsAs`.

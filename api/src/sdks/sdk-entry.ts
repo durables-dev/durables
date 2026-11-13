@@ -1,7 +1,7 @@
-import type { Sdk } from "@durables/schemas";
 import type { FactValues } from "../checks/facts";
 import type { CheckedSdk } from "../checks/pipeline";
 import type { Address, Snippet } from "../storage/version-document";
+import type { Sdk } from "./sdk-list";
 
 // The shape of one SDK registry entry (ADR 0013). Every capability is required, so an entry
 // that leaves one out does not compile.
@@ -51,5 +51,5 @@ export interface SdkEntry<S extends Sdk = Sdk> extends CheckedSdk {
   readonly display: DisplayProfile;
 }
 
-/** The registry: one entry for every SDK in the shared list, keyed by the SDK. */
+/** The registry: one entry for every SDK in the api's list, keyed by the SDK. */
 export type SdkRegistry = { readonly [S in Sdk]: SdkEntry<S> };

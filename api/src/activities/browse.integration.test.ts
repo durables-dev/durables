@@ -1,6 +1,6 @@
-import type { Sdk } from "@durables/schemas";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
+import type { Sdk } from "../sdks/sdk-list";
 import { seedAccount, seedListing, seedVersion } from "../storage/seed";
 import { encodeBrowseCursor } from "./browse-cursor";
 import {

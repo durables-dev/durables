@@ -4,11 +4,11 @@ import {
   publishConfirmationKeys,
   type PublishConfirmationKey,
   publishConfirmationsSchema,
-  sdkSchema,
 } from "@durables/schemas";
 import { z } from "zod";
 import { fieldErrors } from "../http/validation";
 import { MAX_CODE_BYTES } from "../checks/size-limit";
+import { sdkSchema } from "../sdks/sdk-list";
 import { invalidListing } from "./publish-problems";
 
 // The publish request. Its shape is checked by the validator, which answers 400. Its content

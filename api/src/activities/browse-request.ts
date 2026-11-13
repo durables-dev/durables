@@ -1,5 +1,5 @@
-import { sdkSchema } from "@durables/schemas";
 import { z } from "zod";
+import { sdkSchema } from "../sdks/sdk-list";
 import { decodeBrowseCursor } from "./browse-cursor";
 import type { BrowseSort } from "./responses";
 

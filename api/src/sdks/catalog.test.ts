@@ -1,10 +1,10 @@
-import { type Sdk, sdks } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
 import type { FactValues } from "../checks/facts";
 import { generateSnippets } from "../snippets/snippets";
 import { storedSdks } from "../storage/schema";
 import { type SdkProfile, sdkCatalog } from "./catalog";
 import { registeredSdks, sdkRegistry } from "./registry";
+import { type Sdk, sdks } from "./sdk-list";
 
 /** The catalog's SDK names, in the order it lists them. */
 const names = (catalog: readonly SdkProfile[]) =>

@@ -103,7 +103,7 @@ const identifyChecked = (
   return { checked, tier: identification.tier };
 };
 
-/** The declared SDK's entry. Every SDK in the shared list has one in production. */
+/** The declared SDK's entry. Every SDK in the api's list has one in production. */
 const declaredChecked = (
   declared: AcceptedSdk,
   checkedSdks: readonly CheckedSdk[],

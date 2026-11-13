@@ -1,4 +1,3 @@
-import { sdks, type Sdk } from "@durables/schemas";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -8,18 +7,19 @@ import {
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
+import { sdks, type Sdk } from "../sdks/sdk-list";
 
 /** The sign-in providers a publisher can use (ADR 0007). */
 export const providers = ["github", "gitlab", "google", "microsoft"] as const;
 
 export type Provider = (typeof providers)[number];
 
-/** The SDKs publishing accepts today (ADR 0008): the shared SDK list. */
+/** The SDKs publishing accepts today (ADR 0008): the api's SDK list. */
 export { sdks, type Sdk };
 
 /**
  * The SDKs a stored version can be written in: every SDK Temporal officially supports, in
- * Temporal's order. The `versions_sdk` check allows exactly these. It is wider than the shared
+ * Temporal's order. The `versions_sdk` check allows exactly these. It is wider than the api's
  * list until every SDK is accepted, so the table never has to be rebuilt again to add one.
  */
 export const storedSdks = [
