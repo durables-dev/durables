@@ -1,0 +1,4 @@
+temporal server start-dev
+{{environment}}
+mvn compile exec:java -Dexec.mainClass={{workerClass}}
+mvn compile exec:java -Dexec.mainClass=Starter

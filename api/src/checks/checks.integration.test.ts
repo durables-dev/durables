@@ -157,6 +157,67 @@ describe("POST /api/checks", () => {
     expect(await response.json()).toEqual(postSlackMessageFacts);
   });
 
+  describe("a Java activity", () => {
+    const sendSms = lines(
+      "import com.twilio.Twilio;",
+      "import io.temporal.activity.ActivityInterface;",
+      "",
+      "@ActivityInterface",
+      "public interface SmsActivities {",
+      "    String sendSms(SmsRequest request);",
+      "}",
+      "",
+      "class SmsActivitiesImpl implements SmsActivities {",
+      "    @Override",
+      "    public String sendSms(SmsRequest request) {",
+      '        Twilio.init(System.getenv("TWILIO_ACCOUNT_SID"), "token");',
+      "        return request.to();",
+      "    }",
+      "}",
+      "",
+    );
+
+    test("answers 200 with the eight facts and the SDK detected", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(cookie, sendSms);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        sdk: "Java",
+        activity: { name: "sendSms", line: 6 },
+        input: "SmsRequest",
+        output: "String",
+        runsAs: "sync",
+        nonRetryableErrors: [],
+        configurationRead: [{ name: "TWILIO_ACCOUNT_SID", line: 12 }],
+        dependencies: [{ name: "com.twilio", line: 1 }],
+        heartbeats: [],
+        provenance: postSlackMessageFacts.provenance,
+      });
+    });
+
+    test("answers 200 with the SDK inferred for an implementation-only paste", async () => {
+      const cookie = await signIn();
+      const implementation = lines(
+        "public class SmsActivitiesImpl implements SmsActivities {",
+        "    public String sendSms(SmsRequest request) {",
+        "        return request.to();",
+        "    }",
+        "}",
+      );
+
+      const response = await checkCode(cookie, implementation);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        sdk: "Java",
+        activity: { name: "sendSms", line: 2 },
+        provenance: { sdk: "inferred", activity: "detected" },
+      });
+    });
+  });
+
   test("ignores detection results sent by the client", async () => {
     const cookie = await signIn();
 
@@ -229,7 +290,7 @@ describe("POST /api/checks", () => {
     });
 
     test.each([
-      { case: "an SDK not in the list", declaredSdk: "Java" },
+      { case: "an SDK not in the list", declaredSdk: "Cobol" },
       { case: "a lowercased SDK", declaredSdk: "python" },
       { case: "a declared SDK that isn't a string", declaredSdk: 42 },
     ])("answers 400 with a field error for $case", async ({ declaredSdk }) => {
@@ -304,13 +365,15 @@ describe("POST /api/checks", () => {
       {
         refusal: "Temporal activity in an unaccepted SDK",
         code: lines(
-          "import io.temporal.activity.ActivityInterface;",
+          "<?php",
           "",
-          "@ActivityInterface",
-          "public interface Greeting {}",
+          "use Temporal\\Activity\\ActivityInterface;",
+          "",
+          "#[ActivityInterface]",
+          "interface Greeting {}",
           "",
         ),
-        expected: { type: refusalTypes.unacceptedSdk, sdk: "Java" },
+        expected: { type: refusalTypes.unacceptedSdk, sdk: "PHP" },
       },
       {
         refusal: "more than one activity",

@@ -27,11 +27,6 @@ describe("unaccepted SDK markers", () => {
   });
 
   it.each([
-    ["Java", "import io.temporal.activity.ActivityInterface;"],
-    [
-      "Java",
-      "import static io.temporal.activity.Activity.getExecutionContext;",
-    ],
     ["Go", '\t"go.temporal.io/sdk/activity"'],
     ["Go", 'import "go.temporal.io/sdk"'],
     ["PHP", "use Temporal\\Activity\\ActivityInterface;"],
@@ -40,8 +35,6 @@ describe("unaccepted SDK markers", () => {
   });
 
   it.each([
-    ["Java", "@ActivityInterface\npublic interface Greeter {"],
-    ["Java", "    @ActivityMethod\n    String greet(String name);"],
     ["Go", "func Greet(ctx context.Context, name string) (string, error) {"],
     ["Go", "func (a *Activities) Greet(ctx context.Context) error {"],
     ["PHP", "#[ActivityInterface]\ninterface Greeter"],
@@ -51,7 +44,6 @@ describe("unaccepted SDK markers", () => {
   });
 
   it.each([
-    ["Java", "import io.temporalx.Thing;"],
     ["Go", '"github.com/example/temporal"'],
     ["PHP", "use App\\Temporal\\Thing;"],
   ])("do not take a lookalike for the %s SDK: %s", (sdk, line) => {

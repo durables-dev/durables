@@ -186,7 +186,7 @@ test.describe("as an anonymous visitor", () => {
         );
         await expect(
           page.getByRole("group", { name: "Temporal SDK" }).getByRole("button"),
-        ).toHaveText(["Any", "Python", "TypeScript", ".NET"]);
+        ).toHaveText(["Any", "Java", "Python", "TypeScript", ".NET"]);
         await expect(
           page
             .getByRole("group", { name: "Integrates with" })

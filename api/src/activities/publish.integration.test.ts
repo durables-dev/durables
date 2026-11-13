@@ -321,6 +321,41 @@ describe("POST /api/activities", () => {
       });
     });
 
+    test("publishes a Java activity with its facts, integrations and Java snippets", async () => {
+      const { cookie, handle } = await newPublisher();
+      const code = lines(
+        "import com.stripe.Stripe;",
+        "import io.temporal.activity.ActivityInterface;",
+        "",
+        "@ActivityInterface",
+        "public interface Payments {",
+        "    ChargeResult chargeCard(ChargeRequest request);",
+        "}",
+        "",
+      );
+      const body = publishBody({ code });
+
+      const response = await publish(cookie, body);
+
+      expect(response.status).toBe(201);
+      const address = addressOf(handle, body.name);
+      const stored = await storage().readVersionDocument(address);
+      expect(stored).toMatchObject(expectedDocument(code, address));
+      expect(stored?.facts.sdk).toBe("Java");
+      expect(stored?.integrations).toEqual(["Stripe"]);
+      expect(stored?.snippets.map(({ label }) => label)).toEqual([
+        "Install",
+        "ChargeCardWorkflow.java",
+        "ChargeCardWorker.java",
+        "Starter.java",
+        "Run",
+      ]);
+      expect(await storage().findListing(address)).toMatchObject({
+        sdk: "Java",
+        integrations: ["Stripe"],
+      });
+    });
+
     test("ignores detection results, integrations, snippets and a version sent by the client", async () => {
       const { cookie, handle } = await newPublisher();
       const body = publishBody({
@@ -734,10 +769,12 @@ describe("POST /api/activities", () => {
       {
         refusal: "an SDK not accepted",
         code: lines(
-          "import io.temporal.activity.ActivityInterface;",
+          "<?php",
           "",
-          "@ActivityInterface",
-          "public interface Greeting {}",
+          "use Temporal\\Activity\\ActivityInterface;",
+          "",
+          "#[ActivityInterface]",
+          "interface Greeting {}",
           "",
         ),
         type: refusalTypes.unacceptedSdk,
