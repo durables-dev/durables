@@ -371,7 +371,7 @@ describe("the listing and version tables", () => {
       env.DB.prepare(
         "insert into versions (handle, name, version, title, sdk, integrations) values (?, ?, ?, ?, ?, ?)",
       )
-        .bind(listing.handle, listing.name, "9.0.0", "Title", "Java", "[]")
+        .bind(listing.handle, listing.name, "9.0.0", "Title", "Kotlin", "[]")
         .run(),
     ).rejects.toThrow(/CHECK constraint failed/);
   });
