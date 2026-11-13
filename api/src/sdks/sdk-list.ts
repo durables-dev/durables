@@ -5,7 +5,7 @@ import { z } from "zod";
 // api responses and from the SDK catalog.
 
 /** The Temporal SDKs Durables accepts activities from, named as listings store them. */
-export const sdks = ["Python", "TypeScript", ".NET"] as const;
+export const sdks = ["Python", "TypeScript", ".NET", "Ruby"] as const;
 
 export const sdkSchema = z.enum(sdks);
 

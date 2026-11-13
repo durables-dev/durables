@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { dotnet } from "./dotnet";
 import { python } from "./python";
+import { ruby } from "./ruby";
 import { registeredSdks, sdkRegistry } from "./registry";
 import type { SdkEntry, SdkRegistry } from "./sdk-entry";
 import { type Sdk, sdks } from "./sdk-list";
@@ -60,7 +61,7 @@ describe("the SDK registry", () => {
 
   it("lists its entries in the api's list's order", () => {
     expect(registeredSdks.map(({ sdk }) => sdk)).toEqual([...sdks]);
-    expect(registeredSdks).toEqual([python, typescript, dotnet]);
+    expect(registeredSdks).toEqual([python, typescript, dotnet, ruby]);
   });
 
   it("gives every entry recognition patterns with unique names across the registry", () => {
@@ -82,6 +83,10 @@ describe("the SDK registry", () => {
       ["TypeScript", "pg", "pg"],
       [".NET", "Npgsql", "npgsql"],
       [".NET", "SlackNet", "slacknet"],
+      ["Ruby", "stripe", "stripe"],
+      ["Ruby", "aws-sdk-s3", "aws-sdk-s3"],
+      ["Ruby", "Slack-Ruby-Client", "slack-ruby-client"],
+      ["Ruby", "google/cloud/storage", "google-cloud-storage"],
     ] as const)(
       "maps the %s dependency %s to the integration key %s",
       (sdk, name, key) => {
@@ -106,6 +111,12 @@ describe("the SDK registry", () => {
       [".NET", "Microsoft", true],
       [".NET", "Npgsql", false],
       [".NET", "Temporalio", false],
+      ["Ruby", "json", true],
+      ["Ruby", "net/http", true],
+      ["Ruby", "securerandom", true],
+      ["Ruby", "stripe", false],
+      ["Ruby", "aws-sdk-s3", false],
+      ["Ruby", "temporalio", false],
     ] as const)(
       "reads the %s dependency %s as standard library: %s",
       (sdk, name, expected) => {
@@ -119,6 +130,7 @@ describe("the SDK registry", () => {
       ["Python", "activities.py", "temporalio", "python"],
       ["TypeScript", "activities.ts", "@temporalio/activity", "typescript"],
       [".NET", "Activities.cs", "Temporalio", "csharp"],
+      ["Ruby", "activities.rb", "temporalio", "ruby"],
     ] as const)(
       "gives %s the activity file %s, the package %s and the highlight language %s",
       (sdk, activityFileName, sdkPackage, highlightLanguage) => {
@@ -156,6 +168,11 @@ describe("the SDK registry", () => {
         ".NET",
         "Synchronous: the .NET SDK runs it for you",
         "This is a synchronous activity. The .NET SDK runs it for you, so your worker needs no special setup.",
+      ],
+      [
+        "Ruby",
+        "Synchronous: the worker needs no special setup",
+        "This is a synchronous activity. Your worker needs no special setup to run it.",
       ],
     ] as const)(
       "gives %s the Runs as wording %j for sync, and its Worker requirements",

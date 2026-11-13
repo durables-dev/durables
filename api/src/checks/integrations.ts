@@ -11,7 +11,7 @@ interface IntegrationPackages {
   readonly integration: Integration;
   /**
    * The integration keys of this integration's client libraries: package names for Python and
-   * TypeScript, the namespace root of a `using` for .NET. A dependency implies the integration
+   * TypeScript, the namespace root of a `using` for .NET, and gem names for Ruby. A dependency implies the integration
    * when its SDK's normaliser gives one of these keys. Keys are compared without regard to case.
    */
   readonly packages: readonly string[];
@@ -24,7 +24,7 @@ interface IntegrationPackages {
 export const integrationPackages: readonly IntegrationPackages[] = [
   {
     integration: "Amazon S3",
-    packages: ["boto3", "@aws-sdk/client-s3"],
+    packages: ["boto3", "@aws-sdk/client-s3", "aws-sdk-s3"],
   },
   {
     integration: "Postgres",
@@ -32,9 +32,9 @@ export const integrationPackages: readonly IntegrationPackages[] = [
   },
   {
     integration: "Slack",
-    packages: ["slack_sdk", "@slack/web-api", "SlackNet"],
+    packages: ["slack_sdk", "@slack/web-api", "SlackNet", "slack-ruby-client"],
   },
-  // "stripe" is also the Stripe.net package's .NET namespace root.
+  // "stripe" is also the Stripe.net package's .NET namespace root and the Ruby gem.
   { integration: "Stripe", packages: ["stripe"] },
 ];
 

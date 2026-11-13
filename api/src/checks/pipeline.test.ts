@@ -426,6 +426,15 @@ describe("checkCode", () => {
         '    public Task<string> GreetAsync(string name) => Task.FromResult($"Hello {name}");',
         "}",
       ].join("\n"),
+      Ruby: [
+        'require "temporalio/activity"',
+        "",
+        "class Greet < Temporalio::Activity::Definition",
+        "    def execute(name)",
+        '        "Hello #{name}"',
+        "    end",
+        "end",
+      ].join("\n"),
     };
 
     it.each(Object.entries(samples))(

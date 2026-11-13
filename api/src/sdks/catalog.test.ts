@@ -38,7 +38,7 @@ describe("the SDK catalog", () => {
 
     expect(names(catalog)).toEqual(inChipOrder(sdks));
     expect([...names(catalog)].sort()).toEqual([...sdks].sort());
-    expect(names(catalog)).toEqual(["Python", "TypeScript", ".NET"]);
+    expect(names(catalog)).toEqual(["Python", "TypeScript", ".NET", "Ruby"]);
   });
 
   it.each([
@@ -46,17 +46,28 @@ describe("the SDK catalog", () => {
     ["reverse order", [...registeredSdks].reverse()],
     [
       "a shuffled order",
-      [sdkRegistry.TypeScript, sdkRegistry[".NET"], sdkRegistry.Python],
+      [
+        sdkRegistry.TypeScript,
+        sdkRegistry.Ruby,
+        sdkRegistry[".NET"],
+        sdkRegistry.Python,
+      ],
     ],
     [
       "another shuffled order",
-      [sdkRegistry[".NET"], sdkRegistry.Python, sdkRegistry.TypeScript],
+      [
+        sdkRegistry.Ruby,
+        sdkRegistry[".NET"],
+        sdkRegistry.Python,
+        sdkRegistry.TypeScript,
+      ],
     ],
   ])("keeps chip order when the entries come in %s", (_order, entries) => {
     expect(names(sdkCatalog(entries))).toEqual([
       "Python",
       "TypeScript",
       ".NET",
+      "Ruby",
     ]);
   });
 
@@ -144,6 +155,21 @@ describe("the SDK catalog", () => {
 
     expect(python.runsAs.sync).toMatch(threadPool);
     expect(python.workerRequirements.sync).toMatch(threadPool);
+  });
+
+  it("tells Ruby, whose worker sets up nothing, that it needs no special setup, with no thread pool", () => {
+    const ruby = sdkRegistry.Ruby.display;
+
+    for (const wording of [
+      ruby.runsAs.sync,
+      ruby.runsAs.async,
+      ruby.workerRequirements.sync,
+      ruby.workerRequirements.async,
+    ]) {
+      expect(wording).not.toMatch(threadPool);
+    }
+    expect(ruby.workerRequirements.sync).toContain("no special setup");
+    expect(ruby.workerRequirements.async).toContain("no special setup");
   });
 
   it("names no thread pool in .NET's sync Runs as or its Configure wording", () => {

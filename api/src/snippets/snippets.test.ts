@@ -24,12 +24,13 @@ const factsFor = (
       Python: "charge_card",
       TypeScript: "chargeCard",
       ".NET": "ChargeCardAsync",
+      Ruby: "ChargeCard",
     }[sdk],
     line: 1,
   },
   input: "ChargeRequest",
   output: "ChargeResult",
-  runsAs: sdk === "Python" ? "sync" : "async",
+  runsAs: sdk === "Python" || sdk === "Ruby" ? "sync" : "async",
   nonRetryableErrors: [],
   configurationRead: [{ name: "STRIPE_API_KEY", line: 4 }],
   dependencies: [{ name: sdk === ".NET" ? "Stripe" : "stripe", line: 2 }],
@@ -43,6 +44,7 @@ const fileLabels = (sdk: AcceptedSdk, workflowClass = "ChargeCardWorkflow") =>
     Python: ["workflows.py", "worker.py", "start.py"],
     TypeScript: ["workflows.ts", "worker.ts", "start.ts"],
     ".NET": [`${workflowClass}.cs`, "Program.cs", "Starter.cs"],
+    Ruby: ["workflow.rb", "worker.rb", "starter.rb"],
   })[sdk];
 
 /** The snippet with the label. Fails the test when there is none. */
@@ -93,6 +95,7 @@ const lineComments: Record<AcceptedSdk, string> = {
   Python: "#",
   TypeScript: "//",
   ".NET": "//",
+  Ruby: "#",
 };
 
 /** The generated text for each SDK's fixture activity, `factsFor(sdk)` at `address`. */
@@ -378,6 +381,83 @@ const expectedSnippets: Record<AcceptedSdk, Snippet[]> = {
         "export STRIPE_API_KEY=...",
         "dotnet run",
         "dotnet run -- start",
+      ].join("\n"),
+    },
+  ],
+  Ruby: [
+    {
+      label: "Install",
+      code: [
+        "bundle add temporalio",
+        "# Also add the gems that provide: stripe",
+      ].join("\n"),
+    },
+    {
+      label: "workflow.rb",
+      code: [
+        'require "temporalio/workflow"',
+        "",
+        'require_relative "activities"',
+        "",
+        "class ChargeCardWorkflow < Temporalio::Workflow::Definition",
+        "    # input is the ChargeRequest to pass to ChargeCard.",
+        "    def execute(input)",
+        "        Temporalio::Workflow.execute_activity(",
+        "            ChargeCard,",
+        "            input,",
+        "            # Temporal requires a start-to-close timeout. Set it for your activity.",
+        "            start_to_close_timeout: 30",
+        "        )",
+        "    end",
+        "end",
+      ].join("\n"),
+    },
+    {
+      label: "worker.rb",
+      code: [
+        'require "temporalio/client"',
+        'require "temporalio/worker"',
+        "",
+        'require_relative "activities"',
+        'require_relative "workflow"',
+        "",
+        'client = Temporalio::Client.connect("localhost:7233", "default")',
+        "worker = Temporalio::Worker.new(",
+        "    client: client,",
+        '    task_queue: "charge-card",',
+        "    workflows: [ChargeCardWorkflow],",
+        "    activities: [ChargeCard]",
+        ")",
+        'worker.run(shutdown_signals: ["SIGINT"])',
+      ].join("\n"),
+    },
+    {
+      label: "starter.rb",
+      code: [
+        'require "securerandom"',
+        'require "temporalio/client"',
+        "",
+        'require_relative "workflow"',
+        "",
+        'client = Temporalio::Client.connect("localhost:7233", "default")',
+        "# Fill in the ChargeRequest to pass to ChargeCard.",
+        "input = nil",
+        "result = client.execute_workflow(",
+        "    ChargeCardWorkflow,",
+        "    input,",
+        '    id: "charge-card-#{SecureRandom.uuid}",',
+        '    task_queue: "charge-card"',
+        ")",
+        "puts result",
+      ].join("\n"),
+    },
+    {
+      label: "Run",
+      code: [
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "bundle exec ruby worker.rb",
+        "bundle exec ruby starter.rb",
       ].join("\n"),
     },
   ],
@@ -951,6 +1031,7 @@ describe("generateSnippets", () => {
         '({\n    // Temporal requires a start-to-close timeout. Set it for your activity.\n    startToCloseTimeout: "30 seconds",\n});',
       ".NET":
         "            {\n                // Temporal requires a start-to-close timeout. Set it for your activity.\n                StartToCloseTimeout = TimeSpan.FromSeconds(30),\n            });",
+      Ruby: "            # Temporal requires a start-to-close timeout. Set it for your activity.\n            start_to_close_timeout: 30\n        )",
     };
 
     const workflowFile = (
@@ -1050,6 +1131,7 @@ describe("generateSnippets", () => {
         ".NET",
         "dotnet new console --output charge-card\ncd charge-card\ndotnet add package Temporalio",
       ],
+      ["Ruby", "bundle add temporalio"],
     ] as const)("still installs the %s SDK", (sdk, command) => {
       expect(
         snippet(
@@ -1074,6 +1156,7 @@ describe("generateSnippets", () => {
       ["Python", "activities.py"],
       ["TypeScript", "activities.ts"],
       [".NET", "Activities.cs"],
+      ["Ruby", "activities.rb"],
     ] as const)(
       "names the %s activity file %s, the file the workflow and worker import",
       (sdk, fileName) => {
@@ -1082,11 +1165,128 @@ describe("generateSnippets", () => {
           Python: "from activities import",
           TypeScript: 'from "./activities"',
           ".NET": "activities.ChargeCardAsync",
+          Ruby: 'require_relative "activities"',
         }[sdk];
         for (const { code } of files(expectedSnippets[sdk]).slice(0, 2)) {
           expect(code).toContain(importsActivityFile);
         }
       },
+    );
+  });
+});
+
+describe("Ruby snippets", () => {
+  const ruby = (changes: Partial<FactValues> = {}, at: Address = address) =>
+    generateSnippets(factsFor("Ruby", changes), at);
+
+  it("installs the SDK with bundle add, and names each detected require without adding it", () => {
+    expect(snippet(ruby(), installLabel)).toBe(
+      "bundle add temporalio\n# Also add the gems that provide: stripe",
+    );
+    const install = snippet(
+      ruby({
+        dependencies: [
+          { name: "aws-sdk-s3", line: 1 },
+          { name: "active_support/core_ext", line: 2 },
+        ],
+      }),
+      installLabel,
+    );
+    expect(install).toBe(
+      "bundle add temporalio\n# Also add the gems that provide: aws-sdk-s3, active_support/core_ext",
+    );
+    expect(
+      install.split("\n").filter((line) => line.startsWith("bundle add")),
+    ).toEqual(["bundle add temporalio"]);
+  });
+
+  it("writes every file in Ruby, named for Ruby", () => {
+    const snippets = ruby();
+    expect(snippets.map(({ label }) => label)).toEqual([
+      installLabel,
+      "workflow.rb",
+      "worker.rb",
+      "starter.rb",
+      runLabel,
+    ]);
+    for (const { code } of files(snippets)) {
+      expect(code).toMatch(/^require "temporalio\/(?:workflow|client)"$/m);
+      expect(code).not.toMatch(/[;{]$/m);
+    }
+    expect(snippet(snippets, runLabel)).toContain("bundle exec ruby worker.rb");
+  });
+
+  it("passes the activity its input and notes the input's type", () => {
+    const workflow = snippet(ruby(), "workflow.rb");
+    expect(workflow).toContain(
+      "    # input is the ChargeRequest to pass to ChargeCard.\n    def execute(input)\n",
+    );
+    expect(workflow).toContain("            ChargeCard,\n            input,\n");
+  });
+
+  it("passes the arguments through when detection couldn't read the input", () => {
+    const snippets = ruby({ input: null });
+    const workflow = snippet(snippets, "workflow.rb");
+    expect(workflow).toContain("    def execute(*args)\n");
+    expect(workflow).toContain(
+      "        # Detection couldn't read what ChargeCard takes. Fill in its arguments,\n",
+    );
+    expect(workflow).toContain("            ChargeCard,\n            *args,\n");
+    const starter = snippet(snippets, "starter.rb");
+    expect(starter).toContain(
+      "# Fill in the arguments ChargeCard takes, in order.\nargs = []\n",
+    );
+    expect(starter).toContain("    ChargeCardWorkflow,\n    *args,\n");
+  });
+
+  it.each(["sync", "async", null] as const)(
+    "sets up no activity executor or thread pool in the worker when Runs as is %s",
+    (runsAs) => {
+      const worker = snippet(ruby({ runsAs }), "worker.rb");
+      expect(worker).not.toMatch(/executor|thread[ _]?pool/i);
+      expect(worker).toContain("    activities: [ChargeCard]\n");
+    },
+  );
+
+  it("names the workflow after the activity class, without its namespace or an Activity ending", () => {
+    const named = (name: string) =>
+      snippet(ruby({ activity: { name, line: 1 } }), "workflow.rb");
+    expect(named("Billing::ChargeCardActivity")).toContain(
+      "class ChargeCardWorkflow < Temporalio::Workflow::Definition",
+    );
+    expect(named("Billing::ChargeCardActivity")).toContain(
+      "            Billing::ChargeCardActivity,\n",
+    );
+    expect(named("Activity")).toContain(
+      "class ActivityWorkflow < Temporalio::Workflow::Definition",
+    );
+  });
+
+  it("escapes quotes, backslashes and interpolation in the address", () => {
+    const starter = snippet(
+      ruby({}, { handle: "kris", name: 'a"b#{c}\\', version: "1.0.0" }),
+      "starter.rb",
+    );
+    expect(starter).toContain(
+      String.raw`    id: "a\"b\#{c}\\-#{SecureRandom.uuid}",`,
+    );
+    expect(starter).toContain(String.raw`    task_queue: "a\"b\#{c}\\"`);
+  });
+
+  it("generates from a detected Ruby activity", () => {
+    const code = [
+      'require "stripe"',
+      'require "temporalio/activity"',
+      "",
+      "class ChargeCard < Temporalio::Activity::Definition",
+      "    sig { params(input: ChargeRequest).returns(ChargeResult) }",
+      "    def execute(input)",
+      '        Stripe.api_key = ENV.fetch("STRIPE_API_KEY")',
+      "    end",
+      "end",
+    ].join("\n");
+    expect(generateSnippets(checkCode(code, registeredSdks), address)).toEqual(
+      expectedSnippets.Ruby,
     );
   });
 });
