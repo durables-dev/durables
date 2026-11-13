@@ -1,5 +1,5 @@
-import type { SdkMarkers } from "./detector";
 import type { UnacceptedSdk } from "./facts";
+import type { Recognisable } from "./identify";
 import type { Pattern } from "./pattern";
 
 // Markers for the Temporal SDKs Durables recognises but does not accept, so a refusal can
@@ -62,20 +62,30 @@ export const phpActivityAttribute: Pattern = {
   regex: /(?:#\[[ \t]*|@)Activity(?:Interface|Method)\b/,
 };
 
-export const unacceptedSdks: readonly SdkMarkers<UnacceptedSdk>[] = [
+/**
+ * The SDKs Durables recognises but does not accept. Identification runs over these with the
+ * registry's SDKs, so a refusal can name the SDK.
+ */
+export const unacceptedSdks: readonly Recognisable<UnacceptedSdk>[] = [
   {
     sdk: "Java",
-    sdkMarkers: [javaSdkImport],
-    activityMarkers: [javaActivityAnnotation],
+    recognition: {
+      sdkMarkers: [javaSdkImport],
+      activityMarkers: [javaActivityAnnotation],
+    },
   },
   {
     sdk: "Go",
-    sdkMarkers: [goSdkImport],
-    activityMarkers: [goActivityImport, goActivityFunction],
+    recognition: {
+      sdkMarkers: [goSdkImport],
+      activityMarkers: [goActivityImport, goActivityFunction],
+    },
   },
   {
     sdk: "PHP",
-    sdkMarkers: [phpSdkUse],
-    activityMarkers: [phpActivityAttribute],
+    recognition: {
+      sdkMarkers: [phpSdkUse],
+      activityMarkers: [phpActivityAttribute],
+    },
   },
 ];

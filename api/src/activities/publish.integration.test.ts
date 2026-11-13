@@ -1,10 +1,10 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { detectors } from "../checks/detectors";
 import { integrationsFor } from "../checks/integrations";
 import { checkCode } from "../checks/pipeline";
 import { refusalTypes } from "../checks/refusals";
 import { MAX_CODE_BYTES } from "../checks/size-limit";
+import { registeredSdks } from "../sdks/registry";
 import { generateSnippets } from "../snippets/snippets";
 import {
   readAllRows,
@@ -157,10 +157,10 @@ const expectedDocument = (
   code: string,
   address: Address,
 ): Pick<VersionDocument, "facts" | "integrations" | "snippets"> => {
-  const facts = checkCode(code, detectors);
+  const facts = checkCode(code, registeredSdks);
   return {
     facts,
-    integrations: integrationsFor(facts.dependencies),
+    integrations: integrationsFor(facts.sdk, facts.dependencies),
     snippets: generateSnippets(facts, address),
   };
 };
@@ -215,7 +215,7 @@ describe("POST /api/activities", () => {
       const version = await get(location);
       expect(version.status).toBe(200);
       const address = { handle, name: body.name, version: "1.0.0" };
-      const facts = checkCode(postSlackMessage, detectors);
+      const facts = checkCode(postSlackMessage, registeredSdks);
       const row = await storage().findVersion(address);
       expect(await version.json<VersionResponse>()).toEqual({
         address: `${handle}/${body.name}@1.0.0`,
@@ -228,7 +228,7 @@ describe("POST /api/activities", () => {
         code: postSlackMessage,
         activityFileName: "activities.py",
         snippets: generateSnippets(facts, address),
-        integrations: integrationsFor(facts.dependencies),
+        integrations: integrationsFor(facts.sdk, facts.dependencies),
         publishedAt: row?.publishedAt.toISOString(),
       });
       const listing = await get(`/api/activities/${handle}/${body.name}`);

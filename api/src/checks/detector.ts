@@ -1,24 +1,18 @@
-import type { AcceptedSdk, ActivityFacts, UnacceptedSdk } from "./facts";
-import type { Pattern } from "./pattern";
+import type { ActivityFacts } from "./facts";
 import type { Source } from "./source";
 
-/** How the pipeline recognises one Temporal SDK. */
-export interface SdkMarkers<S extends AcceptedSdk | UnacceptedSdk> {
-  readonly sdk: S;
-  /** Patterns that show the file uses this SDK. Any one matching is enough. */
-  readonly sdkMarkers: readonly Pattern[];
-  /**
-   * Patterns that show the file declares an activity in this SDK. Used to choose between
-   * SDKs when a file has markers for more than one.
-   */
-  readonly activityMarkers: readonly Pattern[];
-}
-
 /**
- * Detection for one accepted SDK. The pipeline chooses the SDK from the markers, then asks
- * that SDK's detector for the file's activities.
+ * Detection for one SDK. Identification has already chosen the SDK; the detector reads the
+ * file's activities in it.
  */
-export interface Detector extends SdkMarkers<AcceptedSdk> {
-  /** Every activity in the file, in the order they appear. Empty when there is none. */
-  detect(source: Source): readonly ActivityFacts[];
+export interface Detector {
+  /**
+   * Every activity in the file, in the order they appear. Empty when there is none.
+   * `isStandardLibrary` is the SDK entry's standard-library check; Dependencies leaves out
+   * every name it accepts.
+   */
+  detect(
+    source: Source,
+    isStandardLibrary: (name: string) => boolean,
+  ): readonly ActivityFacts[];
 }

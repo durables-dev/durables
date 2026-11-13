@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Detector } from "./detector";
 import type { AcceptedSdk, ActivityFacts } from "./facts";
-import { checkCode, DetectorFailure } from "./pipeline";
+import { type CheckedSdk, checkCode, DetectorFailure } from "./pipeline";
 import { CheckRefusal, refusalTypes } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
 import { lineAt, type Source } from "./source";
@@ -18,45 +17,50 @@ const facts = (name: string, line = 1): ActivityFacts => ({
 });
 
 /**
- * A stand-in for a real detector. Its SDK marker is `STUB_SDK`, its activity marker is
- * `STUB_ACTIVITY`, and it returns `activities` whatever the code.
+ * A stand-in for a real SDK. Its SDK marker is `STUB_SDK`, its activity marker is
+ * `STUB_ACTIVITY`, and its detector returns `activities` whatever the code.
  */
 const stub = (
   activities: readonly ActivityFacts[],
   sdk: AcceptedSdk = "Python",
   tag = "STUB",
-): Detector => ({
+): CheckedSdk => ({
   sdk,
-  sdkMarkers: [
-    {
-      name: `${tag}-sdk`,
-      description: "Test marker.",
-      regex: new RegExp(`${tag}_SDK`),
-    },
-  ],
-  activityMarkers: [
-    {
-      name: `${tag}-activity`,
-      description: "Test marker.",
-      regex: new RegExp(`${tag}_ACTIVITY`),
-    },
-  ],
-  detect: () => activities,
+  recognition: {
+    sdkMarkers: [
+      {
+        name: `${tag}-sdk`,
+        description: "Test marker.",
+        regex: new RegExp(`${tag}_SDK`),
+      },
+    ],
+    activityMarkers: [
+      {
+        name: `${tag}-activity`,
+        description: "Test marker.",
+        regex: new RegExp(`${tag}_ACTIVITY`),
+      },
+    ],
+  },
+  detector: { detect: () => activities },
+  isStandardLibrary: () => false,
 });
 
-/** A detector that reports one activity per `STUB_ACTIVITY name` line, at that line. */
-const lineCountingStub: Detector = {
+/** An SDK whose detector reports one activity per `STUB_ACTIVITY name` line, at that line. */
+const lineCountingStub: CheckedSdk = {
   ...stub([]),
-  detect: (source: Source) =>
-    [...source.text.matchAll(/STUB_ACTIVITY (\w+)/g)].map((m) =>
-      facts(m[1] ?? "", lineAt(source, m.index)),
-    ),
+  detector: {
+    detect: (source: Source) =>
+      [...source.text.matchAll(/STUB_ACTIVITY (\w+)/g)].map((m) =>
+        facts(m[1] ?? "", lineAt(source, m.index)),
+      ),
+  },
 };
 
 /** The refusal checkCode throws, so a test can assert on it. */
-const thrownBy = (code: string, detectors: readonly Detector[]) => {
+const thrownBy = (code: string, checkedSdks: readonly CheckedSdk[]) => {
   try {
-    checkCode(code, detectors);
+    checkCode(code, checkedSdks);
   } catch (error) {
     return error;
   }
@@ -64,8 +68,8 @@ const thrownBy = (code: string, detectors: readonly Detector[]) => {
 };
 
 /** The Problem Details body of the refusal checkCode throws. */
-const refusalOf = (code: string, detectors: readonly Detector[]) => {
-  const error = thrownBy(code, detectors);
+const refusalOf = (code: string, checkedSdks: readonly CheckedSdk[]) => {
+  const error = thrownBy(code, checkedSdks);
   expect(error).toBeInstanceOf(CheckRefusal);
   return (error as CheckRefusal).problem;
 };
@@ -135,6 +139,27 @@ describe("checkCode", () => {
       ["whitespace-only", "  \n\t\r\n   "],
     ])("refuses %s input as not a Temporal activity", (_, code: string) => {
       expect(refusalOf(code, [stub([facts("act")])]).type).toBe(
+        refusalTypes.notTemporalActivity,
+      );
+    });
+
+    it.each([
+      ["empty", ""],
+      ["whitespace-only", "  \n\t\r\n   "],
+    ])("refuses %s input before identification runs", (_, code: string) => {
+      const matchesAnything = {
+        name: "anything",
+        description: "Test marker that matches any text.",
+        regex: /(?:)/,
+      };
+      const everywhere: CheckedSdk = {
+        ...stub([facts("act")]),
+        recognition: {
+          sdkMarkers: [matchesAnything],
+          activityMarkers: [matchesAnything],
+        },
+      };
+      expect(refusalOf(code, [everywhere]).type).toBe(
         refusalTypes.notTemporalActivity,
       );
     });
@@ -254,13 +279,40 @@ describe("checkCode", () => {
       );
     });
 
-    it("takes the earlier detector when two SDKs have activity markers", () => {
+    it("refuses a file where two SDKs have activity markers as not a Temporal activity, in either order", () => {
       const code = "PY_SDK\nPY_ACTIVITY\nTS_SDK\nTS_ACTIVITY\n";
-      expect(checkCode(code, [python, typescript]).sdk).toBe("Python");
+      expect(refusalOf(code, [python, typescript]).type).toBe(
+        refusalTypes.notTemporalActivity,
+      );
+      expect(refusalOf(code, [typescript, python]).type).toBe(
+        refusalTypes.notTemporalActivity,
+      );
     });
   });
 
   describe("an accepted file", () => {
+    it("passes the SDK's own standard-library check to its detector", () => {
+      const received: unknown[] = [];
+      const isStandardLibrary = (name: string) => name === "os";
+      const recording: CheckedSdk = {
+        ...stub([], ".NET"),
+        detector: {
+          detect: (_source, check) => {
+            received.push(check);
+            return [facts("post_slack_message")];
+          },
+        },
+        isStandardLibrary,
+      };
+      const other: CheckedSdk = {
+        ...stub([], "TypeScript", "OTHER"),
+        isStandardLibrary: () => true,
+      };
+      checkCode("STUB_SDK", [other, recording]);
+      expect(received).toEqual([isStandardLibrary]);
+      expect(received[0]).toBe(isStandardLibrary);
+    });
+
     it("passes the detector's result through unchanged, with its SDK", () => {
       const found = facts("post_slack_message", 25);
       expect(checkCode("STUB_SDK", [stub([found], ".NET")])).toEqual({
@@ -308,9 +360,9 @@ describe("checkCode", () => {
       ],
     ] as const)(
       "logs no code during a %s refusal",
-      (_, code, detectors: readonly Detector[]) => {
+      (_, code, checkedSdks: readonly CheckedSdk[]) => {
         const spies = captureConsole();
-        const refusal = thrownBy(code, detectors);
+        const refusal = thrownBy(code, checkedSdks);
         expect(refusal).toBeInstanceOf(CheckRefusal);
         const logged = JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
         expect(logged).not.toContain(secret);
@@ -322,10 +374,12 @@ describe("checkCode", () => {
     );
 
     it("throws a detector failure that carries no code", () => {
-      const throwing: Detector = {
+      const throwing: CheckedSdk = {
         ...stub([]),
-        detect: (source) => {
-          throw new Error(`could not parse ${source.text}`);
+        detector: {
+          detect: (source) => {
+            throw new Error(`could not parse ${source.text}`);
+          },
         },
       };
       const spies = captureConsole();

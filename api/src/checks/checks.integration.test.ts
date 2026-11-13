@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { createApp } from "../index";
 import { readAllRows } from "../storage/seed";
 import { createChecks } from "./checks";
-import type { Detector } from "./detector";
+import type { CheckedSdk } from "./pipeline";
 import { pythonSdkImport } from "./python-detector";
 import { refusalTypes } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
@@ -388,13 +388,15 @@ describe("POST /api/checks", () => {
 
     test("logs no code when a detector fails with a 500", async () => {
       // A detector that fails with the code in its message, to show the code goes no further.
-      const failing: Detector = {
+      const failing: CheckedSdk = {
         sdk: "Python",
-        sdkMarkers: [pythonSdkImport],
-        activityMarkers: [],
-        detect: (source) => {
-          throw new Error(source.text);
+        recognition: { sdkMarkers: [pythonSdkImport], activityMarkers: [] },
+        detector: {
+          detect: (source) => {
+            throw new Error(source.text);
+          },
         },
+        isStandardLibrary: () => false,
       };
       const app = createApp().route("/api/checks", createChecks([failing]));
       const cookie = await signIn();

@@ -227,3 +227,7 @@ export const pythonStandardLibrary: ReadonlySet<string> = new Set([
   "zlib",
   "zoneinfo",
 ]);
+
+/** Whether a top-level module is part of the Python standard library. */
+export const isPythonStandardLibrary = (name: string) =>
+  pythonStandardLibrary.has(name);
