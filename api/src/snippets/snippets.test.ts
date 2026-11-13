@@ -1,10 +1,10 @@
 import { sdks } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
-import { detectors } from "../checks/detectors";
 import type { AcceptedSdk, Facts } from "../checks/facts";
 import { checkCode } from "../checks/pipeline";
+import { registeredSdks, sdkRegistry } from "../sdks/registry";
 import type { Address, Snippet } from "../storage/version-document";
-import { activityFileName, installLabel, runLabel } from "./labels";
+import { installLabel, runLabel } from "./labels";
 import { generateSnippets } from "./snippets";
 
 const address: Address = {
@@ -857,7 +857,10 @@ describe("generateSnippets", () => {
         "def charge_card(input: ChargeRequest) -> ChargeResult:",
         '    return ChargeResult(charge_id="ch_1", status="ok")',
       ].join("\n");
-      const snippets = generateSnippets(checkCode(code, detectors), address);
+      const snippets = generateSnippets(
+        checkCode(code, registeredSdks),
+        address,
+      );
       expect(snippet(snippets, "workflows.py")).toBe(
         [
           "from datetime import timedelta",
@@ -897,7 +900,10 @@ describe("generateSnippets", () => {
         "  return process.env.STRIPE_API_KEY ?? String(input.amountCents);",
         "}",
       ].join("\n");
-      const snippets = generateSnippets(checkCode(code, detectors), address);
+      const snippets = generateSnippets(
+        checkCode(code, registeredSdks),
+        address,
+      );
       expect(snippet(snippets, "workflows.ts")).toContain(
         "export async function chargeCardWorkflow(input: ChargeRequest): Promise<string> {",
       );
@@ -921,7 +927,10 @@ describe("generateSnippets", () => {
         "    }",
         "}",
       ].join("\n");
-      const snippets = generateSnippets(checkCode(code, detectors), address);
+      const snippets = generateSnippets(
+        checkCode(code, registeredSdks),
+        address,
+      );
       expect(snippet(snippets, "ChargeCardWorkflow.cs")).toContain(
         "public async Task<ChargeResult> RunAsync(ChargeRequest input)",
       );
@@ -1062,7 +1071,7 @@ describe("generateSnippets", () => {
     ] as const)(
       "names the %s activity file %s, the file the workflow and worker import",
       (sdk, fileName) => {
-        expect(activityFileName[sdk]).toBe(fileName);
+        expect(sdkRegistry[sdk].display.activityFileName).toBe(fileName);
         const importsActivityFile = {
           Python: "from activities import",
           TypeScript: 'from "./activities"',

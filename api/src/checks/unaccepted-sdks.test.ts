@@ -7,13 +7,13 @@ const markersFor = (sdk: string) => {
   if (found === undefined) {
     throw new Error(`No markers for ${sdk}`);
   }
-  return found;
+  return found.recognition;
 };
 
 describe("unaccepted SDK markers", () => {
-  const patterns = unacceptedSdks.flatMap((markers) => [
-    ...markers.sdkMarkers,
-    ...markers.activityMarkers,
+  const patterns = unacceptedSdks.flatMap(({ recognition }) => [
+    ...recognition.sdkMarkers,
+    ...recognition.activityMarkers,
   ]);
 
   it("are named, unique, documented and stateless", () => {

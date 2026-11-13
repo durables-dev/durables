@@ -1,7 +1,8 @@
 import type { Detector } from "./detector";
 import type { ActivityFacts, LineRef, NamedLineRef } from "./facts";
+import type { SdkRecognition } from "./identify";
 import type { Pattern } from "./pattern";
-import { pythonStandardLibrary } from "./python-stdlib";
+import { isPythonStandardLibrary } from "./python-stdlib";
 import type { Source } from "./source";
 
 // Python detection (ADR 0008). Every pattern below is part of the published rubric. A match
@@ -458,11 +459,17 @@ const readDependencies = (
   const thirdParty = [...imports, ...fromImports]
     .filter(
       ({ name }) =>
-        name !== temporalSdkPackage && !pythonStandardLibrary.has(name),
+        name !== temporalSdkPackage && !isPythonStandardLibrary(name),
     )
     .sort((a, b) => a.offset - b.offset)
     .map(({ name, offset }) => ({ name, line: lineOf(offset) }));
   return firstByName(thirdParty);
+};
+
+/** How identification recognises Python: the SDK import or the activity decorator. */
+export const pythonRecognition: SdkRecognition = {
+  sdkMarkers: [pythonSdkImport, pythonActivityDecorator],
+  activityMarkers: [pythonActivityDecorator],
 };
 
 /**
@@ -470,9 +477,6 @@ const readDependencies = (
  * dependencies and heartbeats) are read from the whole file and reported on every activity.
  */
 export const pythonDetector: Detector = {
-  sdk: "Python",
-  sdkMarkers: [pythonSdkImport, pythonActivityDecorator],
-  activityMarkers: [pythonActivityDecorator],
   detect(source) {
     const { text } = source;
     const lineOf = lineFinder(text);

@@ -1,4 +1,5 @@
-import type { Integration } from "@durables/schemas";
+import type { Integration, Sdk } from "@durables/schemas";
+import { sdkRegistry } from "../sdks/registry";
 import type { NamedLineRef } from "./facts";
 
 // "Integrates with" is what detection can tell from the code's imports (PM decision,
@@ -8,8 +9,9 @@ import type { NamedLineRef } from "./facts";
 interface IntegrationPackages {
   readonly integration: Integration;
   /**
-   * The dependency names detection reports for this integration's client libraries: package
-   * names for Python and TypeScript, the namespace root of a `using` for .NET.
+   * The integration keys of this integration's client libraries: package names for Python and
+   * TypeScript, the namespace root of a `using` for .NET. A dependency implies the integration
+   * when its SDK's normaliser gives one of these keys. Keys are compared without regard to case.
    */
   readonly packages: readonly string[];
 }
@@ -36,14 +38,18 @@ export const integrationPackages: readonly IntegrationPackages[] = [
 ];
 
 /**
- * The integrations the detected third-party imports imply, each once. The order is the order
- * of `integrationPackages`, whatever order the imports came in. Empty when no import implies
- * an integration.
+ * The integrations an SDK's detected third-party imports imply, each once. Each dependency
+ * goes through the SDK's normaliser first. The order is the order of `integrationPackages`,
+ * whatever order the imports came in. Empty when no import implies an integration.
  */
 export const integrationsFor = (
+  sdk: Sdk,
   dependencies: readonly Pick<NamedLineRef, "name">[],
 ): Integration[] => {
-  const imported = new Set(dependencies.map(({ name }) => name.toLowerCase()));
+  const { normaliseDependency } = sdkRegistry[sdk];
+  const imported = new Set(
+    dependencies.map(({ name }) => normaliseDependency(name)),
+  );
   return integrationPackages
     .filter(({ packages }) =>
       packages.some((name) => imported.has(name.toLowerCase())),

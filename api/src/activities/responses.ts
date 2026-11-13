@@ -1,5 +1,5 @@
 import type { Facts } from "../checks/facts";
-import { activityFileName } from "../snippets/labels";
+import { sdkRegistry } from "../sdks/registry";
 import type {
   Snippet,
   Address,
@@ -121,7 +121,7 @@ export const versionResponse = (
   sdk: version.sdk,
   facts: document.facts,
   code: document.code,
-  activityFileName: activityFileName[version.sdk],
+  activityFileName: sdkRegistry[version.sdk].display.activityFileName,
   snippets: document.snippets,
   integrations: document.integrations,
   publishedAt: version.publishedAt.toISOString(),

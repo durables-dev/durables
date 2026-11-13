@@ -1,6 +1,7 @@
 import type { Detector } from "./detector";
 import type { ActivityFacts, LineRef, NamedLineRef } from "./facts";
-import { nodeBuiltinModules } from "./node-builtins";
+import type { SdkRecognition } from "./identify";
+import { isNodeBuiltin } from "./node-builtins";
 import type { Pattern } from "./pattern";
 import {
   allMatches,
@@ -549,8 +550,7 @@ const readDependencies = (
   );
   const thirdParty = imported
     .filter(
-      ({ name }) =>
-        !name.startsWith(temporalSdkScope) && !nodeBuiltinModules.has(name),
+      ({ name }) => !name.startsWith(temporalSdkScope) && !isNodeBuiltin(name),
     )
     .sort((a, b) => a.offset - b.offset)
     .map(({ name, offset }) => ({ name, line: lineOf(offset) }));
@@ -597,11 +597,10 @@ const readNonRetryableErrors = (
 };
 
 /**
- * Detects TypeScript activities. The file-wide facts (non-retryable errors, configuration read,
- * dependencies and heartbeats) are read from the whole file and reported on every activity.
+ * How identification recognises TypeScript: an import from the SDK, or an exported async
+ * function.
  */
-export const typescriptDetector: Detector = {
-  sdk: "TypeScript",
+export const typescriptRecognition: SdkRecognition = {
   sdkMarkers: [
     typescriptSdkImport,
     typescriptExportedAsyncFunction,
@@ -611,6 +610,13 @@ export const typescriptDetector: Detector = {
     typescriptExportedAsyncFunction,
     typescriptExportedAsyncArrow,
   ],
+};
+
+/**
+ * Detects TypeScript activities. The file-wide facts (non-retryable errors, configuration read,
+ * dependencies and heartbeats) are read from the whole file and reported on every activity.
+ */
+export const typescriptDetector: Detector = {
   detect(source: Source) {
     const { text } = source;
     const ignored = ignoredSpans(text);
