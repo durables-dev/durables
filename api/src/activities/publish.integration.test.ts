@@ -291,6 +291,50 @@ describe("POST /api/activities", () => {
       });
     });
 
+    test("stores a Go activity with its facts, its Stripe integration and Go snippets", async () => {
+      const { cookie, handle } = await newPublisher();
+      const code = [
+        "package payments",
+        "",
+        "import (",
+        '    "context"',
+        '    "fmt"',
+        "",
+        '    "github.com/stripe/stripe-go/v87"',
+        ")",
+        "",
+        "func ChargeCard(ctx context.Context, input ChargeRequest) (*ChargeResult, error) {",
+        '    return nil, fmt.Errorf("not yet: %v", stripe.Key)',
+        "}",
+        "",
+      ].join("\n");
+      const body = publishBody({ code });
+
+      const response = await publish(cookie, body);
+
+      expect(response.status).toBe(201);
+      const address = addressOf(handle, body.name);
+      const stored = await storage().readVersionDocument(address);
+      expect(stored?.facts).toMatchObject({
+        sdk: "Go",
+        activity: { name: "ChargeCard", line: 10 },
+        dependencies: [{ name: "github.com/stripe/stripe-go/v87", line: 7 }],
+        provenance: { sdk: "inferred" },
+      });
+      expect(stored?.integrations).toEqual(["Stripe"]);
+      expect(stored?.snippets.map(({ label }) => label)).toEqual([
+        "Install",
+        "workflow.go",
+        "worker/main.go",
+        "start/main.go",
+        "Run",
+      ]);
+      expect(await storage().findListing(address)).toMatchObject({
+        sdk: "Go",
+        integrations: ["Stripe"],
+      });
+    });
+
     test("stores the code exactly as pasted, with the trimmed details and the re-run's facts, integrations and snippets", async () => {
       const { cookie, handle } = await newPublisher();
       const code = `${postSlackMessage.replaceAll("\n", "\r\n")}  \r\n`;
@@ -437,7 +481,7 @@ describe("POST /api/activities", () => {
 
       const response = await publish(
         cookie,
-        publishBody({ declaredSdk: "Go" }),
+        publishBody({ declaredSdk: "Kotlin" }),
       );
 
       const problem = await expectProblem(response, 400);

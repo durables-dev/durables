@@ -38,7 +38,7 @@ describe("the SDK catalog", () => {
 
     expect(names(catalog)).toEqual(inChipOrder(sdks));
     expect([...names(catalog)].sort()).toEqual([...sdks].sort());
-    expect(names(catalog)).toEqual(["Python", "TypeScript", ".NET"]);
+    expect(names(catalog)).toEqual(["Go", "Python", "TypeScript", ".NET"]);
   });
 
   it.each([
@@ -46,18 +46,36 @@ describe("the SDK catalog", () => {
     ["reverse order", [...registeredSdks].reverse()],
     [
       "a shuffled order",
-      [sdkRegistry.TypeScript, sdkRegistry[".NET"], sdkRegistry.Python],
+      [
+        sdkRegistry.TypeScript,
+        sdkRegistry.Go,
+        sdkRegistry[".NET"],
+        sdkRegistry.Python,
+      ],
     ],
     [
       "another shuffled order",
-      [sdkRegistry[".NET"], sdkRegistry.Python, sdkRegistry.TypeScript],
+      [
+        sdkRegistry[".NET"],
+        sdkRegistry.Python,
+        sdkRegistry.TypeScript,
+        sdkRegistry.Go,
+      ],
     ],
   ])("keeps chip order when the entries come in %s", (_order, entries) => {
     expect(names(sdkCatalog(entries))).toEqual([
+      "Go",
       "Python",
       "TypeScript",
       ".NET",
     ]);
+  });
+
+  it("names no thread pool in Go's sync Runs as or its Configure wording", () => {
+    const go = sdkRegistry.Go.display;
+
+    expect(go.runsAs.sync).not.toMatch(threadPool);
+    expect(go.workerRequirements.sync).not.toMatch(threadPool);
   });
 
   it("does not reorder the entries it is given", () => {

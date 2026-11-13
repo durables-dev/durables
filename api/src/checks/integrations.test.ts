@@ -27,8 +27,8 @@ describe("the shared integration list", () => {
   });
 });
 
-// Every existing SDK normalises a dependency by lower-casing it, so each gives the same
-// integrations for the same names.
+// Every SDK's normaliser lower-cases a dependency, and these names carry no Go major-version
+// suffix, so each SDK gives the same integrations for them.
 describe.each(sdks)("integrations from %s imports", (sdk) => {
   it("maps stripe to Stripe", () => {
     expect(integrationsFor(sdk, imports("stripe"))).toEqual(["Stripe"]);

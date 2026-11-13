@@ -207,7 +207,6 @@ describe("checkCode", () => {
 
     it.each([
       ["Java", javaActivity],
-      ["Go", goActivity],
       ["PHP", phpActivity],
     ] as const)(
       "refuses a %s Temporal activity, naming the SDK",
@@ -221,6 +220,14 @@ describe("checkCode", () => {
         });
       },
     );
+
+    it("accepts a Go Temporal activity, which is no longer refused by name", () => {
+      expect(checkCode(goActivity, registeredSdks)).toMatchObject({
+        sdk: "Go",
+        activity: { name: "Greet", line: 9 },
+        provenance: provenance("detected"),
+      });
+    });
 
     it("names the SDK for a Java file with the SDK import but no activity annotation", () => {
       const code = "import io.temporal.client.WorkflowClient;\n";
@@ -402,6 +409,16 @@ describe("checkCode", () => {
     });
 
     const samples: Record<AcceptedSdk, string> = {
+      Go: [
+        "package greeting",
+        "",
+        'import "go.temporal.io/sdk/activity"',
+        "",
+        "func Greet(ctx context.Context, name string) (string, error) {",
+        "    activity.RecordHeartbeat(ctx)",
+        '    return "Hello " + name, nil',
+        "}",
+      ].join("\n"),
       Python: [
         "from temporalio import activity",
         "",

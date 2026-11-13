@@ -272,6 +272,74 @@ describe("POST /api/checks", () => {
     });
   });
 
+  describe("a Go activity", () => {
+    const greet = (...imports: string[]) =>
+      lines(
+        "package greeting",
+        "",
+        "import (",
+        '    "context"',
+        ...imports,
+        ")",
+        "",
+        "func Greet(ctx context.Context, name string) (string, error) {",
+        '    return "Hello " + name, nil',
+        "}",
+        "",
+      );
+
+    test("answers 200 with the Go facts and the SDK detected from its Temporal import", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(
+        cookie,
+        greet('    "go.temporal.io/sdk/activity"'),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        sdk: "Go",
+        activity: { name: "Greet", line: 8 },
+        input: "string",
+        output: "string",
+        runsAs: "sync",
+        provenance: { sdk: "detected", activity: "detected" },
+      });
+    });
+
+    test("answers 200 with the SDK inferred when the activity has no Temporal marker", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(cookie, greet('    "fmt"'));
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        sdk: "Go",
+        activity: { name: "Greet", line: 8 },
+        dependencies: [],
+        provenance: { sdk: "inferred", activity: "detected" },
+      });
+    });
+
+    test("answers 422 more than one activity for a Go file with two", async () => {
+      const cookie = await signIn();
+      const code = lines(
+        greet(),
+        "func Farewell(ctx context.Context, name string) (string, error) {",
+        '    return "Bye " + name, nil',
+        "}",
+      );
+
+      const response = await checkCode(cookie, code);
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        type: refusalTypes.multipleActivities,
+        count: 2,
+      });
+    });
+  });
+
   describe("refusals", () => {
     test.each([
       {

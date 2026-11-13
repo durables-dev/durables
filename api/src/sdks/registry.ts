@@ -1,4 +1,5 @@
 import { dotnet } from "./dotnet";
+import { go } from "./go";
 import { python } from "./python";
 import type { SdkEntry, SdkRegistry } from "./sdk-entry";
 import { sdks } from "./sdk-list";
@@ -8,6 +9,7 @@ import { typescript } from "./typescript";
 // is one entry here and its name in the api's SDK list (`sdk-list.ts`).
 
 export const sdkRegistry: SdkRegistry = {
+  Go: go,
   Python: python,
   TypeScript: typescript,
   ".NET": dotnet,

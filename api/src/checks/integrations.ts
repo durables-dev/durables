@@ -11,8 +11,9 @@ interface IntegrationPackages {
   readonly integration: Integration;
   /**
    * The integration keys of this integration's client libraries: package names for Python and
-   * TypeScript, the namespace root of a `using` for .NET. A dependency implies the integration
-   * when its SDK's normaliser gives one of these keys. Keys are compared without regard to case.
+   * TypeScript, the namespace root of a `using` for .NET, and the import path before any
+   * major-version suffix for Go. A dependency implies the integration when its SDK's normaliser
+   * gives one of these keys. Keys are compared without regard to case.
    */
   readonly packages: readonly string[];
 }
@@ -24,18 +25,39 @@ interface IntegrationPackages {
 export const integrationPackages: readonly IntegrationPackages[] = [
   {
     integration: "Amazon S3",
-    packages: ["boto3", "@aws-sdk/client-s3"],
+    packages: [
+      "boto3",
+      "@aws-sdk/client-s3",
+      "github.com/aws/aws-sdk-go-v2/service/s3",
+      "github.com/aws/aws-sdk-go/service/s3",
+    ],
   },
   {
     integration: "Postgres",
-    packages: ["psycopg", "psycopg2", "asyncpg", "pg", "Npgsql"],
+    packages: [
+      "psycopg",
+      "psycopg2",
+      "asyncpg",
+      "pg",
+      "Npgsql",
+      "github.com/jackc/pgx",
+      "github.com/lib/pq",
+    ],
   },
   {
     integration: "Slack",
-    packages: ["slack_sdk", "@slack/web-api", "SlackNet"],
+    packages: [
+      "slack_sdk",
+      "@slack/web-api",
+      "SlackNet",
+      "github.com/slack-go/slack",
+    ],
   },
   // "stripe" is also the Stripe.net package's .NET namespace root.
-  { integration: "Stripe", packages: ["stripe"] },
+  {
+    integration: "Stripe",
+    packages: ["stripe", "github.com/stripe/stripe-go"],
+  },
 ];
 
 /**

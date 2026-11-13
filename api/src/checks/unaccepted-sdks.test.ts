@@ -32,8 +32,6 @@ describe("unaccepted SDK markers", () => {
       "Java",
       "import static io.temporal.activity.Activity.getExecutionContext;",
     ],
-    ["Go", '\t"go.temporal.io/sdk/activity"'],
-    ["Go", 'import "go.temporal.io/sdk"'],
     ["PHP", "use Temporal\\Activity\\ActivityInterface;"],
   ])("recognise the %s SDK in %s", (sdk, line) => {
     expect(matchesAny(markersFor(sdk).sdkMarkers, line)).toBe(true);
@@ -42,8 +40,6 @@ describe("unaccepted SDK markers", () => {
   it.each([
     ["Java", "@ActivityInterface\npublic interface Greeter {"],
     ["Java", "    @ActivityMethod\n    String greet(String name);"],
-    ["Go", "func Greet(ctx context.Context, name string) (string, error) {"],
-    ["Go", "func (a *Activities) Greet(ctx context.Context) error {"],
     ["PHP", "#[ActivityInterface]\ninterface Greeter"],
     ["PHP", " * @ActivityMethod"],
   ])("recognise a %s activity in %s", (sdk, code) => {
@@ -52,15 +48,12 @@ describe("unaccepted SDK markers", () => {
 
   it.each([
     ["Java", "import io.temporalx.Thing;"],
-    ["Go", '"github.com/example/temporal"'],
     ["PHP", "use App\\Temporal\\Thing;"],
   ])("do not take a lookalike for the %s SDK: %s", (sdk, line) => {
     expect(matchesAny(markersFor(sdk).sdkMarkers, line)).toBe(false);
   });
 
-  it("do not take a Go workflow for an activity", () => {
-    const workflow =
-      "func GreetWorkflow(ctx workflow.Context, name string) (string, error) {";
-    expect(matchesAny(markersFor("Go").activityMarkers, workflow)).toBe(false);
+  it("no longer hold Go, which the registry accepts", () => {
+    expect(unacceptedSdks.map(({ sdk }) => sdk)).toEqual(["Java", "PHP"]);
   });
 });
