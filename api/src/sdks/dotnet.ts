@@ -21,5 +21,15 @@ export const dotnet: SdkEntry<".NET"> = {
     package: "Temporalio",
     highlightLanguage: "csharp",
     activityFileName: "Activities.cs",
+    runsAs: {
+      // The generated worker sets up no thread pool, so neither sentence names one.
+      sync: "Synchronous: the .NET SDK runs it for you",
+      async: "Async",
+    },
+    workerRequirements: {
+      sync: "This is a synchronous activity. The .NET SDK runs it for you, so your worker needs no special setup.",
+      async:
+        "This is an async activity. Your worker needs no special setup to run it.",
+    },
   },
 };

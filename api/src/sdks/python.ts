@@ -15,5 +15,14 @@ export const python: SdkEntry<"Python"> = {
     package: "temporalio",
     highlightLanguage: "python",
     activityFileName: "activities.py",
+    runsAs: {
+      sync: "Synchronous: the worker needs a thread pool",
+      async: "Async",
+    },
+    workerRequirements: {
+      sync: "This is a synchronous activity. Your worker needs a thread pool to run it, which the worker file in Implement already sets up.",
+      async:
+        "This is an async activity. Your worker needs no special setup to run it.",
+    },
   },
 };

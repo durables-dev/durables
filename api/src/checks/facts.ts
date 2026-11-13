@@ -17,8 +17,8 @@ export interface NamedLineRef extends LineRef {
 }
 
 /**
- * How the activity runs. `sync` means the worker needs a thread pool. Null when detection
- * can't tell.
+ * How the activity runs. Whether a `sync` activity needs a thread pool depends on the SDK, and
+ * its display profile says so. Null when detection can't tell.
  */
 export type RunsAs = "async" | "sync" | null;
 
