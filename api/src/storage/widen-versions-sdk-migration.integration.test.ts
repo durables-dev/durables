@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
 import { SQLiteSyncDialect, getTableConfig } from "drizzle-orm/sqlite-core";
-import { beforeEach, describe, expect, inject, test } from "vitest";
-import { versions } from "./schema";
-import { readAllRows, seedAccount, seedVersion } from "./seed";
-import { Storage, type NewListing } from "./storage";
+import { beforeEach, describe, expect, test } from "vitest";
+import { migration, runMigration, storedListing } from "./migration-testing";
+import { storedSdks, versions } from "./schema";
+import { readAllRows, seedVersion } from "./seed";
+import { Storage } from "./storage";
 
 // Migration 0003 rebuilds the versions table to widen its versions_sdk check. The setup file
 // has already applied it to an empty table, so each test puts back the table exactly as
@@ -12,38 +13,13 @@ import { Storage, type NewListing } from "./storage";
 
 const storage = () => new Storage(env.DB, env.DOCUMENTS);
 
-const eightSdks = [
-  "Go",
-  "Java",
-  "Python",
-  "TypeScript",
-  ".NET",
-  "Ruby",
-  "PHP",
-  "Rust",
-] as const;
+const widen = "0003_widen-versions-sdk";
 
-const migration = (prefix: string) => {
-  const found = inject("d1Migrations").find(({ name }) =>
-    name.startsWith(prefix),
-  );
-  if (found === undefined) {
-    throw new Error(`Migration ${prefix} is missing.`);
-  }
-  return found;
-};
-
-/** Runs migration 0003's statements in one batch, as Wrangler runs a migration file. */
-const runMigration = async (): Promise<void> => {
-  await env.DB.batch(
-    migration("0003_widen-versions-sdk").queries.map((query) =>
-      env.DB.prepare(query),
-    ),
-  );
-};
+/** Runs migration 0003, as Wrangler runs a migration file. */
+const migrate = () => runMigration(widen);
 
 /** Replaces the versions table with the one migration 0001 created, with its narrow check. */
-const restoreTableFrom0001 = async (): Promise<void> => {
+const restoreVersionsTableFrom0001 = async (): Promise<void> => {
   const createVersions = migration("0001_listings-and-versions").queries.find(
     (query) => query.includes("CREATE TABLE `versions`"),
   );
@@ -55,24 +31,6 @@ const restoreTableFrom0001 = async (): Promise<void> => {
     env.DB.prepare("DROP TABLE `versions`"),
     env.DB.prepare(createVersions),
   ]);
-};
-
-/** A listing and its first version, published the way publishing stores them. */
-const storedListing = async (
-  sdk: NewListing["sdk"],
-  integrations: string[] = [],
-): Promise<NewListing> => {
-  const listing: NewListing = {
-    handle: (await seedAccount(env.DB)).handle,
-    name: `activity-${crypto.randomUUID().slice(0, 8)}`,
-    version: "1.0.0",
-    title: "Upload report",
-    description: "Uploads a CSV report and returns where it is.",
-    sdk,
-    integrations,
-  };
-  await storage().createListing(listing);
-  return listing;
 };
 
 /** Writes a version row directly, with any SDK text, under the given listing. */
@@ -105,7 +63,7 @@ const tableShape = async () => {
 };
 
 /** The SQL SQLite stored for the versions table. */
-const storedTableSql = async () =>
+const versionsTableSql = async () =>
   (
     await env.DB.prepare(
       "select sql from sqlite_master where type = 'table' and name = 'versions'",
@@ -114,11 +72,11 @@ const storedTableSql = async () =>
 
 describe("migration 0003, widen the versions table to every SDK", () => {
   beforeEach(async () => {
-    await restoreTableFrom0001();
+    await restoreVersionsTableFrom0001();
   });
 
   test("starts from a table that refuses Go, as before the migration", async () => {
-    const listing = await storedListing("Python");
+    const listing = await storedListing();
 
     await expect(insertVersion(listing, "2.0.0", "Go")).rejects.toThrow(
       /CHECK constraint failed: versions_sdk/,
@@ -126,9 +84,14 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test("keeps every existing row and its listing reference unchanged", async () => {
-    const python = await storedListing("Python", ["Amazon S3", "Postgres"]);
-    const typescript = await storedListing("TypeScript", ["Slack"]);
-    await storedListing(".NET");
+    const python = await storedListing({
+      integrations: ["Amazon S3", "Postgres"],
+    });
+    const typescript = await storedListing({
+      sdk: "TypeScript",
+      integrations: ["Slack"],
+    });
+    await storedListing({ sdk: ".NET" });
     await seedVersion(env.DB, {
       handle: python.handle,
       name: python.name,
@@ -140,7 +103,7 @@ describe("migration 0003, widen the versions table to every SDK", () => {
     });
     const before = await readAllRows(env.DB);
 
-    await runMigration();
+    await migrate();
 
     expect(await readAllRows(env.DB)).toEqual(before);
     expect(await storage().findListing(python)).toMatchObject({
@@ -155,10 +118,10 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test("leaves every version joined to its listing", async () => {
-    await storedListing("Python");
-    await storedListing(".NET");
+    await storedListing();
+    await storedListing({ sdk: ".NET" });
 
-    await runMigration();
+    await migrate();
 
     const unjoined = await env.DB.prepare(
       "select count(*) as n from versions v left join listings l on l.handle = v.handle and l.name = v.name where l.handle is null",
@@ -169,9 +132,9 @@ describe("migration 0003, widen the versions table to every SDK", () => {
     ).toEqual([]);
   });
 
-  test.each(eightSdks)("accepts a version written in %s", async (sdk) => {
-    const listing = await storedListing("Python");
-    await runMigration();
+  test.each(storedSdks)("accepts a version written in %s", async (sdk) => {
+    const listing = await storedListing();
+    await migrate();
 
     await insertVersion(listing, "2.0.0", sdk);
 
@@ -186,8 +149,8 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   test.each(["Kotlin", "go", "", "Python "])(
     "rejects a version written in an SDK outside the list: %j",
     async (sdk) => {
-      const listing = await storedListing("Python");
-      await runMigration();
+      const listing = await storedListing();
+      await migrate();
 
       await expect(insertVersion(listing, "2.0.0", sdk)).rejects.toThrow(
         /CHECK constraint failed: versions_sdk/,
@@ -196,7 +159,7 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   );
 
   test("defers foreign key checks before anything else", () => {
-    const [first = ""] = migration("0003_widen-versions-sdk").queries;
+    const [first = ""] = migration(widen).queries;
     const statement = first
       .split("\n")
       .filter((line) => !line.trimStart().startsWith("--"))
@@ -208,21 +171,23 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test("runs with foreign keys enforced, dropping the old table without a reference failure", async () => {
-    await storedListing("Python");
-    await storedListing("TypeScript");
+    await storedListing();
+    await storedListing({ sdk: "TypeScript" });
     const enforced = await env.DB.prepare("pragma foreign_keys").first<{
       foreign_keys: number;
     }>();
     expect(enforced?.foreign_keys).toBe(1);
 
-    await expect(runMigration()).resolves.toBeUndefined();
+    await expect(migrate()).resolves.toHaveLength(
+      migration(widen).queries.length,
+    );
 
-    expect(await storedTableSql()).toContain("Rust");
+    expect(await versionsTableSql()).toContain("Rust");
   });
 
   test("still refuses a version whose listing does not exist", async () => {
-    const listing = await storedListing("Python");
-    await runMigration();
+    const listing = await storedListing();
+    await migrate();
 
     await expect(
       insertVersion(
@@ -236,14 +201,14 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   test("keeps every column, default, key and index", async () => {
     const before = await tableShape();
 
-    await runMigration();
+    await migrate();
 
     expect(await tableShape()).toEqual(before);
   });
 
   test("still fills in the published date when a version is written without one", async () => {
-    const listing = await storedListing("Python");
-    await runMigration();
+    const listing = await storedListing();
+    await migrate();
     const now = Math.floor(Date.now() / 1000);
 
     await insertVersion(listing, "2.0.0", "Ruby");
@@ -257,7 +222,7 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test("leaves the table with the check the storage schema declares", async () => {
-    await runMigration();
+    await migrate();
 
     const check = getTableConfig(versions).checks.find(
       ({ name }) => name === "versions_sdk",
@@ -266,7 +231,7 @@ describe("migration 0003, widen the versions table to every SDK", () => {
       throw new Error("The storage schema has no versions_sdk check.");
     }
     const declared = new SQLiteSyncDialect().sqlToQuery(check.value).sql;
-    expect(await storedTableSql()).toContain(
+    expect(await versionsTableSql()).toContain(
       `CONSTRAINT "versions_sdk" CHECK(${declared})`,
     );
   });
