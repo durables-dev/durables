@@ -24,3 +24,4 @@ Regex is cheap, deterministic and good enough for the explicit markers each SDK 
 ## Notes
 
 - **2026-10-10, MVP facts widened.** Runs as, non-retryable errors and heartbeats are shown on the "What we found" card in the MVP, as screen 12 shows them, by David Dieruf's approval of the Intake slice map (DUR-5). Detection already found these signals for the later behavior checks; the change is that they are now displayed as detected facts.
+- **2026-11-13, amended by [ADR 0013](0013-sdk-registry.md).** Every SDK's specifics move into one api registry. Identification never depends on the order SDKs are listed in. Facts gain an _inferred_ tier, and a publisher may declare the SDK; the api still runs all detection.
