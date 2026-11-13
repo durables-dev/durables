@@ -1,6 +1,6 @@
 import { sdks } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
-import type { AcceptedSdk, Facts } from "../checks/facts";
+import type { AcceptedSdk, FactValues } from "../checks/facts";
 import { checkCode } from "../checks/pipeline";
 import { registeredSdks, sdkRegistry } from "../sdks/registry";
 import type { Address, Snippet } from "../storage/version-document";
@@ -14,7 +14,10 @@ const address: Address = {
 };
 
 /** Facts as detection reports them, with the given changes. */
-const factsFor = (sdk: AcceptedSdk, changes: Partial<Facts> = {}): Facts => ({
+const factsFor = (
+  sdk: AcceptedSdk,
+  changes: Partial<FactValues> = {},
+): FactValues => ({
   sdk,
   activity: {
     name: {
@@ -562,7 +565,7 @@ describe("generateSnippets", () => {
     });
 
     it("gives a synchronous Python activity a thread pool, and an async one none", () => {
-      const worker = (runsAs: Facts["runsAs"]) =>
+      const worker = (runsAs: FactValues["runsAs"]) =>
         snippet(
           generateSnippets(factsFor("Python", { runsAs }), address),
           "worker.py",
@@ -950,7 +953,10 @@ describe("generateSnippets", () => {
         "            {\n                // Temporal requires a start-to-close timeout. Set it for your activity.\n                StartToCloseTimeout = TimeSpan.FromSeconds(30),\n            });",
     };
 
-    const workflowFile = (sdk: AcceptedSdk, changes: Partial<Facts> = {}) =>
+    const workflowFile = (
+      sdk: AcceptedSdk,
+      changes: Partial<FactValues> = {},
+    ) =>
       snippet(
         generateSnippets(factsFor(sdk, changes), address),
         fileLabels(sdk)[0] ?? "",

@@ -1,4 +1,4 @@
-import type { Facts } from "../checks/facts";
+import type { FactValues } from "../checks/facts";
 import { sdkRegistry } from "../sdks/registry";
 import type { Address, Snippet } from "../storage/version-document";
 
@@ -13,5 +13,7 @@ export { installLabel, runLabel } from "./labels";
  * command, the workflow, worker and starter files, then the run commands. The same facts and
  * address always give the same snippets.
  */
-export const generateSnippets = (facts: Facts, address: Address): Snippet[] =>
-  sdkRegistry[facts.sdk].snippets(facts, address);
+export const generateSnippets = (
+  facts: FactValues,
+  address: Address,
+): Snippet[] => sdkRegistry[facts.sdk].snippets(facts, address);

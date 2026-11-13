@@ -135,6 +135,16 @@ describe("typescriptDetector", () => {
         configurationRead: [{ name: "SLACK_TOKEN", line: 14 }],
         dependencies: [{ name: "@slack/web-api", line: 3 }],
         heartbeats: [{ line: 15 }],
+        provenance: {
+          sdk: "detected",
+          activity: "detected",
+          inputOutput: "detected",
+          runsAs: "detected",
+          nonRetryableErrors: "detected",
+          configurationRead: "detected",
+          dependencies: "detected",
+          heartbeats: "detected",
+        },
       });
     });
 

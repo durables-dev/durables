@@ -610,6 +610,8 @@ export const typescriptRecognition: SdkRecognition = {
     typescriptExportedAsyncFunction,
     typescriptExportedAsyncArrow,
   ],
+  // Recognised only by its markers. Inference by shape would change how it is detected.
+  shapeMarkers: [],
 };
 
 /**

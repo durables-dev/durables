@@ -1,5 +1,5 @@
 import type { Sdk } from "@durables/schemas";
-import type { Facts } from "../checks/facts";
+import type { FactValues } from "../checks/facts";
 import type { CheckedSdk } from "../checks/pipeline";
 import type { Address, Snippet } from "../storage/version-document";
 
@@ -7,7 +7,10 @@ import type { Address, Snippet } from "../storage/version-document";
 // that leaves one out does not compile.
 
 /** Generates an SDK's Implement snippets from its templates. */
-export type SnippetGenerator = (facts: Facts, address: Address) => Snippet[];
+export type SnippetGenerator = (
+  facts: FactValues,
+  address: Address,
+) => Snippet[];
 
 /** How an SDK is shown. The SDK catalog publishes this; web holds none of it. */
 export interface DisplayProfile {

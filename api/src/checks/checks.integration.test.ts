@@ -53,7 +53,28 @@ const postSlackMessageFacts = {
   configurationRead: [{ name: "SLACK_TOKEN", line: 8 }],
   dependencies: [{ name: "httpx", line: 4 }],
   heartbeats: [{ line: 23 }],
+  provenance: {
+    sdk: "detected",
+    activity: "detected",
+    inputOutput: "detected",
+    runsAs: "detected",
+    nonRetryableErrors: "detected",
+    configurationRead: "detected",
+    dependencies: "detected",
+    heartbeats: "detected",
+  },
 };
+
+/** A TypeScript activity, so a declared SDK can be checked against code it doesn't fit. */
+const greetTypeScript = lines(
+  'import { heartbeat } from "@temporalio/activity";',
+  "",
+  "export async function greet(name: string): Promise<string> {",
+  "  heartbeat();",
+  "  return `Hello ${name}`;",
+  "}",
+  "",
+);
 
 /** A request body of exactly `bytes` bytes: the sample, padded with a trailing comment. */
 const paddedBody = (bytes: number): string => {
@@ -153,17 +174,127 @@ describe("POST /api/checks", () => {
     expect(await response.json()).toEqual(postSlackMessageFacts);
   });
 
+  describe("a declared SDK", () => {
+    test("answers 200 with the declared SDK's facts and the SDK declared", async () => {
+      const cookie = await signIn();
+
+      const response = await check(
+        cookie,
+        JSON.stringify({ code: postSlackMessage, declaredSdk: "Python" }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        ...postSlackMessageFacts,
+        provenance: { ...postSlackMessageFacts.provenance, sdk: "declared" },
+      });
+    });
+
+    test("answers 200 for code no SDK is identified in, once the SDK is declared", async () => {
+      const cookie = await signIn();
+      const ambiguous = lines(
+        "from temporalio import activity",
+        "@activity.defn",
+        greetTypeScript,
+      );
+
+      const response = await check(
+        cookie,
+        JSON.stringify({ code: ambiguous, declaredSdk: "TypeScript" }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        sdk: "TypeScript",
+        activity: { name: "greet" },
+        provenance: { sdk: "declared" },
+      });
+    });
+
+    test("answers 422 no activity, naming the SDK, when the declared detector finds none", async () => {
+      const cookie = await signIn();
+
+      const response = await check(
+        cookie,
+        JSON.stringify({ code: greetTypeScript, declaredSdk: ".NET" }),
+      );
+
+      expect(response.status).toBe(422);
+      expect(response.headers.get("Content-Type")).toBe(problemContentType);
+      expect(await response.json()).toMatchObject({
+        type: refusalTypes.noActivity,
+        status: 422,
+        sdk: ".NET",
+      });
+    });
+
+    test.each([
+      { case: "an SDK not in the list", declaredSdk: "Java" },
+      { case: "a lowercased SDK", declaredSdk: "python" },
+      { case: "a declared SDK that isn't a string", declaredSdk: 42 },
+    ])("answers 400 with a field error for $case", async ({ declaredSdk }) => {
+      const cookie = await signIn();
+
+      const response = await check(
+        cookie,
+        JSON.stringify({ code: postSlackMessage, declaredSdk }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.headers.get("Content-Type")).toBe(problemContentType);
+      const problem = await response.json<{
+        errors: { field: string; message: string }[];
+      }>();
+      expect(problem.errors).toEqual([
+        { field: "declaredSdk", message: expect.any(String) as string },
+      ]);
+    });
+
+    test("ignores facts and provenance sent by the client with a declared SDK", async () => {
+      const cookie = await signIn();
+
+      const response = await check(
+        cookie,
+        JSON.stringify({
+          code: postSlackMessage,
+          declaredSdk: "Python",
+          activity: { name: "forged", line: 1 },
+          provenance: { sdk: "detected", activity: "declared" },
+          facts: { sdk: "TypeScript" },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        ...postSlackMessageFacts,
+        provenance: { ...postSlackMessageFacts.provenance, sdk: "declared" },
+      });
+    });
+  });
+
   describe("refusals", () => {
     test.each([
       {
         refusal: "SDK recognised, no activity",
         code: lines("from temporalio import activity", "", "x = 1", ""),
-        expected: { type: refusalTypes.noActivity },
+        expected: { type: refusalTypes.noActivity, sdk: "Python" },
       },
       {
-        refusal: "not a Temporal activity",
+        refusal: "code no SDK is identified in",
         code: lines("def add(a, b):", "    return a + b", ""),
-        expected: { type: refusalTypes.notTemporalActivity },
+        expected: {
+          type: refusalTypes.sdkChoiceNeeded,
+          reason: "not-identified",
+        },
+      },
+      {
+        refusal: "code more than one SDK matches",
+        code: lines(
+          "from temporalio import activity",
+          "@activity.defn",
+          greetTypeScript,
+        ),
+        expected: { type: refusalTypes.sdkChoiceNeeded, reason: "ambiguous" },
       },
       {
         refusal: "empty code",
@@ -390,7 +521,11 @@ describe("POST /api/checks", () => {
       // A detector that fails with the code in its message, to show the code goes no further.
       const failing: CheckedSdk = {
         sdk: "Python",
-        recognition: { sdkMarkers: [pythonSdkImport], activityMarkers: [] },
+        recognition: {
+          sdkMarkers: [pythonSdkImport],
+          activityMarkers: [],
+          shapeMarkers: [],
+        },
         detector: {
           detect: (source) => {
             throw new Error(source.text);

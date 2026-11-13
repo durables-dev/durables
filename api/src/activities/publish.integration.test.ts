@@ -16,6 +16,7 @@ import {
 import {
   Storage,
   type Address,
+  type Sdk,
   type VersionDocument,
 } from "../storage/storage";
 import { versionDocumentKey } from "../storage/version-document";
@@ -156,8 +157,9 @@ const addressOf = (handle: string, name: string): Address => ({
 const expectedDocument = (
   code: string,
   address: Address,
+  declared?: Sdk,
 ): Pick<VersionDocument, "facts" | "integrations" | "snippets"> => {
-  const facts = checkCode(code, registeredSdks);
+  const facts = checkCode(code, registeredSdks, declared);
   return {
     facts,
     integrations: integrationsFor(facts.sdk, facts.dependencies),
@@ -368,6 +370,101 @@ describe("POST /api/activities", () => {
         code: postSlackMessage,
         title: "Post slack message",
       });
+    });
+  });
+
+  describe("a declared SDK", () => {
+    test("re-runs the declared SDK's detector and stores the SDK as declared", async () => {
+      const { cookie, handle } = await newPublisher();
+      const body = publishBody({ declaredSdk: "Python" });
+
+      const response = await publish(cookie, body);
+
+      expect(response.status).toBe(201);
+      const address = addressOf(handle, body.name);
+      const stored = await storage().readVersionDocument(address);
+      expect(stored).toMatchObject(
+        expectedDocument(postSlackMessage, address, "Python"),
+      );
+      expect(stored?.facts.sdk).toBe("Python");
+      expect(stored?.facts.provenance?.sdk).toBe("declared");
+      expect(stored?.facts.provenance?.activity).toBe("detected");
+      expect(await storage().findListing(address)).toMatchObject({
+        sdk: "Python",
+      });
+    });
+
+    test("stores the SDK as detected when none is declared", async () => {
+      const { cookie, handle } = await newPublisher();
+      const body = publishBody();
+
+      expect((await publish(cookie, body)).status).toBe(201);
+
+      const stored = await storage().readVersionDocument(
+        addressOf(handle, body.name),
+      );
+      expect(stored?.facts.provenance).toEqual({
+        sdk: "detected",
+        activity: "detected",
+        inputOutput: "detected",
+        runsAs: "detected",
+        nonRetryableErrors: "detected",
+        configurationRead: "detected",
+        dependencies: "detected",
+        heartbeats: "detected",
+      });
+    });
+
+    test("answers 422 no activity when the declared detector finds none, and writes nothing", async () => {
+      const { cookie } = await newPublisher();
+      const before = await snapshot();
+
+      const response = await publish(
+        cookie,
+        publishBody({ declaredSdk: "TypeScript" }),
+      );
+
+      await expectProblem(response, 422, {
+        type: refusalTypes.noActivity,
+        sdk: "TypeScript",
+      });
+      expect(await snapshot()).toEqual(before);
+    });
+
+    test("answers 400 for a declared SDK not in the list, and writes nothing", async () => {
+      const { cookie } = await newPublisher();
+      const before = await snapshot();
+
+      const response = await publish(
+        cookie,
+        publishBody({ declaredSdk: "Go" }),
+      );
+
+      const problem = await expectProblem(response, 400);
+      expect(problem["errors"]).toEqual([
+        { field: "declaredSdk", message: expect.any(String) as string },
+      ]);
+      expect(await snapshot()).toEqual(before);
+    });
+
+    test("ignores facts and provenance sent by the client with a declared SDK", async () => {
+      const { cookie, handle } = await newPublisher();
+      const body = publishBody({
+        declaredSdk: "Python",
+        facts: {
+          sdk: "Python",
+          activity: { name: "forged", line: 1 },
+          provenance: { sdk: "detected" },
+        },
+        provenance: { sdk: "detected", activity: "declared" },
+      });
+
+      expect((await publish(cookie, body)).status).toBe(201);
+
+      const address = addressOf(handle, body.name);
+      expect(await storage().readVersionDocument(address)).toMatchObject(
+        expectedDocument(postSlackMessage, address, "Python"),
+      );
     });
   });
 
@@ -609,8 +706,13 @@ describe("POST /api/activities", () => {
   describe("code the checks refuse", () => {
     test.each([
       {
-        refusal: "not a Temporal activity",
+        refusal: "code no SDK is identified in",
         code: "print('hello')\n",
+        type: refusalTypes.sdkChoiceNeeded,
+      },
+      {
+        refusal: "empty code",
+        code: "   \n",
         type: refusalTypes.notTemporalActivity,
       },
       {

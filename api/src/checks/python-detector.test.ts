@@ -160,6 +160,16 @@ describe("pythonDetector", () => {
         configurationRead: [{ name: "SLACK_TOKEN", line: 7 }],
         dependencies: [{ name: "httpx", line: 4 }],
         heartbeats: [],
+        provenance: {
+          sdk: "detected",
+          activity: "detected",
+          inputOutput: "detected",
+          runsAs: "detected",
+          nonRetryableErrors: "detected",
+          configurationRead: "detected",
+          dependencies: "detected",
+          heartbeats: "detected",
+        },
       });
     });
 
