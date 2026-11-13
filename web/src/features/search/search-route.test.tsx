@@ -1,11 +1,21 @@
 import "@/styles/global.css";
 import { routes } from "@/app/router";
 import { readSearch, searchAddress } from "@/lib/search-address";
+import { testCatalogSdks } from "../../../test/sdk-catalog";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
+import { worker } from "../../../test/worker";
+import { http, HttpResponse } from "msw";
+import {
+  eightSdkCatalog,
+  eightSdks,
+  failCatalog,
+  holdCatalog,
+  serveCatalog,
+} from "../../../test/serve-sdk-catalog";
 import {
   gate,
   serveBrowse,
@@ -36,7 +46,10 @@ afterEach(async () => {
 
 /** The search the router's current address holds. */
 function currentSearch({ router }: Opened) {
-  return readSearch(new URLSearchParams(router.state.location.search));
+  return readSearch(
+    new URLSearchParams(router.state.location.search),
+    testCatalogSdks,
+  );
 }
 
 function searchBox({ screen }: Opened) {
@@ -829,4 +842,148 @@ test("while the first batch loads, the results area says Loading activities…",
   await expect
     .element(opened.screen.getByText("Loading activities…"))
     .not.toBeInTheDocument();
+});
+
+// The SDK catalog: the sidebar's SDK chips and the SDKs an address can hold come from it
+
+/**
+ * Answers browse calls from a Go card and a Python card, matching the SDK filter, and returns
+ * each call's SDKs. The cards are JSON, so a Go card needs no Go in web's types.
+ */
+function serveGoAndPython() {
+  const cards = [
+    { ...testCard(1), sdk: "Go" },
+    { ...testCard(2), sdk: "Python" },
+  ];
+  const calls: string[][] = [];
+  worker.use(
+    http.get("/api/activities", ({ request }) => {
+      const sdks = new URL(request.url).searchParams.getAll("sdk");
+      calls.push(sdks);
+      const matches = cards.filter(
+        (card) => sdks.length === 0 || sdks.includes(card.sdk),
+      );
+      return HttpResponse.json({
+        activities: matches,
+        count: matches.length,
+        sort: "newest",
+        nextCursor: null,
+      });
+    }),
+  );
+  return calls;
+}
+
+test("the sidebar's SDK chips are Any then the catalog's SDKs, in catalog order", async () => {
+  serveBrowse(testCards(1));
+  serveCatalog(eightSdkCatalog);
+  const opened = await openAt("/search");
+
+  await expect
+    .poll(() => pressedIn(opened, "Temporal SDK"))
+    .toEqual([["Any", true], ...eightSdks.map((sdk) => [sdk, false])]);
+});
+
+test("picking a new SDK's chip in the sidebar shows only that SDK's activities", async () => {
+  serveCatalog(eightSdkCatalog);
+  const calls = serveGoAndPython();
+  const opened = await openAt("/search");
+  await expect.poll(() => cardCount(opened)).toBe(2);
+
+  await sdkChip(opened, "Go").click();
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  await expect
+    .element(opened.screen.getByRole("heading", { name: "Activity 1" }))
+    .toBeVisible();
+  expect(calls.at(-1)).toEqual(["Go"]);
+  expect(opened.router.state.location.search).toBe("?sdk=Go");
+  await expect
+    .element(sdkChip(opened, "Go"))
+    .toHaveAttribute("aria-pressed", "true");
+});
+
+test("a new SDK in the address counts when the catalog lists it", async () => {
+  serveCatalog(eightSdkCatalog);
+  const calls = serveGoAndPython();
+  const opened = await openAt("/search?sdk=Go");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([["Go"]]);
+  await expect
+    .element(sdkChip(opened, "Go"))
+    .toHaveAttribute("aria-pressed", "true");
+});
+
+test("an SDK in the address that the catalog does not list is dropped", async () => {
+  const calls = serveGoAndPython();
+  const opened = await openAt("/search?sdk=Go&sdk=Python");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([["Python"]]);
+});
+
+test("while the catalog loads, the page says so and asks for no results yet", async () => {
+  const answerCatalog = holdCatalog();
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?sdk=Python");
+
+  await expect
+    .element(opened.screen.getByRole("status"))
+    .toHaveTextContent("Loading the search…");
+  expect(calls).toEqual([]);
+
+  answerCatalog();
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([{ ...firstCall, sdks: ["Python"] }]);
+});
+
+test("when the catalog cannot be read, the page still renders with Any as the only SDK chip, and no SDK filter", async () => {
+  const failed = failCatalog();
+  const calls = serveBrowse(testCards(2));
+  const opened = await openAt("/search?sdk=Python&integration=Stripe");
+  await failed;
+
+  await expect.poll(() => cardCount(opened)).toBe(2);
+  expect(pressedIn(opened, "Temporal SDK")).toEqual([["Any", true]]);
+  expect(calls).toEqual([{ ...firstCall, integrations: ["Stripe"] }]);
+});
+
+test("every result card's SDK tag looks the same, whatever the SDK", async () => {
+  serveCatalog(eightSdkCatalog);
+  const eight = eightSdks.map((sdk, index) => ({
+    ...testCard(index + 1),
+    sdk,
+  }));
+  worker.use(
+    http.get("/api/activities", () =>
+      HttpResponse.json({
+        activities: eight,
+        count: eight.length,
+        sort: "newest",
+        nextCursor: null,
+      }),
+    ),
+  );
+  const opened = await openAt("/search");
+  await expect.poll(() => cardCount(opened)).toBe(8);
+
+  const looks = cards(opened)
+    .elements()
+    .map((card) => {
+      const tag = [...card.querySelectorAll("p")].find((p) =>
+        (eightSdks as readonly string[]).includes(p.textContent),
+      );
+      if (tag === undefined) throw new Error("A card has no SDK tag.");
+      const style = getComputedStyle(tag);
+      return [
+        style.backgroundColor,
+        style.color,
+        style.borderRadius,
+        style.fontSize,
+        style.fontWeight,
+      ].join(" ");
+    });
+  expect(looks).toHaveLength(8);
+  expect(new Set(looks).size).toBe(1);
 });

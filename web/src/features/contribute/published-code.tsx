@@ -1,5 +1,5 @@
 import { CodeBlock } from "@/components/code-block";
-import { sdkLanguage } from "@/lib/sdk-language";
+import { useSdkProfile } from "@/lib/use-sdk-profile";
 import { useId, useRef, useState } from "react";
 import type { CheckedFacts } from "./check-result";
 import styles from "./published-code.module.css";
@@ -7,7 +7,7 @@ import styles from "./published-code.module.css";
 export interface PublishedCodeProps {
   /** The accepted file, exactly as pasted. */
   code: string;
-  /** The SDK detection found, which picks the highlighting. */
+  /** The SDK detection found. Its catalog profile picks the highlighting. */
   sdk: CheckedFacts["sdk"];
 }
 
@@ -17,6 +17,7 @@ export interface PublishedCodeProps {
 // close button and Escape both close it, and focus goes back to the button that opened it.
 // The code block renders only while the dialog is open, so the highlighter loads on first use.
 export function PublishedCode({ code, sdk }: PublishedCodeProps) {
+  const language = useSdkProfile(sdk)?.highlightLanguage;
   const titleId = useId();
   const subtitleId = useId();
   const opener = useRef<HTMLButtonElement>(null);
@@ -100,7 +101,7 @@ export function PublishedCode({ code, sdk }: PublishedCodeProps) {
           <div className={styles["body"]}>
             <CodeBlock
               code={code}
-              language={sdkLanguage(sdk)}
+              language={language}
               label="code that will be published"
             />
           </div>

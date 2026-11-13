@@ -7,7 +7,7 @@ import { sectionHref } from "./listing-sections";
 
 export interface ListingTopProps {
   title: string;
-  /** "Python", "TypeScript" or ".NET". */
+  /** The activity's SDK, named as the api names it. */
   sdk: string;
   address: string;
   /** The listing's current one-line description. Empty shows no description line. */

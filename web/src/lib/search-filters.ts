@@ -1,5 +1,6 @@
+import type { SdkName } from "./sdk-catalog";
 import type { Search } from "./search-address";
-import type { Integration, Sdk } from "@durables/schemas";
+import type { Integration } from "@durables/schemas";
 
 /** The search with every SDK cleared, which is what the Any chip means. */
 export function withAnySdk(search: Search): Search {
@@ -10,7 +11,7 @@ export function withAnySdk(search: Search): Search {
  * The search with one SDK picked or, when it is already picked, unpicked. Picking an SDK
  * turns Any off. Unpicking the last one leaves no SDKs, which is Any again.
  */
-export function withSdkToggled(search: Search, sdk: Sdk): Search {
+export function withSdkToggled(search: Search, sdk: SdkName): Search {
   return {
     ...search,
     sdks: search.sdks.includes(sdk)

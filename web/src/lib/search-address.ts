@@ -1,11 +1,10 @@
 import {
   handleFormatSchema,
   integrations,
-  sdks,
   type Integration,
-  type Sdk,
 } from "@durables/schemas";
 import { z } from "zod";
+import type { SdkName } from "./sdk-catalog";
 
 /** The path of the results page. "search" is on the reserved-handle list. */
 export const searchPath = "/search";
@@ -14,8 +13,8 @@ export const searchPath = "/search";
 export interface Search {
   /** The words typed, exactly as typed. Empty means no words. */
   words: string;
-  /** The chosen SDKs, in the order chosen. Empty means any SDK. */
-  sdks: readonly Sdk[];
+  /** The chosen SDKs, named as the SDK catalog names them, in the order chosen. Empty means any SDK. */
+  sdks: readonly SdkName[];
   /** The chosen integrations, in the order chosen. Empty means any integration. */
   integrations: readonly Integration[];
   /** The publisher's handle, when the results are one publisher's activities. */
@@ -34,7 +33,7 @@ function unique<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
 
-/** A repeated parameter's values, keeping those on the shared list and dropping the rest. */
+/** A repeated parameter's values, keeping those on a known list and dropping the rest. */
 function knownValues<T extends string>(known: readonly T[]) {
   const isKnown = (value: string): value is T =>
     known.some((entry) => entry === value);
@@ -43,22 +42,24 @@ function knownValues<T extends string>(known: readonly T[]) {
     .transform((values) => unique(values.filter(isKnown)));
 }
 
-const searchParamsSchema = z.object({
-  words: z
-    .string()
-    .nullable()
-    .transform((words) => words ?? ""),
-  sdks: knownValues(sdks),
-  integrations: knownValues(integrations),
-  publisher: z
-    .string()
-    .nullable()
-    .transform((publisher) =>
-      publisher !== null && handleFormatSchema.safeParse(publisher).success
-        ? publisher
-        : undefined,
-    ),
-});
+/** The address's search params, keeping only the SDKs in `sdks`. */
+const searchParamsSchema = (sdks: readonly SdkName[]) =>
+  z.object({
+    words: z
+      .string()
+      .nullable()
+      .transform((words) => words ?? ""),
+    sdks: knownValues(sdks),
+    integrations: knownValues(integrations),
+    publisher: z
+      .string()
+      .nullable()
+      .transform((publisher) =>
+        publisher !== null && handleFormatSchema.safeParse(publisher).success
+          ? publisher
+          : undefined,
+      ),
+  });
 
 /**
  * The /search address for a search: /search?q=…&sdk=…&integration=…&publisher=…. A part
@@ -85,11 +86,15 @@ export function searchAddress(search: Partial<Search> = {}): string {
 
 /**
  * The search a /search address holds, read from its search params. No parameters means no
- * words and no filters. SDKs and integrations not on the shared lists are dropped, as is a
- * publisher that cannot be a handle. Repeated values count once.
+ * words and no filters. An SDK is kept only when `sdks`, the SDK catalog's names, lists it.
+ * Integrations not on the shared list are dropped, as is a publisher that cannot be a handle.
+ * Repeated values count once.
  */
-export function readSearch(params: URLSearchParams): Search {
-  const { publisher, ...search } = searchParamsSchema.parse({
+export function readSearch(
+  params: URLSearchParams,
+  sdks: readonly SdkName[],
+): Search {
+  const { publisher, ...search } = searchParamsSchema(sdks).parse({
     words: params.get(param.words),
     sdks: params.getAll(param.sdk),
     integrations: params.getAll(param.integration),

@@ -1,5 +1,6 @@
 import "@/styles/global.css";
 import { readSearch, searchAddress } from "@/lib/search-address";
+import { testCatalogSdks } from "../../test/sdk-catalog";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test } from "vitest";
 import { render } from "vitest-browser-react";
@@ -31,7 +32,7 @@ test("an integration on the shared list links to the results for it alone", asyn
     .element(screen.getByRole("heading", { name: "Results" }))
     .toBeVisible();
   const { pathname, search } = screen.router.state.location;
-  expect(readSearch(new URLSearchParams(search))).toEqual({
+  expect(readSearch(new URLSearchParams(search), testCatalogSdks)).toEqual({
     words: "",
     sdks: [],
     integrations: ["Amazon S3"],

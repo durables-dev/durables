@@ -5,6 +5,13 @@ import {
   ConfigureSection,
   type ConfigureSectionProps,
 } from "./configure-section";
+import { TestProviders } from "../../../test/test-providers";
+import {
+  failCatalog,
+  rustProfile,
+  serveCatalog,
+} from "../../../test/serve-sdk-catalog";
+import { testCatalog } from "../../../test/sdk-catalog";
 
 const chargeCard: ConfigureSectionProps = {
   environmentVariables: ["STRIPE_API_KEY"],
@@ -15,7 +22,9 @@ const chargeCard: ConfigureSectionProps = {
 };
 
 function renderConfigure(props: Partial<ConfigureSectionProps> = {}) {
-  return render(<ConfigureSection {...chargeCard} {...props} />);
+  return render(<ConfigureSection {...chargeCard} {...props} />, {
+    wrapper: TestProviders,
+  });
 }
 
 const columnHeadings = /required|purpose/i;
@@ -193,6 +202,83 @@ test("an async activity's worker requirements say no special setup is needed", a
   await expect.element(screen.getByText(/thread pool/)).not.toBeInTheDocument();
 });
 
+test.each(["sync", "async"] as const)(
+  "a %s activity in an SDK web has no code for reads the catalog's worker requirements",
+  async (runsAs) => {
+    serveCatalog([...testCatalog, rustProfile]);
+    const screen = await renderConfigure({ runsAs, sdk: "Rust" });
+
+    await expect
+      .element(screen.getByText(rustProfile.workerRequirements[runsAs]))
+      .toBeVisible();
+  },
+);
+
+test("the worker requirements are whatever the catalog says for the SDK", async () => {
+  serveCatalog(
+    testCatalog.map((profile) =>
+      profile.name === "Python"
+        ? {
+            ...profile,
+            workerRequirements: {
+              ...profile.workerRequirements,
+              sync: "Corrected wording from the catalog.",
+            },
+          }
+        : profile,
+    ),
+  );
+  const screen = await renderConfigure({ runsAs: "sync", sdk: "Python" });
+
+  await expect
+    .element(screen.getByText("Corrected wording from the catalog."))
+    .toBeVisible();
+  await expect.element(screen.getByText(/thread pool/)).not.toBeInTheDocument();
+});
+
+test("when the catalog cannot be read, the worker requirements are left out and the rest of Configure shows", async () => {
+  const failed = failCatalog();
+  const screen = await renderConfigure({ runsAs: "sync" });
+  await failed;
+
+  await expect
+    .element(screen.getByRole("list", { name: "Input and output types" }))
+    .toBeVisible();
+  await expect
+    .element(screen.getByRole("heading", { name: "Worker requirements" }))
+    .not.toBeInTheDocument();
+  await expect
+    .element(screen.getByText(/thread pool|special setup/))
+    .not.toBeInTheDocument();
+});
+
+test("an SDK the catalog does not list gets no worker requirements sentence", async () => {
+  const screen = await render(
+    <>
+      <section aria-label="Zig">
+        <ConfigureSection {...chargeCard} sdk="Zig" />
+      </section>
+      <section aria-label="Python">
+        <ConfigureSection {...chargeCard} sdk="Python" />
+      </section>
+    </>,
+    { wrapper: TestProviders },
+  );
+  const section = (sdk: string) => screen.getByRole("region", { name: sdk });
+
+  // The Python section shows its sentence once the catalog has arrived.
+  await expect
+    .element(
+      section("Python").getByRole("heading", { name: "Worker requirements" }),
+    )
+    .toBeVisible();
+  await expect
+    .element(
+      section("Zig").getByRole("heading", { name: "Worker requirements" }),
+    )
+    .not.toBeInTheDocument();
+});
+
 test("when the run mode couldn't be read, the worker requirements section is hidden", async () => {
   const screen = await renderConfigure({ runsAs: null });
 
@@ -217,15 +303,22 @@ test.each(["sync", "async", null] as const)(
       .toBeVisible();
     await expect.element(screen.getByRole("table")).not.toBeInTheDocument();
     await expect.element(screen.getByText(optionsText)).not.toBeInTheDocument();
-    expect(
-      screen
-        .getByRole("heading", { level: 3 })
-        .elements()
-        .map((heading) => heading.textContent),
-    ).toEqual(
-      runsAs === null
-        ? ["Environment variables", "Input and output"]
-        : ["Environment variables", "Input and output", "Worker requirements"],
-    );
+    // The worker requirements arrive with the SDK catalog, after the section first renders.
+    await expect
+      .poll(() =>
+        screen
+          .getByRole("heading", { level: 3 })
+          .elements()
+          .map((heading) => heading.textContent),
+      )
+      .toEqual(
+        runsAs === null
+          ? ["Environment variables", "Input and output"]
+          : [
+              "Environment variables",
+              "Input and output",
+              "Worker requirements",
+            ],
+      );
   },
 );

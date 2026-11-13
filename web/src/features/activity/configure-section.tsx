@@ -1,4 +1,4 @@
-import type { Sdk } from "@durables/schemas";
+import { useSdkProfile } from "@/lib/use-sdk-profile";
 import styles from "./configure-section.module.css";
 import type { VersionResponse } from "./listing-queries";
 
@@ -13,11 +13,14 @@ export interface ConfigureSectionProps {
   /** The output type's name. Null when it couldn't be read from the code. */
   output: string | null;
   runsAs: RunsAs;
-  sdk: Sdk;
+  /** The activity's SDK, named as the api names it. */
+  sdk: string;
 }
 
 // The Configure section: the environment variable names, the input and output type names,
-// and the worker requirements. Durables shows no activity options here (API map D14).
+// and the worker requirements. Durables shows no activity options here (API map D14). The
+// worker requirements sentence comes from the SDK catalog. Without the catalog's profile for
+// the SDK, or when detection couldn't tell how the activity runs, the group is left out.
 export function ConfigureSection({
   environmentVariables,
   input,
@@ -90,26 +93,16 @@ function TypeCard({ kind, name }: TypeCardProps) {
 
 interface WorkerRequirementsProps {
   runsAs: Exclude<RunsAs, null>;
-  sdk: Sdk;
+  sdk: string;
 }
 
 function WorkerRequirements({ runsAs, sdk }: WorkerRequirementsProps) {
+  const profile = useSdkProfile(sdk);
+  if (profile === undefined) return null;
   return (
     <div className={styles["group"]}>
       <h3 className={styles["heading"]}>Worker requirements</h3>
-      <p className={styles["prose"]}>{workerRequirementsText(runsAs, sdk)}</p>
+      <p className={styles["prose"]}>{profile.workerRequirements[runsAs]}</p>
     </div>
   );
-}
-
-// TypeScript activities are always detected as async, so only Python and .NET reach the
-// sync branch. The .NET worker file sets up no thread pool, so its sentence names none.
-function workerRequirementsText(runsAs: Exclude<RunsAs, null>, sdk: Sdk) {
-  if (runsAs === "async") {
-    return "This is an async activity. Your worker needs no special setup to run it.";
-  }
-  if (sdk === ".NET") {
-    return "This is a synchronous activity. The .NET SDK runs it for you, so your worker needs no special setup.";
-  }
-  return "This is a synchronous activity. Your worker needs a thread pool to run it, which the worker file in Implement already sets up.";
 }

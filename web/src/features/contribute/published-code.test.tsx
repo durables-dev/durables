@@ -224,20 +224,22 @@ describe("View what will be published", () => {
   });
 
   test.each([
-    ["Python", "python", "def"],
-    ["TypeScript", "typescript", "interface"],
-    [".NET", "csharp", "namespace"],
+    ["Python", "python", "def", pastedCode],
+    [
+      "TypeScript",
+      "typescript",
+      "interface",
+      "interface SlackMessage {\n  text: string;\n}\nexport async function postSlackMessage(message: SlackMessage): Promise<string> {\n  return message.text;\n}",
+    ],
+    [
+      ".NET",
+      "csharp",
+      "namespace",
+      "namespace Slack;\n\npublic class Activities\n{\n    [Activity]\n    public Task<string> PostSlackMessage(SlackMessage message) => Task.FromResult(message.Text);\n}",
+    ],
   ] as const)(
-    "highlights a %s activity as %s",
-    async (sdk, _language, keyword) => {
-      const files: Record<CheckedFacts["sdk"], string> = {
-        Python: pastedCode,
-        TypeScript:
-          "interface SlackMessage {\n  text: string;\n}\nexport async function postSlackMessage(message: SlackMessage): Promise<string> {\n  return message.text;\n}",
-        ".NET":
-          "namespace Slack;\n\npublic class Activities\n{\n    [Activity]\n    public Task<string> PostSlackMessage(SlackMessage message) => Task.FromResult(message.Text);\n}",
-      };
-      const code = files[sdk];
+    "highlights a %s activity as %s, the catalog's language for it",
+    async (sdk, _language, keyword, code) => {
       const screen = await openCodeStep(acceptedAs(code, sdk));
 
       await openDialog(screen);

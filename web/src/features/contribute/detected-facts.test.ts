@@ -1,6 +1,13 @@
+import { sdkProfile, type SdkProfile } from "@/lib/sdk-catalog";
 import { describe, expect, test } from "vitest";
+import { testCatalog } from "../../../test/sdk-catalog";
 import type { CheckedFacts } from "./check-result";
 import { factRows, type FactRow } from "./detected-facts";
+
+/** The catalog's profile for `sdk`, as the card looks it up. */
+function profileOf(sdk: string): SdkProfile | undefined {
+  return sdkProfile(testCatalog, sdk);
+}
 
 const nothingFound: CheckedFacts = {
   sdk: "Python",
@@ -26,13 +33,23 @@ const everythingFound: CheckedFacts = {
   heartbeats: [{ line: 11 }],
 };
 
+/** The card's row for `label`, with the catalog's profile for the facts' SDK. */
 function row(facts: CheckedFacts, label: string): FactRow | undefined {
-  return factRows(facts).find((fact) => fact.label === label);
+  return rowWith(facts, label, profileOf(facts.sdk));
+}
+
+/** The card's row for `label`, with `profile` as the SDK's catalog profile. */
+function rowWith(
+  facts: CheckedFacts,
+  label: string,
+  profile: SdkProfile | undefined,
+): FactRow | undefined {
+  return factRows(facts, profile).find((fact) => fact.label === label);
 }
 
 describe("factRows", () => {
   test("gives the eight facts in screen 12's order", () => {
-    expect(factRows(everythingFound)).toEqual([
+    expect(factRows(everythingFound, profileOf("Python"))).toEqual([
       { label: "SDK", value: "Python", found: true },
       { label: "Activity", value: "post_slack_message", found: true },
       {
@@ -61,7 +78,7 @@ describe("factRows", () => {
   });
 
   test("gives each fact's fallback, marked not found, when detection found nothing", () => {
-    expect(factRows(nothingFound)).toEqual([
+    expect(factRows(nothingFound, profileOf("Python"))).toEqual([
       { label: "SDK", value: "Python", found: true },
       { label: "Activity", value: "post_slack_message", found: true },
       { label: "Input → output", value: "—", found: false },
@@ -104,10 +121,56 @@ describe("factRows", () => {
       });
     });
 
-    test("says the worker needs a thread pool for a synchronous activity", () => {
+    test("says the worker needs a thread pool for a synchronous Python activity", () => {
       expect(
         row({ ...everythingFound, runsAs: "sync" }, "Runs as")?.value,
       ).toBe("Synchronous: the worker needs a thread pool");
+    });
+
+    test.each(["Python", "TypeScript", ".NET"] as const)(
+      "reads the catalog's %s wording for each way it runs",
+      (sdk) => {
+        const profile = profileOf(sdk);
+        expect(profile).toBeDefined();
+        for (const runsAs of ["sync", "async"] as const) {
+          expect(
+            rowWith({ ...everythingFound, sdk, runsAs }, "Runs as", profile),
+          ).toEqual({
+            label: "Runs as",
+            value: profile?.runsAs[runsAs],
+            found: true,
+          });
+        }
+      },
+    );
+
+    test("a synchronous .NET activity reads as the Configure section does, with no thread pool", () => {
+      const value = row(
+        { ...everythingFound, sdk: ".NET", runsAs: "sync" },
+        "Runs as",
+      )?.value;
+
+      expect(value).toBe("Synchronous: the .NET SDK runs it for you");
+      expect(value).not.toMatch(/thread pool/i);
+    });
+
+    test.each([
+      ["sync", "Synchronous"],
+      ["async", "Async"],
+    ] as const)(
+      "without the catalog's profile, a %s activity reads %s and nothing more",
+      (runsAs, value) => {
+        expect(
+          rowWith({ ...everythingFound, runsAs }, "Runs as", undefined),
+        ).toEqual({ label: "Runs as", value, found: true });
+      },
+    );
+
+    test("an SDK the catalog does not list falls back the same way", () => {
+      expect(
+        row({ ...everythingFound, sdk: "Zig", runsAs: "sync" }, "Runs as")
+          ?.value,
+      ).toBe("Synchronous");
     });
   });
 
