@@ -1,0 +1,20 @@
+<?php
+
+declare(strict_types=1);
+
+use Temporal\WorkerFactory;
+
+ini_set('display_errors', 'stderr');
+require 'vendor/autoload.php';
+require '{{activityFile}}';
+require '{{workflowFile}}';
+
+$factory = WorkerFactory::create();
+$worker = $factory->newWorker({{taskQueue}});
+
+$worker->registerWorkflowTypes({{workflowClass}}::class);
+// Activities stands in for the class that implements {{activity}}. Change it to your
+// class's name, with its namespace if it has one.
+$worker->registerActivity(Activities::class);
+
+$factory->run();

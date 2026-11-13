@@ -46,22 +46,6 @@ export const goActivityFunction: Pattern = {
     /^[ \t]*func[ \t]+(?:\([^)]*\)[ \t]*)?[A-Za-z_]\w*[ \t]*\([ \t]*\w+[ \t]+context\.Context\b/m,
 };
 
-/** A PHP `use` of the Temporal SDK's namespace, such as `use Temporal\Activity\ActivityInterface;`. */
-export const phpSdkUse: Pattern = {
-  name: "php-sdk-use",
-  description:
-    "A PHP use statement for the Temporal SDK's Temporal namespace, such as use Temporal\\Activity\\ActivityInterface.",
-  regex: /^[ \t]*use[ \t]+\\?Temporal\\/m,
-};
-
-/** A PHP activity attribute or annotation: `ActivityInterface` or `ActivityMethod`. */
-export const phpActivityAttribute: Pattern = {
-  name: "php-activity-attribute",
-  description:
-    "The #[ActivityInterface] or #[ActivityMethod] attribute, or the same name as a docblock annotation, on a PHP interface or method.",
-  regex: /(?:#\[[ \t]*|@)Activity(?:Interface|Method)\b/,
-};
-
 /**
  * The SDKs Durables recognises but does not accept. Identification runs over these with the
  * registry's SDKs, so a refusal can name the SDK.
@@ -80,14 +64,6 @@ export const unacceptedSdks: readonly Recognisable<UnacceptedSdk>[] = [
     recognition: {
       sdkMarkers: [goSdkImport],
       activityMarkers: [goActivityImport, goActivityFunction],
-      shapeMarkers: [],
-    },
-  },
-  {
-    sdk: "PHP",
-    recognition: {
-      sdkMarkers: [phpSdkUse],
-      activityMarkers: [phpActivityAttribute],
       shapeMarkers: [],
     },
   },

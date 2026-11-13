@@ -48,7 +48,7 @@ describe("the browse query", () => {
   );
 
   test("rejects several SDKs when one is unsupported", () => {
-    expect(errors({ sdk: ["TypeScript", "PHP"] })).toEqual({
+    expect(errors({ sdk: ["TypeScript", "Rust"] })).toEqual({
       sdk: sdkFilterMessage,
     });
   });

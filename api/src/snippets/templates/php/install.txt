@@ -1,0 +1,4 @@
+composer require temporal/sdk
+./vendor/bin/rr get
+# RoadRunner needs PHP's grpc extension. Install it with: pecl install grpc
+{{packagesNote}}

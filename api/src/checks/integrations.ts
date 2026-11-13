@@ -11,8 +11,10 @@ interface IntegrationPackages {
   readonly integration: Integration;
   /**
    * The integration keys of this integration's client libraries: package names for Python and
-   * TypeScript, the namespace root of a `using` for .NET. A dependency implies the integration
-   * when its SDK's normaliser gives one of these keys. Keys are compared without regard to case.
+   * TypeScript, the namespace root of a `using` for .NET, and the package-level namespace for
+   * PHP, such as `Aws\S3`. A dependency implies the integration when its SDK's normaliser gives
+   * one of these keys, or, for a PHP namespace, a namespace inside one of them. Keys are
+   * compared without regard to case.
    */
   readonly packages: readonly string[];
 }
@@ -24,19 +26,36 @@ interface IntegrationPackages {
 export const integrationPackages: readonly IntegrationPackages[] = [
   {
     integration: "Amazon S3",
-    packages: ["boto3", "@aws-sdk/client-s3"],
+    packages: ["boto3", "@aws-sdk/client-s3", "Aws\\S3"],
   },
   {
     integration: "Postgres",
-    packages: ["psycopg", "psycopg2", "asyncpg", "pg", "Npgsql"],
+    packages: [
+      "psycopg",
+      "psycopg2",
+      "asyncpg",
+      "pg",
+      "Npgsql",
+      "Amp\\Postgres",
+    ],
   },
   {
     integration: "Slack",
-    packages: ["slack_sdk", "@slack/web-api", "SlackNet"],
+    packages: ["slack_sdk", "@slack/web-api", "SlackNet", "JoliCode\\Slack"],
   },
-  // "stripe" is also the Stripe.net package's .NET namespace root.
+  // "stripe" is also the Stripe.net package's .NET namespace root, and stripe-php's namespace.
   { integration: "Stripe", packages: ["stripe"] },
 ];
+
+/** A PHP namespace's separator. No other SDK's integration keys contain it. */
+const namespaceSeparator = "\\";
+
+/**
+ * Whether an imported key is the package key, or a PHP namespace inside it: `stripe\exception`
+ * is inside `stripe`.
+ */
+const isWithin = (imported: string, key: string) =>
+  imported === key || imported.startsWith(`${key}${namespaceSeparator}`);
 
 /**
  * The integrations an SDK's detected third-party imports imply, each once. Each dependency
@@ -48,12 +67,12 @@ export const integrationsFor = (
   dependencies: readonly Pick<NamedLineRef, "name">[],
 ): Integration[] => {
   const { normaliseDependency } = sdkRegistry[sdk];
-  const imported = new Set(
-    dependencies.map(({ name }) => normaliseDependency(name)),
-  );
+  const imported = dependencies.map(({ name }) => normaliseDependency(name));
   return integrationPackages
     .filter(({ packages }) =>
-      packages.some((name) => imported.has(name.toLowerCase())),
+      packages.some((name) =>
+        imported.some((key) => isWithin(key, name.toLowerCase())),
+      ),
     )
     .map(({ integration }) => integration);
 };

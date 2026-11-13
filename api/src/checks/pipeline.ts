@@ -77,7 +77,7 @@ interface ChosenSdk {
 }
 
 /**
- * Identifies the SDK over the given SDKs together with Java, Go and PHP, which are recognised
+ * Identifies the SDK over the given SDKs together with Java and Go, which are recognised
  * so they can be refused by name.
  */
 const identifyChecked = (

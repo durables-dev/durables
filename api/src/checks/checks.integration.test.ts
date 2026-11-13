@@ -157,6 +157,45 @@ describe("POST /api/checks", () => {
     expect(await response.json()).toEqual(postSlackMessageFacts);
   });
 
+  test("answers 200 with PHP and its eight facts for a PHP activity", async () => {
+    const cookie = await signIn();
+    const phpActivity = lines(
+      "<?php",
+      "",
+      "use Stripe\\StripeClient;",
+      "use Temporal\\Activity;",
+      "use Temporal\\Activity\\ActivityInterface;",
+      "use Temporal\\Exception\\Failure\\ApplicationFailure;",
+      "",
+      "#[ActivityInterface]",
+      "class Payments",
+      "{",
+      "    public function chargeCard(ChargeRequest $request): ChargeResult",
+      "    {",
+      "        $stripe = new StripeClient(getenv('STRIPE_API_KEY'));",
+      "        Activity::heartbeat();",
+      "        throw new ApplicationFailure('Declined', 'CardDeclined', true);",
+      "    }",
+      "}",
+    );
+
+    const response = await checkCode(cookie, phpActivity);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      sdk: "PHP",
+      activity: { name: "chargeCard", line: 11 },
+      input: "ChargeRequest",
+      output: "ChargeResult",
+      runsAs: "sync",
+      nonRetryableErrors: [{ line: 15 }],
+      configurationRead: [{ name: "STRIPE_API_KEY", line: 13 }],
+      dependencies: [{ name: "Stripe", line: 3 }],
+      heartbeats: [{ line: 14 }],
+      provenance: postSlackMessageFacts.provenance,
+    });
+  });
+
   test("ignores detection results sent by the client", async () => {
     const cookie = await signIn();
 

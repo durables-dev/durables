@@ -3,11 +3,8 @@ import { registeredSdks } from "../sdks/registry";
 import { identifySdk, type Recognisable } from "./identify";
 import type { Pattern } from "./pattern";
 import { toSource } from "./source";
-import {
-  javaActivityAnnotation,
-  phpActivityAttribute,
-  unacceptedSdks,
-} from "./unaccepted-sdks";
+import { phpActivityAttribute } from "./php-detector";
+import { javaActivityAnnotation, unacceptedSdks } from "./unaccepted-sdks";
 
 const marker = (name: string): Pattern => ({
   name,
@@ -141,6 +138,7 @@ describe("identifySdk", () => {
         dotnetActivity,
         ["dotnet-sdk-using", "dotnet-activity-attribute"],
       ],
+      ["PHP", phpActivity, ["php-sdk-use", "php-activity-attribute"]],
     ])(
       "returns %s, its tier and the matched patterns for a registry SDK",
       (sdk, code, matchedPatterns) => {

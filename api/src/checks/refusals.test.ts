@@ -120,7 +120,7 @@ describe("refusals", () => {
       noActivity("TypeScript"),
       notTemporalActivity(),
       sdkChoiceNeeded("ambiguous"),
-      unacceptedSdk("PHP"),
+      unacceptedSdk("Go"),
       multipleActivities(2),
       codeTooLarge(),
     ]) {

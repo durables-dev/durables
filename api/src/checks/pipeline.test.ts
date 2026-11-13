@@ -208,7 +208,6 @@ describe("checkCode", () => {
     it.each([
       ["Java", javaActivity],
       ["Go", goActivity],
-      ["PHP", phpActivity],
     ] as const)(
       "refuses a %s Temporal activity, naming the SDK",
       (sdk, code) => {
@@ -426,6 +425,7 @@ describe("checkCode", () => {
         '    public Task<string> GreetAsync(string name) => Task.FromResult($"Hello {name}");',
         "}",
       ].join("\n"),
+      PHP: phpActivity,
     };
 
     it.each(Object.entries(samples))(
