@@ -55,6 +55,16 @@ const fragmentCrates: ReadonlySet<string> = new Set([
   "tokio",
 ]);
 
+/**
+ * The Cargo.toml name of each integration crate whose `use` name differs from it. Cargo names
+ * these crates with hyphens, and their code is used with underscores.
+ */
+const cargoNames: ReadonlyMap<string, string> = new Map([
+  ["aws_sdk_s3", "aws-sdk-s3"],
+  ["slack_morphism", "slack-morphism"],
+  ["tokio_postgres", "tokio-postgres"],
+]);
+
 /** The escape for one character in a Rust string literal, or the character itself. */
 const rustCharacter = (character: string) => {
   switch (character) {
@@ -139,10 +149,11 @@ export const rustSnippets = (
   const known = facts.input !== null;
   // Detection reports the crate a use path names, which can differ from the crate Cargo.toml
   // installs: async-stripe's code is used as stripe. Adding one by that name can fetch
-  // someone else's crate.
+  // someone else's crate, so only a known integration crate is named as Cargo names it.
   const crates = facts.dependencies
     .map(({ name }) => name)
-    .filter((name) => !fragmentCrates.has(name));
+    .filter((name) => !fragmentCrates.has(name))
+    .map((name) => cargoNames.get(name) ?? name);
   const values = {
     activity,
     workflowClass: workflowStruct,
