@@ -19,6 +19,7 @@ describe("reading the SDK catalog", () => {
     const catalog = await response.json<SdkProfile[]>();
     expect(catalog.map(({ name }) => name)).toEqual([
       "Go",
+      "Java",
       "Python",
       "TypeScript",
       ".NET",

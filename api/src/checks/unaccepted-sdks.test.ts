@@ -26,34 +26,28 @@ describe("unaccepted SDK markers", () => {
     }
   });
 
-  it.each([
-    ["Java", "import io.temporal.activity.ActivityInterface;"],
-    [
-      "Java",
-      "import static io.temporal.activity.Activity.getExecutionContext;",
-    ],
-    ["PHP", "use Temporal\\Activity\\ActivityInterface;"],
-  ])("recognise the %s SDK in %s", (sdk, line) => {
-    expect(matchesAny(markersFor(sdk).sdkMarkers, line)).toBe(true);
-  });
+  it.each([["PHP", "use Temporal\\Activity\\ActivityInterface;"]])(
+    "recognise the %s SDK in %s",
+    (sdk, line) => {
+      expect(matchesAny(markersFor(sdk).sdkMarkers, line)).toBe(true);
+    },
+  );
 
   it.each([
-    ["Java", "@ActivityInterface\npublic interface Greeter {"],
-    ["Java", "    @ActivityMethod\n    String greet(String name);"],
     ["PHP", "#[ActivityInterface]\ninterface Greeter"],
     ["PHP", " * @ActivityMethod"],
   ])("recognise a %s activity in %s", (sdk, code) => {
     expect(matchesAny(markersFor(sdk).activityMarkers, code)).toBe(true);
   });
 
-  it.each([
-    ["Java", "import io.temporalx.Thing;"],
-    ["PHP", "use App\\Temporal\\Thing;"],
-  ])("do not take a lookalike for the %s SDK: %s", (sdk, line) => {
-    expect(matchesAny(markersFor(sdk).sdkMarkers, line)).toBe(false);
-  });
+  it.each([["PHP", "use App\\Temporal\\Thing;"]])(
+    "do not take a lookalike for the %s SDK: %s",
+    (sdk, line) => {
+      expect(matchesAny(markersFor(sdk).sdkMarkers, line)).toBe(false);
+    },
+  );
 
-  it("no longer hold Go, which the registry accepts", () => {
-    expect(unacceptedSdks.map(({ sdk }) => sdk)).toEqual(["Java", "PHP"]);
+  it("no longer hold Go or Java, which the registry accepts", () => {
+    expect(unacceptedSdks.map(({ sdk }) => sdk)).toEqual(["PHP"]);
   });
 });

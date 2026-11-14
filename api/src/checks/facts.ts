@@ -4,7 +4,7 @@ import type { Sdk } from "../sdks/sdk-list";
 export type AcceptedSdk = Sdk;
 
 /** Temporal SDKs Durables recognises but does not accept. */
-export type UnacceptedSdk = "Java" | "PHP";
+export type UnacceptedSdk = "PHP";
 
 /** A place in the pasted code. Lines are 1-based, numbered as the editor numbers them. */
 export interface LineRef {

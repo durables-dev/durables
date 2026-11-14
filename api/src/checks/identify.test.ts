@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { registeredSdks } from "../sdks/registry";
 import { identifySdk, type Recognisable } from "./identify";
+import { javaActivityAnnotation } from "./java-detector";
 import { matchesAny, type Pattern } from "./pattern";
 import { toSource } from "./source";
-import {
-  javaActivityAnnotation,
-  phpActivityAttribute,
-  unacceptedSdks,
-} from "./unaccepted-sdks";
+import { phpActivityAttribute, unacceptedSdks } from "./unaccepted-sdks";
 
 const marker = (name: string): Pattern => ({
   name,
@@ -255,6 +252,22 @@ describe("identifySdk", () => {
         matchedPatterns: ["go-activity-shape"],
       });
     });
+
+    it("is inferred for Java from an implementing class with no Temporal import", () => {
+      const implementation = lines(
+        "public class GreeterImpl implements Greeter {",
+        "    public String greet(String name) {",
+        '        return "Hello " + name;',
+        "    }",
+        "}",
+      );
+      expect(identify(implementation)).toEqual({
+        outcome: "identified",
+        sdk: "Java",
+        tier: "inferred",
+        matchedPatterns: ["java-implementation-class"],
+      });
+    });
   });
 
   describe("an ambiguous paste", () => {
@@ -438,7 +451,8 @@ describe("identifySdk", () => {
         ),
       ],
     ])("does not infer Go for %s", (_, code) => {
-      expect(identify(code)).toEqual({ outcome: "not-identified" });
+      // Java now infers its own implementation classes, so only the Go answer is ruled out.
+      expect(identify(code)).not.toMatchObject({ sdk: "Go" });
     });
 
     it("keeps a Go file that imports the SDK as Go when it also mentions a Java annotation in a comment", () => {
