@@ -205,10 +205,7 @@ describe("checkCode", () => {
       );
     });
 
-    it.each([
-      ["Go", goActivity],
-      ["PHP", phpActivity],
-    ] as const)(
+    it.each([["PHP", phpActivity]] as const)(
       "refuses a %s Temporal activity, naming the SDK",
       (sdk, code) => {
         expect(refusalOf(code, [stub([facts("act")])])).toEqual({
@@ -221,11 +218,19 @@ describe("checkCode", () => {
       },
     );
 
-    it("names the SDK for a Go file with the SDK import but no activity function", () => {
-      const code = 'import "go.temporal.io/sdk/client"\n';
+    it("accepts a Go Temporal activity, which is no longer refused by name", () => {
+      expect(checkCode(goActivity, registeredSdks)).toMatchObject({
+        sdk: "Go",
+        activity: { name: "Greet", line: 9 },
+        provenance: provenance("detected"),
+      });
+    });
+
+    it("names the SDK for a PHP file with the SDK use but no activity attribute", () => {
+      const code = "use Temporal\\Client\\WorkflowClient;\n";
       expect(refusalOf(code, [])).toMatchObject({
         type: refusalTypes.unacceptedSdk,
-        sdk: "Go",
+        sdk: "PHP",
       });
     });
 
@@ -401,6 +406,16 @@ describe("checkCode", () => {
     });
 
     const samples: Record<AcceptedSdk, string> = {
+      Go: [
+        "package greeting",
+        "",
+        'import "go.temporal.io/sdk/activity"',
+        "",
+        "func Greet(ctx context.Context, name string) (string, error) {",
+        "    activity.RecordHeartbeat(ctx)",
+        '    return "Hello " + name, nil',
+        "}",
+      ].join("\n"),
       Java: javaActivity,
       Python: [
         "from temporalio import activity",

@@ -70,10 +70,10 @@ describe("refusals", () => {
     ],
     [
       "unaccepted SDK",
-      unacceptedSdk("Go"),
+      unacceptedSdk("PHP"),
       refusalTypes.unacceptedSdk,
       422,
-      { sdk: "Go" },
+      { sdk: "PHP" },
     ],
     [
       "multiple activities",

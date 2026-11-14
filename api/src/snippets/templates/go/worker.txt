@@ -1,0 +1,29 @@
+package main
+
+import (
+    "log"
+
+    app {{modulePath}}
+
+    "go.temporal.io/sdk/client"
+    "go.temporal.io/sdk/worker"
+)
+
+func main() {
+    c, err := client.Dial(client.Options{})
+    if err != nil {
+        log.Fatalln("Unable to create client", err)
+    }
+    defer c.Close()
+
+    w := worker.New(c, {{taskQueue}}, worker.Options{})
+    w.RegisterWorkflow(app.{{workflowName}})
+    // If {{activity}} is a method, register a value of its type instead, such as
+    // w.RegisterActivity(&app.Activities{}).
+    w.RegisterActivity(app.{{activity}})
+
+    err = w.Run(worker.InterruptCh())
+    if err != nil {
+        log.Fatalln("Unable to start worker", err)
+    }
+}

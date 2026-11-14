@@ -1,0 +1,34 @@
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    app {{modulePath}}
+
+    "go.temporal.io/sdk/client"
+)
+
+{{packagesNote}}
+func main() {
+    c, err := client.Dial(client.Options{})
+    if err != nil {
+        log.Fatalln("Unable to create client", err)
+    }
+    defer c.Close()
+
+    options := client.StartWorkflowOptions{
+        ID:        {{workflowId}},
+        TaskQueue: {{taskQueue}},
+    }
+    // Fill in the input to pass to {{activity}}.
+    var input {{starterInputType}}
+    we, err := c.ExecuteWorkflow(context.Background(), options, app.{{workflowName}}, input)
+    if err != nil {
+        log.Fatalln("Unable to execute workflow", err)
+    }
+
+    {{printResult}}
+}
