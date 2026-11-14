@@ -335,13 +335,11 @@ const refusals = [
       "Found the SDK but no activity function with typed input and output.",
   },
   {
-    file: "a file in no recognised SDK",
-    code: sample("not-temporal"),
+    // An empty editor sends nothing, so the empty paste a publisher can make is whitespace.
+    file: "a paste of only whitespace",
+    code: "  \n\t\n   ",
     message:
-      "This doesn't look like a Python, TypeScript or .NET Temporal activity.",
-    // The api now answers this paste with sdk-choice-needed (DUR-82), which web can't show
-    // until DUR-90 adds the must-choose control. DUR-92 rewrites this case for that control.
-    fixme: "Waits for DUR-90 and DUR-92: the api asks for the SDK to be chosen",
+      "This doesn't look like a Temporal activity in any SDK Durables supports.",
   },
   {
     file: "a file with two activities",
@@ -384,6 +382,56 @@ function publishedDialog(page: Page) {
 
 function factsCard(page: Page) {
   return page.getByRole("region", { name: "What we found" });
+}
+
+/** Every SDK in the catalog, in Temporal's order (API map D1). */
+const catalogSdks = [
+  "Go",
+  "Java",
+  "Python",
+  "TypeScript",
+  ".NET",
+  "Ruby",
+  "PHP",
+  "Rust",
+];
+
+const chooseSdkPrompt =
+  "We couldn't tell which SDK this is. Choose the one it's written for.";
+const chooseSdkHint = "Choose the SDK this activity is for";
+
+/** The dropdown of SDKs, whether it changes an SDK or must choose one. */
+function sdkDropdown(page: Page) {
+  return page.getByRole("combobox", { name: "SDK", exact: true });
+}
+
+/** The SDK name on the Found line, when the SDK can be changed. */
+function changeSdkLink(page: Page, sdk: string) {
+  return page.getByRole("button", {
+    name: `Change the SDK, ${sdk}`,
+    exact: true,
+  });
+}
+
+/** The Found line for an SDK that was inferred from the code or declared by the publisher. */
+function tierFoundLine(
+  page: Page,
+  activity: string,
+  sdk: string,
+  tier: "inferred from the code" | "declared by you",
+) {
+  return page.getByText(
+    `✓ Found ${activity} (${sdk}, ${tier}). Next, check what we detected.`,
+    { exact: true },
+  );
+}
+
+/** The line shown when the SDK the publisher chose finds no activity. */
+function noActivityLine(page: Page, sdk: string) {
+  return page.getByText(
+    `No activity found for ${sdk}. Check the code, or choose a different SDK.`,
+    { exact: true },
+  );
 }
 
 /** The editor's gutter numbers, 1 to the last line, as its text reads. */
@@ -475,7 +523,6 @@ test.describe("the Code step", () => {
       paste,
       signInWithAccount,
     }) => {
-      test.fixme(refusal.fixme !== undefined, refusal.fixme);
       await signInWithAccount();
       await openCodeStep(page);
 
@@ -486,6 +533,7 @@ test.describe("the Code step", () => {
       ).toBeVisible();
       await expect(anyFoundLine(page)).toHaveCount(0);
       await expect(viewButton(page)).toHaveCount(0);
+      await expect(sdkDropdown(page)).toHaveCount(0);
       await expect(continueButton(page)).toBeDisabled();
       await expectAccessible();
     });
@@ -610,6 +658,161 @@ test.describe("the Code step", () => {
     await expect(page).toHaveURL("/contribute/code");
     await expect(editor(page)).toHaveValue(code);
     await expect(continueButton(page)).toBeDisabled();
+  });
+});
+
+test.describe("choosing the SDK on the Code step", () => {
+  // go-no-marker.txt imports no Temporal package, so Go is inferred from the code.
+  const inferredGo = sample("go-no-marker");
+  // java-no-import.txt writes its Temporal annotations in full and imports nothing from
+  // Temporal, so no SDK identifies it. Java's check finds its activity.
+  const unidentified = sample("java-no-import");
+
+  test("a Go activity with no Temporal marker says its SDK was inferred, and the SDK name opens a dropdown of every SDK", async ({
+    page,
+    expectAccessible,
+    paste,
+    signInWithAccount,
+  }) => {
+    await signInWithAccount();
+    await openCodeStep(page);
+
+    await paste(editor(page), inferredGo);
+
+    await expect(
+      tierFoundLine(page, "ComposeGreeting", "Go", "inferred from the code"),
+    ).toBeVisible();
+    await expect(changeSdkLink(page, "Go")).toBeVisible();
+    await expect(sdkDropdown(page)).toHaveCount(0);
+    await expect(continueButton(page)).toBeEnabled();
+    await expectAccessible();
+
+    await changeSdkLink(page, "Go").click();
+
+    await expect(sdkDropdown(page)).toBeVisible();
+    await expect(sdkDropdown(page)).toBeFocused();
+    await expect(sdkDropdown(page)).toHaveValue("Go");
+    await expect(sdkDropdown(page).getByRole("option")).toHaveText(catalogSdks);
+    await expectAccessible();
+  });
+
+  test("changing an inferred SDK twice keeps the last choice, says it was declared and leaves it a link", async ({
+    page,
+    expectAccessible,
+    paste,
+    signInWithAccount,
+  }) => {
+    await signInWithAccount();
+    await openCodeStep(page);
+    await paste(editor(page), inferredGo);
+    await expect(
+      tierFoundLine(page, "ComposeGreeting", "Go", "inferred from the code"),
+    ).toBeVisible();
+
+    await test.step("choosing Java finds no activity and keeps the dropdown", async () => {
+      await changeSdkLink(page, "Go").click();
+      await sdkDropdown(page).selectOption("Java");
+
+      await expect(noActivityLine(page, "Java")).toBeVisible();
+      await expect(sdkDropdown(page)).toHaveValue("Java");
+      await expect(anyFoundLine(page)).toHaveCount(0);
+      await expect(continueButton(page)).toBeDisabled();
+      await expect(
+        page.getByText(chooseSdkHint, { exact: true }),
+      ).toBeVisible();
+      await expectAccessible();
+    });
+
+    await test.step("choosing Go finds the activity, declared by the publisher", async () => {
+      await sdkDropdown(page).selectOption("Go");
+
+      await expect(
+        tierFoundLine(page, "ComposeGreeting", "Go", "declared by you"),
+      ).toBeVisible();
+      await expect(changeSdkLink(page, "Go")).toBeVisible();
+      await expect(sdkDropdown(page)).toHaveCount(0);
+      await expect(noActivityLine(page, "Java")).toHaveCount(0);
+      await expect(continueButton(page)).toBeEnabled();
+      await expectAccessible();
+    });
+
+    await test.step("Detected shows the SDK as declared by the publisher", async () => {
+      await continueButton(page).click();
+
+      await expect(page).toHaveURL("/contribute/detected");
+      const values = factsCard(page).getByRole("definition");
+      await expect(values.nth(0)).toHaveText("Go");
+      await expect(values.nth(1)).toHaveText("Declared by you");
+      await expect(values.nth(2)).toHaveText("ComposeGreeting");
+    });
+  });
+
+  test("a file no SDK identifies asks for the SDK with Continue disabled, and choosing the right one enables Continue", async ({
+    page,
+    expectAccessible,
+    paste,
+    signInWithAccount,
+  }) => {
+    await signInWithAccount();
+    await openCodeStep(page);
+
+    await paste(editor(page), unidentified);
+
+    await expect(
+      page.getByText(chooseSdkPrompt, { exact: true }),
+    ).toBeVisible();
+    await expect(sdkDropdown(page)).toBeVisible();
+    await expect(sdkDropdown(page)).toHaveValue("");
+    await expect(sdkDropdown(page).getByRole("option")).toHaveText([
+      "Choose an SDK",
+      ...catalogSdks,
+    ]);
+    await expect(continueButton(page)).toBeDisabled();
+    await expect(page.getByText(chooseSdkHint, { exact: true })).toBeVisible();
+    await expect(anyFoundLine(page)).toHaveCount(0);
+    await expect(viewButton(page)).toHaveCount(0);
+    await expectAccessible();
+
+    await sdkDropdown(page).selectOption("Java");
+
+    await expect(
+      tierFoundLine(page, "issueRefund", "Java", "declared by you"),
+    ).toBeVisible();
+    await expect(continueButton(page)).toBeEnabled();
+    await expect(page.getByText(chooseSdkHint, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(chooseSdkPrompt, { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(sdkDropdown(page)).toHaveCount(0);
+    await expect(changeSdkLink(page, "Java")).toBeVisible();
+    await expectAccessible();
+  });
+
+  test("a plain script asks for the SDK, and each SDK chosen that finds no activity says so and keeps the dropdown", async ({
+    page,
+    expectAccessible,
+    paste,
+    signInWithAccount,
+  }) => {
+    await signInWithAccount();
+    await openCodeStep(page);
+    await paste(editor(page), sample("not-temporal"));
+    await expect(
+      page.getByText(chooseSdkPrompt, { exact: true }),
+    ).toBeVisible();
+
+    for (const sdk of ["Python", "Rust"]) {
+      await sdkDropdown(page).selectOption(sdk);
+
+      await expect(noActivityLine(page, sdk)).toBeVisible();
+      await expect(sdkDropdown(page)).toHaveValue(sdk);
+      await expect(anyFoundLine(page)).toHaveCount(0);
+      await expect(continueButton(page)).toBeDisabled();
+      await expect(
+        page.getByText(chooseSdkHint, { exact: true }),
+      ).toBeVisible();
+    }
+    await expectAccessible();
   });
 });
 
