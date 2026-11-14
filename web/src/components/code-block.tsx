@@ -15,7 +15,11 @@ export const COPY_FAILED_MESSAGE =
 export interface CodeBlockProps {
   /** The code. It is shown exactly as given, never reindented or rewritten. */
   code: string;
-  /** "python", "typescript" or "csharp". Any other value, or none, shows plain text. */
+  /**
+   * A language Durables highlights, as the SDK catalog's `highlightLanguage` names it: "python",
+   * "typescript", "csharp", "go", "java", "ruby", "php" or "rust". Any other value, or none,
+   * shows plain text.
+   */
   language?: string | undefined;
   /**
    * What the code is, such as "install command". It names the copy button

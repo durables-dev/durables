@@ -86,3 +86,12 @@ export function holdCatalog(): () => void {
   );
   return answer;
 }
+
+/** A catalog profile for an SDK, shaped as the api answers it, naming its highlight language. */
+export function profileFor(
+  name: string,
+  highlightLanguage: string,
+  activityFileName: string,
+) {
+  return { ...rustProfile, name, highlightLanguage, activityFileName };
+}

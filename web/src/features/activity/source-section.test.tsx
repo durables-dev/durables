@@ -3,7 +3,12 @@ import { afterEach, expect, test, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { SourceSection, type SourceSectionProps } from "./source-section";
 import { TestProviders } from "../../../test/test-providers";
-import { failCatalog, serveCatalog } from "../../../test/serve-sdk-catalog";
+import {
+  failCatalog,
+  profileFor,
+  serveCatalog,
+} from "../../../test/serve-sdk-catalog";
+import { newSdkSamples } from "./test-versions";
 import { testCatalog } from "../../../test/sdk-catalog";
 
 const CHARGE_CARD = [
@@ -168,6 +173,20 @@ test("the code is highlighted in the language the catalog names for the SDK", as
   await expect.poll(() => coloured("TypeScript")).toBeGreaterThan(0);
   expect(coloured("Python")).toBe(0);
 });
+
+test.each(newSdkSamples)(
+  "a $sdk activity's code is highlighted in $highlightLanguage, and is still exactly as published",
+  async ({ sdk, highlightLanguage, activityFileName, code }) => {
+    serveCatalog([
+      ...testCatalog,
+      profileFor(sdk, highlightLanguage, activityFileName),
+    ]);
+    const block = await renderSource({ sdk, activityFileName, code });
+
+    await expect.poll(block.coloured).toBeGreaterThan(0);
+    expect(block.code()).toBe(code);
+  },
+);
 
 test("when the catalog cannot be read, the code shows as plain text, unchanged", async () => {
   const failed = failCatalog();
