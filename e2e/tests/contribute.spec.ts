@@ -348,7 +348,14 @@ async function expectDetectedCard(page: Page, file: AcceptedSample) {
   ).toBeVisible();
   await expect(card.getByText("Regex, no AI", { exact: true })).toBeVisible();
   await expect(card.getByRole("term")).toHaveText(factLabels);
-  await expect(card.getByRole("definition")).toHaveText(file.facts);
+  // The SDK's value is followed by how the SDK was established. Every sample here carries a
+  // Temporal marker, so each one's SDK is detected.
+  const [sdk, ...rest] = file.facts;
+  await expect(card.getByRole("definition")).toHaveText([
+    sdk ?? "",
+    "Detected",
+    ...rest,
+  ]);
 }
 
 test.describe("the Code step", () => {
