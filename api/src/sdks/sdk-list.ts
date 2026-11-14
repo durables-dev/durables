@@ -16,6 +16,7 @@ export const sdks = [
   ".NET",
   "Ruby",
   "PHP",
+  "Rust",
 ] as const;
 
 export const sdkSchema = z.enum(sdks);

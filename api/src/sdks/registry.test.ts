@@ -6,6 +6,7 @@ import { java } from "./java";
 import { python } from "./python";
 import { ruby } from "./ruby";
 import { registeredSdks, sdkRegistry } from "./registry";
+import { rust } from "./rust";
 import type { SdkEntry, SdkRegistry } from "./sdk-entry";
 import { type Sdk, sdks } from "./sdk-list";
 import { typescript } from "./typescript";
@@ -72,6 +73,7 @@ describe("the SDK registry", () => {
       dotnet,
       ruby,
       php,
+      rust,
     ]);
   });
 
@@ -96,6 +98,9 @@ describe("the SDK registry", () => {
       ["TypeScript", "pg", "pg"],
       [".NET", "Npgsql", "npgsql"],
       [".NET", "SlackNet", "slacknet"],
+      ["Rust", "aws-sdk-s3", "aws_sdk_s3"],
+      ["Rust", "aws_sdk_s3", "aws_sdk_s3"],
+      ["Rust", "Async-Stripe", "async_stripe"],
       ["Ruby", "stripe", "stripe"],
       ["Ruby", "aws-sdk-s3", "aws-sdk-s3"],
       ["Ruby", "Slack-Ruby-Client", "slack-ruby-client"],
@@ -132,6 +137,11 @@ describe("the SDK registry", () => {
       [".NET", "Microsoft", true],
       [".NET", "Npgsql", false],
       [".NET", "Temporalio", false],
+      ["Rust", "std", true],
+      ["Rust", "core", true],
+      ["Rust", "alloc", true],
+      ["Rust", "serde", false],
+      ["Rust", "temporalio_sdk", false],
       ["Ruby", "json", true],
       ["Ruby", "net/http", true],
       ["Ruby", "securerandom", true],
@@ -159,6 +169,7 @@ describe("the SDK registry", () => {
       ["Python", "activities.py", "temporalio", "python"],
       ["TypeScript", "activities.ts", "@temporalio/activity", "typescript"],
       [".NET", "Activities.cs", "Temporalio", "csharp"],
+      ["Rust", "activities.rs", "temporalio-sdk", "rust"],
       ["Ruby", "activities.rb", "temporalio", "ruby"],
       ["PHP", "Activities.php", "temporal/sdk", "php"],
     ] as const)(
@@ -217,6 +228,11 @@ describe("the SDK registry", () => {
         "This is a synchronous activity. The .NET SDK runs it for you, so your worker needs no special setup.",
       ],
       [
+        "Rust",
+        "Synchronous: the worker needs no special setup",
+        "This is a synchronous activity. Your worker needs no special setup to run it.",
+      ],
+      [
         "Ruby",
         "Synchronous: the worker needs no special setup",
         "This is a synchronous activity. Your worker needs no special setup to run it.",
@@ -232,5 +248,18 @@ describe("the SDK registry", () => {
         });
       },
     );
+
+    it("never names a thread pool in Rust's wording, whatever the activity", () => {
+      const { runsAs, workerRequirements } = sdkRegistry.Rust.display;
+      for (const wording of [
+        runsAs.sync,
+        runsAs.async,
+        workerRequirements.sync,
+        workerRequirements.async,
+      ]) {
+        expect(wording).not.toMatch(/thread/i);
+      }
+      expect(workerRequirements.async).toContain("no special setup");
+    });
   });
 });

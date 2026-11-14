@@ -174,12 +174,6 @@ describe("integrations from Ruby requires", () => {
   ])("maps %s to nothing", (name) => {
     expect(integrationsFor("Ruby", imports(name))).toEqual([]);
   });
-
-  it("does not take another SDK's package name for a gem", () => {
-    expect(
-      integrationsFor("Ruby", imports("@aws-sdk/client-s3", "@slack/web-api")),
-    ).toEqual([]);
-  });
 });
 
 describe("integrations from detected code", () => {

@@ -46,6 +46,7 @@ describe("the SDK catalog", () => {
       ".NET",
       "Ruby",
       "PHP",
+      "Rust",
     ]);
   });
 
@@ -60,6 +61,7 @@ describe("the SDK catalog", () => {
         sdkRegistry.PHP,
         sdkRegistry.Java,
         sdkRegistry.Ruby,
+        sdkRegistry.Rust,
         sdkRegistry[".NET"],
         sdkRegistry.Python,
       ],
@@ -67,6 +69,7 @@ describe("the SDK catalog", () => {
     [
       "another shuffled order",
       [
+        sdkRegistry.Rust,
         sdkRegistry.PHP,
         sdkRegistry[".NET"],
         sdkRegistry.Python,
@@ -85,6 +88,7 @@ describe("the SDK catalog", () => {
       ".NET",
       "Ruby",
       "PHP",
+      "Rust",
     ]);
   });
 

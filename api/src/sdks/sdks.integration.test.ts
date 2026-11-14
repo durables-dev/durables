@@ -25,6 +25,7 @@ describe("reading the SDK catalog", () => {
       ".NET",
       "Ruby",
       "PHP",
+      "Rust",
     ]);
     expect(catalog).toHaveLength(registeredSdks.length);
   });

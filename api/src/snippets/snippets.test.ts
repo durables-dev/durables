@@ -28,6 +28,7 @@ const factsFor = (
       ".NET": "ChargeCardAsync",
       Ruby: "ChargeCard",
       PHP: "chargeCard",
+      Rust: "charge_card",
     }[sdk],
     line: 1,
   },
@@ -48,6 +49,7 @@ const factsFor = (
         ".NET": "Stripe",
         Ruby: "stripe",
         PHP: "Stripe",
+        Rust: "stripe",
       }[sdk],
       line: 2,
     },
@@ -64,6 +66,7 @@ const fileLabels = (sdk: AcceptedSdk, workflowClass = "ChargeCardWorkflow") =>
     Python: ["workflows.py", "worker.py", "start.py"],
     TypeScript: ["workflows.ts", "worker.ts", "start.ts"],
     ".NET": [`${workflowClass}.cs`, "Program.cs", "Starter.cs"],
+    Rust: ["workflows.rs", "main.rs", "starter.rs"],
     Ruby: ["workflow.rb", "worker.rb", "starter.rb"],
     PHP: [`${workflowClass}.php`, "worker.php", "starter.php"],
   })[sdk];
@@ -127,6 +130,7 @@ const lineComments: Record<AcceptedSdk, string> = {
   Python: "#",
   TypeScript: "//",
   ".NET": "//",
+  Rust: "//",
   Ruby: "#",
   PHP: "//",
 };
@@ -642,6 +646,155 @@ const expectedSnippets: Record<AcceptedSdk, Snippet[]> = {
         "export STRIPE_API_KEY=...",
         "dotnet run",
         "dotnet run -- start",
+      ].join("\n"),
+    },
+  ],
+  Rust: [
+    {
+      label: "Install",
+      code: [
+        "[dependencies]",
+        'futures = "0.3"',
+        'serde = { version = "1", features = ["derive"] }',
+        'temporalio-client = "1.0.0"',
+        'temporalio-common = "1.0.0"',
+        'temporalio-macros = "1.0.0"',
+        'temporalio-sdk = "1.0.0"',
+        'temporalio-workflow = "1.0.0"',
+        'tokio = { version = "1", features = ["full"] }',
+        "# Also add the crates that provide: stripe",
+      ].join("\n"),
+    },
+    {
+      label: "workflows.rs",
+      code: [
+        "use std::time::Duration;",
+        "",
+        "use temporalio_macros::{workflow, workflow_methods};",
+        "use temporalio_sdk::{ActivityOptions, WorkflowContext, WorkflowContextView, WorkflowResult};",
+        "",
+        "use crate::activities::{Activities, ChargeRequest, ChargeResult};",
+        "",
+        "// Activities stands in for the type whose #[activities] impl declares charge_card. Change it",
+        "// to your type's name here and in main.rs.",
+        "#[workflow]",
+        "pub struct ChargeCardWorkflow {",
+        "    input: ChargeRequest,",
+        "}",
+        "",
+        "#[workflow_methods]",
+        "impl ChargeCardWorkflow {",
+        "    #[init]",
+        "    fn new(_ctx: &WorkflowContextView, input: ChargeRequest) -> Self {",
+        "        Self { input }",
+        "    }",
+        "",
+        "    #[run]",
+        "    pub async fn run(ctx: &mut WorkflowContext<Self>) -> WorkflowResult<ChargeResult> {",
+        "        // Reading the input from the workflow's state needs ChargeRequest to implement Clone.",
+        "        let input = ctx.state(|s| s.input.clone());",
+        "        let result = ctx",
+        "            .execute_activity(",
+        "                Activities::charge_card,",
+        "                input,",
+        "                // Temporal requires a start-to-close timeout. Set it for your activity.",
+        "                ActivityOptions::start_to_close_timeout(Duration::from_secs(30)),",
+        "            )",
+        "            .await?;",
+        "        Ok(result)",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "main.rs",
+      code: [
+        "use temporalio_client::{",
+        "    Client, ClientOptions, Connection,",
+        "    envconfig::LoadClientConfigProfileOptions,",
+        "};",
+        "use temporalio_sdk::{Runtime, Worker, WorkerOptions};",
+        "",
+        "mod activities;",
+        "mod starter;",
+        "mod workflows;",
+        "",
+        "use crate::activities::Activities;",
+        "use crate::workflows::ChargeCardWorkflow;",
+        "",
+        "#[tokio::main]",
+        "async fn main() -> Result<(), Box<dyn std::error::Error>> {",
+        '    if std::env::args().nth(1).as_deref() == Some("start") {',
+        "        return starter::run().await;",
+        "    }",
+        "",
+        "    let runtime = Runtime::from_current_tokio(Default::default())?;",
+        "",
+        "    let (connection_options, client_options) = ClientOptions::load_from_config(",
+        "        LoadClientConfigProfileOptions::default(),",
+        "    )?;",
+        "",
+        "    let connection = Connection::connect(connection_options).await?;",
+        "    let client = Client::new(connection, client_options)?;",
+        "",
+        "    // Activities stands in for the type whose #[activities] impl declares charge_card.",
+        "    // Change it to your type's name, and pass it what your activities need.",
+        '    let worker_options = WorkerOptions::new("charge-card")',
+        "        .register_activities(Activities)",
+        "        .register_workflow::<ChargeCardWorkflow>()?",
+        "        .build();",
+        "",
+        "    let mut worker = Worker::new(&runtime, client, worker_options)?;",
+        "    worker.run().await?;",
+        "",
+        "    Ok(())",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "starter.rs",
+      code: [
+        "use std::time::{SystemTime, UNIX_EPOCH};",
+        "",
+        "use temporalio_client::{",
+        "    Client, ClientOptions, Connection, GetWorkflowResultOptions, WorkflowOptions,",
+        "    envconfig::LoadClientConfigProfileOptions,",
+        "};",
+        "",
+        "use crate::activities::ChargeRequest;",
+        "use crate::workflows::ChargeCardWorkflow;",
+        "",
+        "pub async fn run() -> Result<(), Box<dyn std::error::Error>> {",
+        "    let (connection_options, client_options) = ClientOptions::load_from_config(",
+        "        LoadClientConfigProfileOptions::default(),",
+        "    )?;",
+        "",
+        "    let connection = Connection::connect(connection_options).await?;",
+        "    let client = Client::new(connection, client_options)?;",
+        "",
+        "    // Fill in the input to pass to charge_card.",
+        "    let input: ChargeRequest = todo!();",
+        "    let started = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();",
+        "    let handle = client",
+        "        .start_workflow(",
+        "            ChargeCardWorkflow::run,",
+        "            input,",
+        '            WorkflowOptions::new("charge-card", format!("charge-card-{}", started)).build(),',
+        "        )",
+        "        .await?;",
+        "    let result = handle.get_result(GetWorkflowResultOptions::default()).await?;",
+        '    println!("{result:?}");',
+        "    Ok(())",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "Run",
+      code: [
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "cargo run",
+        "cargo run -- start",
       ].join("\n"),
     },
   ],
@@ -1592,6 +1745,7 @@ describe("generateSnippets", () => {
         '({\n    // Temporal requires a start-to-close timeout. Set it for your activity.\n    startToCloseTimeout: "30 seconds",\n});',
       ".NET":
         "            {\n                // Temporal requires a start-to-close timeout. Set it for your activity.\n                StartToCloseTimeout = TimeSpan.FromSeconds(30),\n            });",
+      Rust: "                input,\n                // Temporal requires a start-to-close timeout. Set it for your activity.\n                ActivityOptions::start_to_close_timeout(Duration::from_secs(30)),\n            )",
       Ruby: "            # Temporal requires a start-to-close timeout. Set it for your activity.\n            start_to_close_timeout: 30\n        )",
       PHP: "            // Temporal requires a start-to-close timeout. Set it for your activity.\n            ActivityOptions::new()->withStartToCloseTimeout(30),\n        );",
     };
@@ -1699,6 +1853,10 @@ describe("generateSnippets", () => {
         "dotnet new console --output charge-card\ncd charge-card\ndotnet add package Temporalio",
       ],
       [
+        "Rust",
+        '[dependencies]\nfutures = "0.3"\nserde = { version = "1", features = ["derive"] }\ntemporalio-client = "1.0.0"\ntemporalio-common = "1.0.0"\ntemporalio-macros = "1.0.0"\ntemporalio-sdk = "1.0.0"\ntemporalio-workflow = "1.0.0"\ntokio = { version = "1", features = ["full"] }',
+      ],
+      [
         "PHP",
         "composer require temporal/sdk\n./vendor/bin/rr get\n# RoadRunner needs PHP's grpc extension. Install it with: pecl install grpc",
       ],
@@ -1729,6 +1887,7 @@ describe("generateSnippets", () => {
       ["Python", "activities.py"],
       ["TypeScript", "activities.ts"],
       [".NET", "Activities.cs"],
+      ["Rust", "activities.rs"],
       ["Ruby", "activities.rb"],
       ["PHP", "Activities.php"],
     ] as const)(
@@ -1741,6 +1900,7 @@ describe("generateSnippets", () => {
           Python: "from activities import",
           TypeScript: 'from "./activities"',
           ".NET": "activities.ChargeCardAsync",
+          Rust: "use crate::activities::",
           Ruby: 'require_relative "activities"',
           PHP: "Activities::class",
         }[sdk];
@@ -1749,6 +1909,154 @@ describe("generateSnippets", () => {
         }
       },
     );
+  });
+
+  describe("Rust", () => {
+    const rustSnippets = (changes: Partial<FactValues> = {}) =>
+      generateSnippets(factsFor("Rust", changes), address);
+
+    it("installs with the quickstart's Cargo.toml fragment and notes each detected crate", () => {
+      const install = snippet(
+        rustSnippets({
+          dependencies: [
+            { name: "aws_sdk_s3", line: 1 },
+            { name: "serde", line: 2 },
+            { name: "slack_morphism", line: 3 },
+            { name: "tokio", line: 4 },
+          ],
+        }),
+        installLabel,
+      );
+      expect(install.split("\n")[0]).toBe("[dependencies]");
+      expect(install).toContain('temporalio-sdk = "1.0.0"');
+      expect(install).not.toMatch(/cargo add/);
+      // serde and tokio are already in the fragment, so the note leaves them out.
+      expect(install.split("\n").at(-1)).toBe(
+        "# Also add the crates that provide: aws_sdk_s3, slack_morphism",
+      );
+    });
+
+    it("names every file in Rust and runs the worker with cargo run", () => {
+      const snippets = rustSnippets();
+      expect(files(snippets).map(({ label }) => label)).toEqual([
+        "workflows.rs",
+        "main.rs",
+        "starter.rs",
+      ]);
+      expect(snippet(snippets, runLabel).split("\n")).toEqual([
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "cargo run",
+        "cargo run -- start",
+      ]);
+      expect(snippet(snippets, "main.rs")).toContain("mod activities;");
+    });
+
+    it("never sets up a thread pool, for a sync or an async activity", () => {
+      for (const runsAs of ["sync", "async"] as const) {
+        for (const { code } of rustSnippets({ runsAs })) {
+          expect(code).not.toMatch(/thread/i);
+        }
+      }
+    });
+
+    it("gives an unread input a type alias the developer changes", () => {
+      const snippets = rustSnippets({ input: null });
+      const workflow = snippet(snippets, "workflows.rs");
+      expect(workflow).toContain(
+        "// Detection couldn't read what charge_card takes. Change Input to its input type, and\n",
+      );
+      expect(workflow).toContain("pub type Input = ();");
+      expect(workflow).toContain(
+        "use crate::activities::{Activities, ChargeResult};",
+      );
+      const starter = snippet(snippets, "starter.rs");
+      expect(starter).toContain(
+        "use crate::workflows::{ChargeCardWorkflow, Input};",
+      );
+      expect(starter).toContain("    let input: Input = todo!();");
+      expect(starter).not.toContain("crate::activities");
+    });
+
+    it("returns () and prints nothing when the activity has no output", () => {
+      const snippets = rustSnippets({ output: null });
+      const workflow = snippet(snippets, "workflows.rs");
+      expect(workflow).toContain("-> WorkflowResult<()> {");
+      expect(workflow).toContain("        ctx\n            .execute_activity(");
+      expect(workflow).toContain("        Ok(())\n");
+      expect(workflow).toContain(
+        "use crate::activities::{Activities, ChargeRequest};",
+      );
+      const starter = snippet(snippets, "starter.rs");
+      expect(starter).toContain(
+        "    handle.get_result(GetWorkflowResultOptions::default()).await?;\n    Ok(())",
+      );
+      expect(starter).not.toContain("println!");
+    });
+
+    it("imports only the names a type needs from the activity's file", () => {
+      const snippets = rustSnippets({
+        input: "Vec<models::Item>",
+        output: "Option<HashMap<String, Receipt>>",
+      });
+      expect(snippet(snippets, "workflows.rs")).toContain(
+        "use crate::activities::{Activities, HashMap, Receipt};",
+      );
+      expect(snippet(snippets, "starter.rs")).not.toContain(
+        "use crate::activities",
+      );
+    });
+
+    it("names the workflow from a raw or underscore-led activity name", () => {
+      expect(
+        snippet(
+          rustSnippets({ activity: { name: "r#match", line: 1 } }),
+          "workflows.rs",
+        ),
+      ).toContain("pub struct MatchWorkflow {");
+      expect(
+        snippet(
+          rustSnippets({ activity: { name: "_9lives", line: 1 } }),
+          "workflows.rs",
+        ),
+      ).toContain("pub struct Activity9livesWorkflow {");
+    });
+
+    it("escapes quotes, backslashes and braces in the address for Rust's strings", () => {
+      const snippets = generateSnippets(factsFor("Rust"), {
+        ...address,
+        name: 'a"b\\c{d}',
+      });
+      expect(snippet(snippets, "main.rs")).toContain(
+        'WorkerOptions::new("a\\"b\\\\c{d}")',
+      );
+      expect(snippet(snippets, "starter.rs")).toContain(
+        'format!("a\\"b\\\\c{{d}}-{}", started)',
+      );
+    });
+
+    it("generates from a detected Rust activity", () => {
+      const code = [
+        "use std::env;",
+        "use stripe::Client;",
+        "use temporalio_macros::activities;",
+        "use temporalio_sdk::activities::{ActivityContext, ActivityError};",
+        "",
+        "pub struct Payments;",
+        "",
+        "#[activities]",
+        "impl Payments {",
+        "    #[activity]",
+        "    pub async fn charge_card(ctx: ActivityContext, input: ChargeRequest) -> Result<ChargeResult, ActivityError> {",
+        '        let key = env::var("STRIPE_API_KEY")?;',
+        "        todo!()",
+        "    }",
+        "}",
+      ].join("\n");
+      expect(
+        generateSnippets(checkCode(code, registeredSdks), address),
+      ).toEqual(expectedSnippets.Rust);
+    });
   });
 });
 

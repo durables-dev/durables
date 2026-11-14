@@ -13,9 +13,9 @@ interface IntegrationPackages {
    * The integration keys of this integration's client libraries: package names for Python and
    * TypeScript, the namespace root of a `using` for .NET, the import path before any
    * major-version suffix for Go, a package's organisation or AWS service for Java, the
-   * package-level namespace for PHP, such as `Aws\S3`, and gem names for Ruby. A dependency
-   * implies the integration when its SDK's normaliser gives one of these keys, or, for a PHP
-   * namespace, a namespace inside one of them. Keys are compared without regard to case.
+   * package-level namespace for PHP, such as `Aws\S3`, gem names for Ruby and crate names for
+   * Rust. A dependency implies the integration when its SDK's normaliser gives it the same key
+   * as one of these, or, for a PHP namespace, a namespace inside one of them.
    */
   readonly packages: readonly string[];
 }
@@ -36,6 +36,7 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "com.amazonaws.services.s3",
       "Aws\\S3",
       "aws-sdk-s3",
+      "rusoto_s3",
     ],
   },
   {
@@ -50,6 +51,7 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "github.com/lib/pq",
       "org.postgresql",
       "Amp\\Postgres",
+      "tokio-postgres",
     ],
   },
   {
@@ -62,13 +64,19 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "com.slack",
       "JoliCode\\Slack",
       "slack-ruby-client",
+      "slack-morphism",
     ],
   },
-  // "stripe" is also the Stripe.net package's .NET namespace root, stripe-php's namespace and
-  // the Ruby gem.
+  // "stripe" is also the Stripe.net package's .NET namespace root, stripe-php's namespace, the
+  // Ruby gem, and the crate name Rust code uses async-stripe by.
   {
     integration: "Stripe",
-    packages: ["stripe", "github.com/stripe/stripe-go", "com.stripe"],
+    packages: [
+      "stripe",
+      "github.com/stripe/stripe-go",
+      "com.stripe",
+      "async-stripe",
+    ],
   },
 ];
 
@@ -83,9 +91,10 @@ const isWithin = (imported: string, key: string) =>
   imported === key || imported.startsWith(`${key}${namespaceSeparator}`);
 
 /**
- * The integrations an SDK's detected third-party imports imply, each once. Each dependency
- * goes through the SDK's normaliser first. The order is the order of `integrationPackages`,
- * whatever order the imports came in. Empty when no import implies an integration.
+ * The integrations an SDK's detected third-party imports imply, each once. Each dependency and
+ * each package goes through the SDK's normaliser, so the two compare as that SDK reads them.
+ * The order is the order of `integrationPackages`, whatever order the imports came in. Empty
+ * when no import implies an integration.
  */
 export const integrationsFor = (
   sdk: Sdk,
@@ -96,7 +105,7 @@ export const integrationsFor = (
   return integrationPackages
     .filter(({ packages }) =>
       packages.some((name) =>
-        imported.some((key) => isWithin(key, name.toLowerCase())),
+        imported.some((key) => isWithin(key, normaliseDependency(name))),
       ),
     )
     .map(({ integration }) => integration);

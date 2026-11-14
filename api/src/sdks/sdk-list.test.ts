@@ -4,7 +4,7 @@ import type { SdkRegistry } from "./sdk-entry";
 import { type Sdk, sdkSchema, sdks } from "./sdk-list";
 
 describe("the api's SDK list", () => {
-  it("holds Go, Java, Python, TypeScript, .NET, Ruby and PHP, in Temporal's order", () => {
+  it("holds every SDK Temporal officially supports, in Temporal's order", () => {
     expect(sdks).toEqual([
       "Go",
       "Java",
@@ -13,6 +13,7 @@ describe("the api's SDK list", () => {
       ".NET",
       "Ruby",
       "PHP",
+      "Rust",
     ]);
   });
 
@@ -26,17 +27,10 @@ describe("the api's SDK list", () => {
     expect(sdkSchema.parse(sdk)).toBe(sdk);
   });
 
-  it.each([
-    "Kotlin",
-    "Rust",
-    "go",
-    "java",
-    "python",
-    "php",
-    "ruby",
-    "",
-    ".net",
-  ])("refuses %j, which is not in the list", (name) => {
-    expect(sdkSchema.safeParse(name).success).toBe(false);
-  });
+  it.each(["Kotlin", "go", "java", "python", "php", "ruby", "", ".net"])(
+    "refuses %j, which is not in the list",
+    (name) => {
+      expect(sdkSchema.safeParse(name).success).toBe(false);
+    },
+  );
 });

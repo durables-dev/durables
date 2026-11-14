@@ -1,0 +1,31 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use temporalio_client::{
+    Client, ClientOptions, Connection, GetWorkflowResultOptions, WorkflowOptions,
+    envconfig::LoadClientConfigProfileOptions,
+};
+
+{{workflowsUse}}
+
+pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let (connection_options, client_options) = ClientOptions::load_from_config(
+        LoadClientConfigProfileOptions::default(),
+    )?;
+
+    let connection = Connection::connect(connection_options).await?;
+    let client = Client::new(connection, client_options)?;
+
+    // Fill in the input to pass to {{activity}}, once Input in workflows.rs is its type.
+    let input: Input = todo!();
+    let started = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
+    let handle = client
+        .start_workflow(
+            {{workflowClass}}::run,
+            input,
+            WorkflowOptions::new({{taskQueue}}, format!({{workflowIdFormat}}, started)).build(),
+        )
+        .await?;
+    {{resultBinding}}handle.get_result(GetWorkflowResultOptions::default()).await?;
+    {{printResult}}
+    Ok(())
+}
