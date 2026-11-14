@@ -182,3 +182,74 @@ export const pythonWithoutEnvironment: TestVersion = {
       : snippet,
   ),
 };
+
+/**
+ * A PHP version as the api answers it: install, the workflow, worker and starter files, run,
+ * then the RoadRunner config the worker needs.
+ */
+export const php: TestVersion = {
+  sdk: "PHP",
+  address: "ddieruf/charge-card@1.0.0",
+  code: "<?php\n\nclass Activities\n{\n    public function chargeCard(string $input): string\n    {\n        return $input;\n    }\n}\n",
+  activityFileName: "Activities.php",
+  snippets: [
+    {
+      label: "Install",
+      code: "composer require temporal/sdk\n./vendor/bin/rr get\n# RoadRunner needs PHP's grpc extension. Install it with: pecl install grpc",
+    },
+    {
+      label: "ChargeCardWorkflow.php",
+      code: "<?php\n\ndeclare(strict_types=1);\n\nclass ChargeCardWorkflow\n{\n}",
+    },
+    {
+      label: "worker.php",
+      code: "<?php\n\ndeclare(strict_types=1);\n\nuse Temporal\\WorkerFactory;\n\n$factory = WorkerFactory::create();\n$factory->run();",
+    },
+    {
+      label: "starter.php",
+      code: "<?php\n\ndeclare(strict_types=1);\n\nrequire 'vendor/autoload.php';",
+    },
+    {
+      label: "Run",
+      code: "temporal server start-dev\n./rr serve\nphp starter.php",
+    },
+    {
+      label: ".rr.yaml",
+      code: 'version: "3"\nrpc:\n    listen: tcp://127.0.0.1:6001\nserver:\n    command: "php worker.php"\ntemporal:\n    address: "127.0.0.1:7233"\nlogs:\n    level: info',
+    },
+  ],
+};
+
+/** A published activity in each new SDK, with the catalog's highlight language for it. */
+export const newSdkSamples = [
+  {
+    sdk: "Go",
+    highlightLanguage: "go",
+    activityFileName: "activities.go",
+    code: 'package activities\n\nfunc ChargeCard(ctx context.Context, input Charge) (string, error) {\n    return "ok", nil\n}\n',
+  },
+  {
+    sdk: "Java",
+    highlightLanguage: "java",
+    activityFileName: "ActivitiesImpl.java",
+    code: "public class ActivitiesImpl implements Activities {\n    @Override\n    public String charge(String input) {\n        return input;\n    }\n}\n",
+  },
+  {
+    sdk: "Ruby",
+    highlightLanguage: "ruby",
+    activityFileName: "activities.rb",
+    code: "class ChargeCard < Temporalio::Activity::Definition\n    def execute(input)\n        'ok'\n    end\nend\n",
+  },
+  {
+    sdk: "PHP",
+    highlightLanguage: "php",
+    activityFileName: php.activityFileName,
+    code: php.code,
+  },
+  {
+    sdk: "Rust",
+    highlightLanguage: "rust",
+    activityFileName: "activities.rs",
+    code: "pub async fn charge_card(input: Charge) -> Result<String, Error> {\n    let id = input.id;\n    Ok(id)\n}\n",
+  },
+] as const;
