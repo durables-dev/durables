@@ -1031,8 +1031,9 @@ function declaredOr(undeclared: () => Response) {
       : HttpResponse.json(goFacts(declaredSdk, "declared"));
 }
 
+/** The "Change the SDK" link, whichever SDK it names. */
 function changeLink(screen: Screen) {
-  return screen.getByRole("button", { name: "Change the SDK" });
+  return screen.getByRole("button", { name: /^Change the SDK\b/ });
 }
 
 function sdkSelect(screen: Screen) {
@@ -1062,7 +1063,7 @@ describe("the Found line's SDK", () => {
     expect(sdkSelect(screen).elements()).toHaveLength(0);
   });
 
-  test("an inferred SDK says so, and its name is a link labelled Change the SDK", async () => {
+  test("an inferred SDK says so, and its name is a link labelled Change the SDK, with the SDK", async () => {
     answerChecks(() => HttpResponse.json(goFacts("Go", "inferred")));
     const { screen } = await openToCheck();
 
@@ -1075,6 +1076,9 @@ describe("the Found line's SDK", () => {
       );
     await expect.element(changeLink(screen)).toBeVisible();
     await expect.element(changeLink(screen)).toHaveTextContent("Go");
+    await expect
+      .element(changeLink(screen))
+      .toHaveAccessibleName("Change the SDK, Go");
     await expect.element(continueButton(screen)).toBeEnabled();
   });
 
@@ -1114,6 +1118,9 @@ describe("the Found line's SDK", () => {
       { code: pastedCode, declaredSdk: "Rust" },
     ]);
     await expect.element(changeLink(screen)).toHaveTextContent("Rust");
+    await expect
+      .element(changeLink(screen))
+      .toHaveAccessibleName("Change the SDK, Rust");
     // Focus returns to the link once the dropdown that replaced it is gone.
     await expect.element(changeLink(screen)).toHaveFocus();
     await expect.element(continueButton(screen)).toBeEnabled();

@@ -63,7 +63,8 @@ function sdkOptions(
 // the right of the row to open the code in a read-only dialog. A refusal shows in a
 // Gold-tint panel.
 //
-// An inferred or declared SDK's name on the Found line is a link labelled "Change the SDK".
+// An inferred or declared SDK's name on the Found line is a link labelled "Change the SDK",
+// followed by the SDK, such as "Change the SDK, Go".
 // Pressing it turns it into a dropdown of every SDK in the catalog, and choosing one checks
 // the code again with that SDK. When the api can't tell the SDK, a dropdown labelled "SDK"
 // sits under the message until a check with the chosen SDK finds the activity. The dropdowns
@@ -92,7 +93,7 @@ export function CheckLineRow({
         <button
           ref={restoreFocus}
           type="button"
-          aria-label="Change the SDK"
+          aria-label={`Change the SDK, ${facts.sdk}`}
           className={styles["sdkLink"]}
           onClick={() => {
             setChanging(facts);
