@@ -1,0 +1,14 @@
+require "temporalio/client"
+require "temporalio/worker"
+
+require_relative "activities"
+require_relative "workflow"
+
+client = Temporalio::Client.connect("localhost:7233", "default")
+worker = Temporalio::Worker.new(
+    client: client,
+    task_queue: {{taskQueue}},
+    workflows: [{{workflowClass}}],
+    activities: [{{activity}}]
+)
+worker.run(shutdown_signals: ["SIGINT"])

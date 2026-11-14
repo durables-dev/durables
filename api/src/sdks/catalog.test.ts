@@ -44,6 +44,7 @@ describe("the SDK catalog", () => {
       "Python",
       "TypeScript",
       ".NET",
+      "Ruby",
       "PHP",
     ]);
   });
@@ -58,6 +59,7 @@ describe("the SDK catalog", () => {
         sdkRegistry.Go,
         sdkRegistry.PHP,
         sdkRegistry.Java,
+        sdkRegistry.Ruby,
         sdkRegistry[".NET"],
         sdkRegistry.Python,
       ],
@@ -71,6 +73,7 @@ describe("the SDK catalog", () => {
         sdkRegistry.TypeScript,
         sdkRegistry.Go,
         sdkRegistry.Java,
+        sdkRegistry.Ruby,
       ],
     ],
   ])("keeps chip order when the entries come in %s", (_order, entries) => {
@@ -80,6 +83,7 @@ describe("the SDK catalog", () => {
       "Python",
       "TypeScript",
       ".NET",
+      "Ruby",
       "PHP",
     ]);
   });
@@ -175,6 +179,21 @@ describe("the SDK catalog", () => {
 
     expect(python.runsAs.sync).toMatch(threadPool);
     expect(python.workerRequirements.sync).toMatch(threadPool);
+  });
+
+  it("tells Ruby, whose worker sets up nothing, that it needs no special setup, with no thread pool", () => {
+    const ruby = sdkRegistry.Ruby.display;
+
+    for (const wording of [
+      ruby.runsAs.sync,
+      ruby.runsAs.async,
+      ruby.workerRequirements.sync,
+      ruby.workerRequirements.async,
+    ]) {
+      expect(wording).not.toMatch(threadPool);
+    }
+    expect(ruby.workerRequirements.sync).toContain("no special setup");
+    expect(ruby.workerRequirements.async).toContain("no special setup");
   });
 
   it("names no thread pool in .NET's sync Runs as or its Configure wording", () => {

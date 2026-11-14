@@ -3,6 +3,7 @@ import { php } from "./php";
 import { go } from "./go";
 import { java } from "./java";
 import { python } from "./python";
+import { ruby } from "./ruby";
 import type { SdkEntry, SdkRegistry } from "./sdk-entry";
 import { sdks } from "./sdk-list";
 import { typescript } from "./typescript";
@@ -16,6 +17,7 @@ export const sdkRegistry: SdkRegistry = {
   Python: python,
   TypeScript: typescript,
   ".NET": dotnet,
+  Ruby: ruby,
   PHP: php,
 };
 

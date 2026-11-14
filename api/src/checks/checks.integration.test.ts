@@ -274,6 +274,61 @@ describe("POST /api/checks", () => {
     expect(await response.json()).toEqual(postSlackMessageFacts);
   });
 
+  describe("a Ruby file", () => {
+    const chargeCard = lines(
+      'require "stripe"',
+      'require "json"',
+      'require "temporalio/activity"',
+      "",
+      "class ChargeCard < Temporalio::Activity::Definition",
+      "    sig { params(input: ChargeRequest).returns(ChargeResult) }",
+      "    def execute(input)",
+      "        Temporalio::Activity::Context.current.heartbeat",
+      '        Stripe.api_key = ENV["STRIPE_API_KEY"]',
+      "        raise Temporalio::Error::ApplicationError.new(",
+      '            "Declined", non_retryable: true',
+      "        )",
+      "    end",
+      "end",
+      "",
+    );
+
+    test("answers 200 with Ruby and its eight facts, the SDK detected", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(cookie, chargeCard);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        sdk: "Ruby",
+        activity: { name: "ChargeCard", line: 5 },
+        input: "ChargeRequest",
+        output: "ChargeResult",
+        runsAs: "sync",
+        nonRetryableErrors: [{ line: 11 }],
+        configurationRead: [{ name: "STRIPE_API_KEY", line: 9 }],
+        dependencies: [{ name: "stripe", line: 1 }],
+        heartbeats: [{ line: 8 }],
+        provenance: { ...postSlackMessageFacts.provenance, sdk: "detected" },
+      });
+    });
+
+    test("answers 422 no activity, naming Ruby, for a Ruby file with no activity class", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(
+        cookie,
+        lines('require "temporalio/client"', "puts 1"),
+      );
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        type: refusalTypes.noActivity,
+        sdk: "Ruby",
+      });
+    });
+  });
+
   describe("a declared SDK", () => {
     test("answers 200 with the declared SDK's facts and the SDK declared", async () => {
       const cookie = await signIn();

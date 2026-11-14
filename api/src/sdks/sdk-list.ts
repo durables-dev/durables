@@ -14,6 +14,7 @@ export const sdks = [
   "Python",
   "TypeScript",
   ".NET",
+  "Ruby",
   "PHP",
 ] as const;
 

@@ -46,7 +46,7 @@ describe("the browse query", () => {
 
   test("names every SDK in the api's list in the filter message", () => {
     expect(sdkFilterMessage).toBe(
-      "Choose Go, Java, Python, TypeScript, .NET or PHP.",
+      "Choose Go, Java, Python, TypeScript, .NET, Ruby or PHP.",
     );
   });
 

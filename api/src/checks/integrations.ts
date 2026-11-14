@@ -12,10 +12,10 @@ interface IntegrationPackages {
   /**
    * The integration keys of this integration's client libraries: package names for Python and
    * TypeScript, the namespace root of a `using` for .NET, the import path before any
-   * major-version suffix for Go, a package's organisation or AWS service for Java, and the
-   * package-level namespace for PHP, such as `Aws\S3`. A dependency implies the integration
-   * when its SDK's normaliser gives one of these keys, or, for a PHP namespace, a namespace
-   * inside one of them. Keys are compared without regard to case.
+   * major-version suffix for Go, a package's organisation or AWS service for Java, the
+   * package-level namespace for PHP, such as `Aws\S3`, and gem names for Ruby. A dependency
+   * implies the integration when its SDK's normaliser gives one of these keys, or, for a PHP
+   * namespace, a namespace inside one of them. Keys are compared without regard to case.
    */
   readonly packages: readonly string[];
 }
@@ -35,6 +35,7 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "software.amazon.awssdk.services.s3",
       "com.amazonaws.services.s3",
       "Aws\\S3",
+      "aws-sdk-s3",
     ],
   },
   {
@@ -60,9 +61,11 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "github.com/slack-go/slack",
       "com.slack",
       "JoliCode\\Slack",
+      "slack-ruby-client",
     ],
   },
-  // "stripe" is also the Stripe.net package's .NET namespace root, and stripe-php's namespace.
+  // "stripe" is also the Stripe.net package's .NET namespace root, stripe-php's namespace and
+  // the Ruby gem.
   {
     integration: "Stripe",
     packages: ["stripe", "github.com/stripe/stripe-go", "com.stripe"],
