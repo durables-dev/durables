@@ -12,7 +12,7 @@ import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
 import { draftStorageKey, type Draft } from "./draft";
-import { acceptedCheck, pastedCode } from "./test-drafts";
+import { acceptedCheck, acceptedFacts, pastedCode } from "./test-drafts";
 
 // Publishing from Review: the request it sends, the Published screen, and each refusal. The
 // real route tree, Query and draft; only the API is faked.
@@ -204,6 +204,46 @@ describe("Publish", () => {
         confirmations: allConfirmed,
       },
     ]);
+  });
+
+  test("sends the SDK the publisher declared", async () => {
+    const { screen, session } = await openReview({
+      ...readyDraft,
+      declaredSdk: "Rust",
+      check: {
+        outcome: "accepted",
+        facts: {
+          ...acceptedFacts,
+          sdk: "Rust",
+          provenance: { sdk: "declared" },
+        },
+      },
+    });
+    const bodies = answerPublish(
+      () => HttpResponse.json(created, { status: 201 }),
+      session,
+    );
+
+    await publishButton(screen).click();
+
+    await expect.element(publishedHeading(screen)).toBeVisible();
+    expect(bodies).toEqual([
+      expect.objectContaining({ code: pastedCode, declaredSdk: "Rust" }),
+    ]);
+  });
+
+  test("sends no declared SDK when the publisher chose none", async () => {
+    const { screen, session } = await openReview();
+    const bodies = answerPublish(
+      () => HttpResponse.json(created, { status: 201 }),
+      session,
+    );
+
+    await publishButton(screen).click();
+
+    await expect.element(publishedHeading(screen)).toBeVisible();
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).not.toHaveProperty("declaredSdk");
   });
 
   test("sends the default title and name when the publisher left them", async () => {

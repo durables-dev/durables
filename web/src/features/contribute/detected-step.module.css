@@ -83,6 +83,13 @@
   color: var(--fg-muted);
 }
 
+/* How the SDK was established, under its name. */
+.note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-caption);
+}
+
 @media (max-width: 960px) {
   .facts {
     grid-template-columns: minmax(0, 1fr);

@@ -50,7 +50,7 @@ function rowWith(
 describe("factRows", () => {
   test("gives the eight facts in screen 12's order", () => {
     expect(factRows(everythingFound, profileOf("Python"))).toEqual([
-      { label: "SDK", value: "Python", found: true },
+      { label: "SDK", value: "Python", found: true, note: "Detected" },
       { label: "Activity", value: "post_slack_message", found: true },
       {
         label: "Input → output",
@@ -79,7 +79,7 @@ describe("factRows", () => {
 
   test("gives each fact's fallback, marked not found, when detection found nothing", () => {
     expect(factRows(nothingFound, profileOf("Python"))).toEqual([
-      { label: "SDK", value: "Python", found: true },
+      { label: "SDK", value: "Python", found: true, note: "Detected" },
       { label: "Activity", value: "post_slack_message", found: true },
       { label: "Input → output", value: "—", found: false },
       { label: "Runs as", value: "—", found: false },
@@ -97,9 +97,33 @@ describe("factRows", () => {
         label: "SDK",
         value: sdk,
         found: true,
+        note: "Detected",
       });
     },
   );
+
+  describe("the SDK's tier note", () => {
+    test.each([
+      ["detected", "Detected"],
+      ["inferred", "Inferred from the code"],
+      ["declared", "Declared by you"],
+    ] as const)("a %s SDK says %j under its name", (tier, note) => {
+      expect(
+        row(
+          { ...everythingFound, sdk: "Go", provenance: { sdk: tier } },
+          "SDK",
+        ),
+      ).toEqual({ label: "SDK", value: "Go", found: true, note });
+    });
+
+    test("only the SDK has a note", () => {
+      const notes = factRows(
+        { ...everythingFound, provenance: { sdk: "inferred" } },
+        undefined,
+      ).filter((fact) => fact.note !== undefined);
+      expect(notes.map(({ label }) => label)).toEqual(["SDK"]);
+    });
+  });
 
   describe("Input → output", () => {
     test('shows "—" for a side that can\'t be read', () => {
