@@ -1932,7 +1932,25 @@ describe("generateSnippets", () => {
       expect(install).not.toMatch(/cargo add/);
       // serde and tokio are already in the fragment, so the note leaves them out.
       expect(install.split("\n").at(-1)).toBe(
-        "# Also add the crates that provide: aws_sdk_s3, slack_morphism",
+        "# Also add the crates that provide: aws-sdk-s3, slack-morphism",
+      );
+    });
+
+    it("names an integration crate as Cargo.toml names it, and any other crate as it is used", () => {
+      const install = snippet(
+        rustSnippets({
+          dependencies: [
+            { name: "tokio_postgres", line: 1 },
+            { name: "stripe", line: 2 },
+            { name: "reqwest", line: 3 },
+          ],
+        }),
+        installLabel,
+      );
+      // stripe stays as used: its code comes from async-stripe, and a crate named stripe is
+      // someone else's.
+      expect(install.split("\n").at(-1)).toBe(
+        "# Also add the crates that provide: tokio-postgres, stripe, reqwest",
       );
     });
 
