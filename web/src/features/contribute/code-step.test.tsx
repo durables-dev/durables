@@ -6,9 +6,15 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import {
+  eightSdks,
+  holdCatalog,
+  serveCatalog,
+  eightSdkCatalog,
+} from "../../../test/serve-sdk-catalog";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
-import type { CheckedFacts } from "./check-result";
+import type { CheckedFacts, SdkTier } from "./check-result";
 import { ContributeDraftProvider } from "./contribute-draft-provider";
 import { draftStorageKey, type Draft } from "./draft";
 import {
@@ -592,12 +598,7 @@ describe("a refused file", () => {
     [
       "not-a-temporal-activity",
       {},
-      "This doesn't look like a Python, TypeScript or .NET Temporal activity.",
-    ],
-    [
-      "unaccepted-sdk",
-      { sdk: "Java" },
-      "Durables accepts Python, TypeScript and .NET activities. This file looks like a Java activity.",
+      "This doesn't look like a Temporal activity in any SDK Durables supports.",
     ],
     [
       "multiple-activities",
@@ -630,20 +631,6 @@ describe("a refused file", () => {
       await expect
         .poll(() => sessionStorage.getItem(draftStorageKey))
         .toContain('"outcome":"refused"');
-    },
-  );
-
-  test.each(["Java", "Go", "PHP"])(
-    "the unaccepted-SDK message names %s",
-    async (sdk) => {
-      answerChecks(() => refusal("unaccepted-sdk", { sdk }));
-      const { screen } = await openToCheck();
-
-      await paste(screen, pastedCode);
-
-      await expect
-        .element(checkStatus(screen))
-        .toHaveTextContent(`This file looks like a ${sdk} activity.`);
     },
   );
 
@@ -855,7 +842,7 @@ describe("an older check", () => {
     await expect.element(checkStatus(screen)).toHaveTextContent("Checking…");
     await paste(screen, "print('hello')");
     const newer =
-      "This doesn't look like a Python, TypeScript or .NET Temporal activity.";
+      "This doesn't look like a Temporal activity in any SDK Durables supports.";
     await expect.element(checkStatus(screen)).toHaveTextContent(newer);
 
     older.release(HttpResponse.json(acceptedFacts));
@@ -921,13 +908,15 @@ describe("the status region", () => {
   });
 
   test("announces a refusal", async () => {
-    answerChecks(() => refusal("unaccepted-sdk", { sdk: "Go" }));
+    answerChecks(() => refusal("multiple-activities", { count: 2 }));
     const { screen } = await openToCheck();
 
     await paste(screen, pastedCode);
 
     await expect
-      .element(screen.getByRole("status").filter({ hasText: "Go activity" }))
+      .element(
+        screen.getByRole("status").filter({ hasText: "This file has 2" }),
+      )
       .toBeInTheDocument();
   });
 });
@@ -998,5 +987,347 @@ describe("checking again", () => {
     await expect.element(continueButton(screen)).toBeEnabled();
     await wait(checkPauseMs + 300);
     expect(sent).toEqual([]);
+  });
+});
+
+// The SDK control: how the SDK was established, changing an inferred SDK, and choosing one
+// when the api can't tell.
+
+interface SentCheck {
+  code: string;
+  declaredSdk?: string;
+}
+
+/** The check answers with `respond` for each body it is sent. Returns every body, in order. */
+function answerChecksWithSdk(
+  respond: (sent: SentCheck) => Response | Promise<Response>,
+): SentCheck[] {
+  const sent: SentCheck[] = [];
+  worker.use(
+    http.post("/api/checks", async ({ request }) => {
+      const body = (await request.json()) as SentCheck;
+      sent.push(body);
+      return respond(body);
+    }),
+  );
+  return sent;
+}
+
+/** A Go activity's facts, with how the SDK was established. */
+function goFacts(sdk: string, tier: SdkTier): CheckedFacts {
+  return {
+    ...acceptedFacts,
+    sdk,
+    activity: { name: "Charge", line: 4 },
+    provenance: { sdk: tier },
+  };
+}
+
+/** The declared SDK's facts when one is sent, otherwise `undeclared`. */
+function declaredOr(undeclared: () => Response) {
+  return ({ declaredSdk }: SentCheck) =>
+    declaredSdk === undefined
+      ? undeclared()
+      : HttpResponse.json(goFacts(declaredSdk, "declared"));
+}
+
+/** The "Change the SDK" link, whichever SDK it names. */
+function changeLink(screen: Screen) {
+  return screen.getByRole("button", { name: /^Change the SDK\b/ });
+}
+
+function sdkSelect(screen: Screen) {
+  return screen.getByRole("combobox", { name: "SDK" });
+}
+
+function optionTexts(screen: Screen): string[] {
+  const select = sdkSelect(screen).element() as HTMLSelectElement;
+  return [...select.options].map((option) => option.text);
+}
+
+function hint(screen: Screen) {
+  return screen.getByRole("status").last();
+}
+
+describe("the Found line's SDK", () => {
+  test("a detected SDK is plain text and can't be changed", async () => {
+    answerChecks(() => HttpResponse.json(goFacts("Go", "detected")));
+    const { screen } = await openToCheck();
+
+    await paste(screen, pastedCode);
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent("✓ Found Charge (Go). Next, check what we detected.");
+    expect(changeLink(screen).elements()).toHaveLength(0);
+    expect(sdkSelect(screen).elements()).toHaveLength(0);
+  });
+
+  test("an inferred SDK says so, and its name is a link labelled Change the SDK, with the SDK", async () => {
+    answerChecks(() => HttpResponse.json(goFacts("Go", "inferred")));
+    const { screen } = await openToCheck();
+
+    await paste(screen, pastedCode);
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent(
+        "✓ Found Charge (Go, inferred from the code). Next, check what we detected.",
+      );
+    await expect.element(changeLink(screen)).toBeVisible();
+    await expect.element(changeLink(screen)).toHaveTextContent("Go");
+    await expect
+      .element(changeLink(screen))
+      .toHaveAccessibleName("Change the SDK, Go");
+    await expect.element(continueButton(screen)).toBeEnabled();
+  });
+
+  test("the link opens a dropdown of every catalog SDK, showing the current one", async () => {
+    serveCatalog(eightSdkCatalog);
+    answerChecks(() => HttpResponse.json(goFacts("Go", "inferred")));
+    const { screen } = await openToCheck();
+    await paste(screen, pastedCode);
+
+    await changeLink(screen).click();
+
+    await expect.element(sdkSelect(screen)).toBeVisible();
+    await expect.element(sdkSelect(screen)).toHaveFocus();
+    await expect.element(sdkSelect(screen)).toHaveValue("Go");
+    expect(optionTexts(screen)).toEqual([...eightSdks]);
+    expect(changeLink(screen).elements()).toHaveLength(0);
+  });
+
+  test("choosing an SDK checks again with it declared, and the name stays a link", async () => {
+    serveCatalog(eightSdkCatalog);
+    const sent = answerChecksWithSdk(
+      declaredOr(() => HttpResponse.json(goFacts("Go", "inferred"))),
+    );
+    const { screen } = await openToCheck();
+    await paste(screen, pastedCode);
+    await changeLink(screen).click();
+
+    await sdkSelect(screen).selectOptions("Rust");
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent(
+        "✓ Found Charge (Rust, declared by you). Next, check what we detected.",
+      );
+    expect(sent).toEqual([
+      { code: pastedCode },
+      { code: pastedCode, declaredSdk: "Rust" },
+    ]);
+    await expect.element(changeLink(screen)).toHaveTextContent("Rust");
+    await expect
+      .element(changeLink(screen))
+      .toHaveAccessibleName("Change the SDK, Rust");
+    // Focus returns to the link once the dropdown that replaced it is gone.
+    await expect.element(changeLink(screen)).toHaveFocus();
+    await expect.element(continueButton(screen)).toBeEnabled();
+  });
+
+  test("changing the SDK again replaces the previous result", async () => {
+    serveCatalog(eightSdkCatalog);
+    const sent = answerChecksWithSdk(
+      declaredOr(() => HttpResponse.json(goFacts("Go", "inferred"))),
+    );
+    const { screen } = await openToCheck();
+    await paste(screen, pastedCode);
+    await changeLink(screen).click();
+    await sdkSelect(screen).selectOptions("Rust");
+    await expect.element(changeLink(screen)).toHaveTextContent("Rust");
+
+    await changeLink(screen).click();
+    await sdkSelect(screen).selectOptions("Java");
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent(
+        "✓ Found Charge (Java, declared by you). Next, check what we detected.",
+      );
+    expect(sent.map(({ declaredSdk }) => declaredSdk)).toEqual([
+      undefined,
+      "Rust",
+      "Java",
+    ]);
+    await expect
+      .poll(() => sessionStorage.getItem(draftStorageKey))
+      .toContain('"declaredSdk":"Java"');
+  });
+
+  test("Escape closes the dropdown without checking again", async () => {
+    const sent = answerChecks(() =>
+      HttpResponse.json(goFacts("Go", "inferred")),
+    );
+    const { screen } = await openToCheck();
+    await paste(screen, pastedCode);
+    await changeLink(screen).click();
+    await expect.element(sdkSelect(screen)).toHaveFocus();
+
+    await userEvent.keyboard("{Escape}");
+
+    await expect.element(changeLink(screen)).toBeVisible();
+    expect(sent).toEqual([pastedCode]);
+  });
+
+  test("while the catalog loads, the dropdown is disabled and lists only the current SDK", async () => {
+    answerChecks(() => HttpResponse.json(goFacts("Go", "inferred")));
+    const answer = holdCatalog();
+    const { screen } = await openToCheck();
+    await paste(screen, pastedCode);
+
+    await changeLink(screen).click();
+
+    await expect.element(sdkSelect(screen)).toBeDisabled();
+    expect(optionTexts(screen)).toEqual(["Go"]);
+    answer();
+  });
+});
+
+describe("choosing the SDK when the api can't tell", () => {
+  test.each(["not-identified", "ambiguous"])(
+    "a %s result shows the prompt, every catalog SDK, and disables Continue with the hint",
+    async (reason) => {
+      serveCatalog(eightSdkCatalog);
+      answerChecks(() => refusal("sdk-choice-needed", { reason }));
+      const { screen } = await openToCheck();
+
+      await paste(screen, pastedCode);
+
+      await expect
+        .element(checkStatus(screen))
+        .toHaveTextContent(
+          "We couldn't tell which SDK this is. Choose the one it's written for.",
+        );
+      await expect.element(sdkSelect(screen)).toBeVisible();
+      await expect.element(sdkSelect(screen)).toHaveValue("");
+      await expect
+        .poll(() => optionTexts(screen))
+        .toEqual(["Choose an SDK", ...eightSdks]);
+      await expect.element(continueButton(screen)).toBeDisabled();
+      await expect
+        .element(hint(screen))
+        .toHaveTextContent("Choose the SDK this activity is for");
+      expect(changeLink(screen).elements()).toHaveLength(0);
+    },
+  );
+
+  test("choosing an SDK checks again with it declared and enables Continue", async () => {
+    serveCatalog(eightSdkCatalog);
+    const sent = answerChecksWithSdk(
+      declaredOr(() =>
+        refusal("sdk-choice-needed", { reason: "not-identified" }),
+      ),
+    );
+    const { screen } = await openToCheck();
+    await paste(screen, pastedCode);
+    await expect.element(sdkSelect(screen)).toBeEnabled();
+
+    await sdkSelect(screen).selectOptions("Ruby");
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent(
+        "✓ Found Charge (Ruby, declared by you). Next, check what we detected.",
+      );
+    expect(sent).toEqual([
+      { code: pastedCode },
+      { code: pastedCode, declaredSdk: "Ruby" },
+    ]);
+    await expect.element(continueButton(screen)).toBeEnabled();
+    expect(sdkSelect(screen).elements()).toHaveLength(0);
+    await expect.element(changeLink(screen)).toHaveTextContent("Ruby");
+  });
+
+  test("a chosen SDK that finds no activity says so and keeps the dropdown", async () => {
+    serveCatalog(eightSdkCatalog);
+    answerChecksWithSdk(({ declaredSdk }) =>
+      declaredSdk === undefined
+        ? refusal("sdk-choice-needed", { reason: "not-identified" })
+        : refusal("no-activity", { sdk: declaredSdk }),
+    );
+    const { screen } = await openToCheck();
+    await paste(screen, pastedCode);
+    await expect.element(sdkSelect(screen)).toBeEnabled();
+    // A keyboard user is on the dropdown when they choose.
+    (sdkSelect(screen).element() as HTMLSelectElement).focus();
+
+    await sdkSelect(screen).selectOptions("PHP");
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent(
+        "No activity found for PHP. Check the code, or choose a different SDK.",
+      );
+    await expect.element(sdkSelect(screen)).toBeVisible();
+    await expect.element(sdkSelect(screen)).toHaveValue("PHP");
+    await expect.element(sdkSelect(screen)).toHaveFocus();
+    await expect.element(continueButton(screen)).toBeDisabled();
+  });
+
+  test("while the catalog loads, the dropdown is disabled with no SDKs made up", async () => {
+    answerChecks(() =>
+      refusal("sdk-choice-needed", { reason: "not-identified" }),
+    );
+    const answer = holdCatalog();
+    const { screen } = await openToCheck();
+
+    await paste(screen, pastedCode);
+
+    await expect.element(sdkSelect(screen)).toBeDisabled();
+    expect(optionTexts(screen)).toEqual(["Choose an SDK"]);
+    answer();
+    await expect.element(sdkSelect(screen)).toBeEnabled();
+  });
+
+  test("the declared SDK is kept through a reload", async () => {
+    const sent = answerChecksWithSdk(declaredOr(() => refusal("no-activity")));
+    signIn();
+    keepDraft({ finished: ["profile"], code: pastedCode, declaredSdk: "Go" });
+
+    const { screen } = await openCodeStep();
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent(/\(Go, declared by you\)/);
+    expect(sent).toEqual([{ code: pastedCode, declaredSdk: "Go" }]);
+  });
+});
+
+describe("an empty paste", () => {
+  test("whitespace is checked, gets the not-an-activity line, and no dropdown", async () => {
+    const sent = answerChecksWithSdk(() => refusal("not-a-temporal-activity"));
+    const { screen } = await openToCheck();
+
+    await paste(screen, "   \n\t\n");
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent(
+        "This doesn't look like a Temporal activity in any SDK Durables supports.",
+      );
+    expect(sent).toEqual([{ code: "   \n\t\n" }]);
+    expect(sdkSelect(screen).elements()).toHaveLength(0);
+    expect(changeLink(screen).elements()).toHaveLength(0);
+  });
+
+  test("whitespace pasted over a declared SDK drops it, and opens no dropdown", async () => {
+    const sent = answerChecksWithSdk(({ code }) =>
+      code.trim() === ""
+        ? refusal("not-a-temporal-activity")
+        : refusal("no-activity", { sdk: "Go" }),
+    );
+    signIn();
+    keepDraft({ finished: ["profile"], code: pastedCode, declaredSdk: "Go" });
+    const { screen } = await openCodeStep();
+    await expect.element(sdkSelect(screen)).toBeVisible();
+
+    await paste(screen, " ");
+
+    await expect
+      .element(checkStatus(screen))
+      .toHaveTextContent(/doesn't look like a Temporal activity/);
+    expect(sdkSelect(screen).elements()).toHaveLength(0);
+    expect(sent.at(-1)).toEqual({ code: " " });
   });
 });

@@ -153,6 +153,35 @@ afterEach(() => {
 });
 
 describe("the Detected step", () => {
+  test.each([
+    ["detected", "Detected"],
+    ["inferred", "Inferred from the code"],
+    ["declared", "Declared by you"],
+  ] as const)(
+    "a %s SDK shows %j in muted text under its name, read-only",
+    async (tier, note) => {
+      const { screen } = await openDetected(
+        draftWith({ ...fullFacts, sdk: "Go", provenance: { sdk: tier } }),
+      );
+
+      const value = factValue(screen, "SDK");
+      expect(value.textContent).toBe("Go");
+      const under = value.nextElementSibling;
+      if (!(under instanceof HTMLElement)) {
+        throw new Error("Expected a note under the SDK");
+      }
+      expect(under.tagName).toBe("DD");
+      expect(under.textContent).toBe(note);
+      expect(getComputedStyle(under).color).toBe(tokenColour("--fg-muted"));
+      expect(under.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        value.getBoundingClientRect().bottom,
+      );
+      const facts = card(screen);
+      expect(facts.getByRole("button").elements()).toHaveLength(0);
+      expect(facts.getByRole("combobox").elements()).toHaveLength(0);
+    },
+  );
+
   test("shows the heading, the intro and the card with all eight facts", async () => {
     const { screen } = await openDetected(draftWith(fullFacts));
 

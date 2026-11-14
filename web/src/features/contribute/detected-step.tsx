@@ -62,8 +62,8 @@ interface FactsCardProps {
 }
 
 // The "What we found" card: eight facts in two columns, each a small label above a monospace
-// value. A fact detection couldn't find shows its fallback in muted text. The Runs as wording
-// comes from the SDK catalog.
+// value. A fact detection couldn't find shows its fallback in muted text. The SDK has a muted
+// note under it saying how it was established. The Runs as wording comes from the SDK catalog.
 function FactsCard({ facts }: FactsCardProps) {
   const profile = useSdkProfile(facts.sdk);
   return (
@@ -81,6 +81,9 @@ function FactsCard({ facts }: FactsCardProps) {
             <dd className={styles["value"]} data-found={row.found}>
               {row.value}
             </dd>
+            {row.note === undefined ? null : (
+              <dd className={styles["note"]}>{row.note}</dd>
+            )}
           </div>
         ))}
       </dl>

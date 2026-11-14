@@ -52,10 +52,10 @@ describe("fieldMessage", () => {
 
 test("problemFrom keeps a refusal's extension members", () => {
   const body = {
-    type: "https://durables.dev/problems/unaccepted-sdk",
-    title: "SDK not accepted",
+    type: "https://durables.dev/problems/sdk-choice-needed",
+    title: "Choose an SDK",
     status: 422,
-    sdk: "Go",
+    reason: "ambiguous",
   };
 
   expect(problemFrom(apiError(422, body))).toEqual(body);

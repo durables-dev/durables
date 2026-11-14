@@ -1,5 +1,5 @@
 import type { SdkProfile } from "@/lib/sdk-catalog";
-import type { CheckedFacts } from "./check-result";
+import { sdkTier, type CheckedFacts, type SdkTier } from "./check-result";
 
 // The eight facts on the Detected step's "What we found" card, as the publisher reads them.
 // Line numbers are shown as detection reports them, which is how the editor and "What will
@@ -11,6 +11,8 @@ export interface FactRow {
   value: string;
   /** False when detection found nothing, so the value is a fallback shown muted. */
   found: boolean;
+  /** A muted note under the value, as how the SDK was established. */
+  note?: string | undefined;
 }
 
 /** Said when a type or the way an activity runs can't be read. */
@@ -22,6 +24,18 @@ function found(label: string, value: string): FactRow {
 
 function fallback(label: string, value: string): FactRow {
   return { label, value, found: false };
+}
+
+/** The note under the SDK: how it was established. */
+export const sdkTierNote: Record<SdkTier, string> = {
+  detected: "Detected",
+  inferred: "Inferred from the code",
+  declared: "Declared by you",
+};
+
+/** The SDK's name, with how it was established under it. Read-only. */
+function sdk(facts: CheckedFacts): FactRow {
+  return { ...found("SDK", facts.sdk), note: sdkTierNote[sdkTier(facts)] };
 }
 
 /** "line 7", or "lines 7, 12" when there are several. */
@@ -94,7 +108,7 @@ export function factRows(
   profile: SdkProfile | undefined,
 ): FactRow[] {
   return [
-    found("SDK", facts.sdk),
+    sdk(facts),
     found("Activity", facts.activity.name),
     inputOutput(facts),
     runsAs(facts, profile),

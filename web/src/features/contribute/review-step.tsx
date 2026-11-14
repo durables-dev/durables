@@ -28,7 +28,8 @@ export interface ReviewStepProps {
 // Terms page and Back returns to the step as it was. Publish stays disabled until all six are
 // checked and nothing earlier is still needed.
 //
-// Publish sends the code, the details and the confirmations. While it is on its way the button
+// Publish sends the code, the SDK the publisher declared if they chose one, the details and
+// the confirmations. While it is on its way the button
 // says so and can't be pressed again. Once published, the Published screen opens and the draft
 // is cleared. A name the publisher already used sends them back to Details, and a handle
 // taken since they chose it sends them to the handle step. The rest of the draft is kept
@@ -57,6 +58,9 @@ export function ReviewStep({ handle, finished }: ReviewStepProps) {
       if (previous.kind === "published") return previous;
       const request: PublishRequest = {
         code: draft.code ?? "",
+        ...(draft.declaredSdk === undefined
+          ? {}
+          : { declaredSdk: draft.declaredSdk }),
         ...details,
         confirmations,
       };
