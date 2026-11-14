@@ -37,7 +37,6 @@ import { CheckRefusal, refusalTypes } from "./refusals";
 import { allMatches } from "./scan";
 import { MAX_CODE_BYTES } from "./size-limit";
 import { toSource } from "./source";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
 const detect = (code: string) =>
   goDetector.detect(toSource(code), sdkRegistry.Go.isStandardLibrary);
@@ -172,7 +171,7 @@ describe("goDetector", () => {
     });
 
     it("have names no other SDK's patterns use", () => {
-      const others = [...registeredSdks, ...unacceptedSdks]
+      const others = registeredSdks
         .filter(({ sdk }) => sdk !== "Go")
         .flatMap(({ recognition }) => [
           ...recognition.sdkMarkers,

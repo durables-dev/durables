@@ -33,7 +33,6 @@ import { phpActivityAttribute } from "./php-detector";
 import { allMatches } from "./scan";
 import { MAX_CODE_BYTES } from "./size-limit";
 import { toSource } from "./source";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
 const detect = (code: string) =>
   javaDetector.detect(toSource(code), sdkRegistry.Java.isStandardLibrary);
@@ -143,20 +142,15 @@ describe("Java detection patterns", () => {
     }
   });
 
-  it("are unique across the registry and the unaccepted SDKs", () => {
-    const others = [
-      ...registeredSdks
-        .filter(({ sdk }) => sdk !== "Java")
-        .flatMap(({ recognition }) => [
-          ...recognition.sdkMarkers,
-          ...recognition.activityMarkers,
-          ...recognition.shapeMarkers,
-        ]),
-      ...unacceptedSdks.flatMap(({ recognition }) => [
+  it("are unique across the registry", () => {
+    const others = registeredSdks
+      .filter(({ sdk }) => sdk !== "Java")
+      .flatMap(({ recognition }) => [
         ...recognition.sdkMarkers,
         ...recognition.activityMarkers,
-      ]),
-    ].map(({ name }) => name);
+        ...recognition.shapeMarkers,
+      ])
+      .map(({ name }) => name);
     for (const { name } of javaPatterns) {
       expect(others).not.toContain(name);
     }
@@ -694,7 +688,7 @@ describe("Java and PHP", () => {
   );
 
   const identify = (code: string) =>
-    identifySdk(toSource(code).text, [...registeredSdks, ...unacceptedSdks]);
+    identifySdk(toSource(code).text, registeredSdks);
 
   it("resolves a PHP activity with #[ActivityInterface] to PHP, not Java", () => {
     expect(identify(php)).toMatchObject({ outcome: "identified", sdk: "PHP" });

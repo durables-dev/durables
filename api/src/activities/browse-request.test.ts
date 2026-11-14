@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { sdks } from "../sdks/sdk-list";
 import { encodeBrowseCursor } from "./browse-cursor";
 import {
   BROWSE_BATCH_SIZE,
@@ -42,6 +43,14 @@ describe("the browse query", () => {
 
   test("reads Java as an SDK filter", () => {
     expect(browseQuery.parse({ sdk: "Java" })).toEqual({ sdk: ["Java"] });
+  });
+
+  test.each(sdks)("reads %s as an SDK filter", (sdk) => {
+    expect(browseQuery.parse({ sdk })).toEqual({ sdk: [sdk] });
+  });
+
+  test("reads all eight SDKs as one filter", () => {
+    expect(browseQuery.parse({ sdk: [...sdks] })).toEqual({ sdk: [...sdks] });
   });
 
   test("names every SDK in the api's list in the filter message", () => {

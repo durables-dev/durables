@@ -1,5 +1,5 @@
 import { type ProblemDetails, ProblemError } from "../http/problem";
-import type { AcceptedSdk, UnacceptedSdk } from "./facts";
+import type { AcceptedSdk } from "./facts";
 import { MAX_CODE_BYTES } from "./size-limit";
 
 // Why the pipeline refused a file. Each refusal is thrown as a CheckRefusal, a ProblemError
@@ -14,7 +14,6 @@ export const refusalTypes = {
   noActivity: problemType("no-activity"),
   notTemporalActivity: problemType("not-a-temporal-activity"),
   sdkChoiceNeeded: problemType("sdk-choice-needed"),
-  unacceptedSdk: problemType("unaccepted-sdk"),
   multipleActivities: problemType("multiple-activities"),
   codeTooLarge: problemType("code-too-large"),
 } as const;
@@ -46,14 +45,6 @@ export interface SdkChoiceNeededProblem extends ProblemDetails {
   reason: SdkChoiceReason;
 }
 
-/** The file is a Temporal activity in an SDK Durables doesn't accept. */
-export interface UnacceptedSdkProblem extends ProblemDetails {
-  type: typeof refusalTypes.unacceptedSdk;
-  status: 422;
-  /** The SDK the file is written in. */
-  sdk: UnacceptedSdk;
-}
-
 /** The file has more than one activity. */
 export interface MultipleActivitiesProblem extends ProblemDetails {
   type: typeof refusalTypes.multipleActivities;
@@ -74,7 +65,6 @@ export type RefusalProblem =
   | NoActivityProblem
   | NotTemporalActivityProblem
   | SdkChoiceNeededProblem
-  | UnacceptedSdkProblem
   | MultipleActivitiesProblem
   | CodeTooLargeProblem;
 
@@ -109,7 +99,7 @@ export const notTemporalActivity = () =>
     status: 422,
     title: "Not a Temporal activity",
     detail:
-      "The file doesn't look like a Python, TypeScript or .NET Temporal activity.",
+      "This doesn't look like a Temporal activity in any SDK Durables supports.",
   });
 
 const sdkChoiceDetails: Record<SdkChoiceReason, string> = {
@@ -126,15 +116,6 @@ export const sdkChoiceNeeded = (reason: SdkChoiceReason) =>
     title: "Choose an SDK",
     detail: sdkChoiceDetails[reason],
     reason,
-  });
-
-export const unacceptedSdk = (sdk: UnacceptedSdk) =>
-  new CheckRefusal({
-    type: refusalTypes.unacceptedSdk,
-    status: 422,
-    title: "SDK not accepted",
-    detail: `Durables accepts Python, TypeScript and .NET activities. This file looks like a ${String(sdk)} activity.`,
-    sdk,
   });
 
 export const multipleActivities = (count: number) =>

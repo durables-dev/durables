@@ -7,11 +7,9 @@ import {
   noActivity,
   notTemporalActivity,
   sdkChoiceNeeded,
-  unacceptedSdk,
 } from "./refusals";
 import { isWithinSizeLimit } from "./size-limit";
 import { type Source, toSource } from "./source";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
 // The checks pipeline (ADR 0008): pasted code in, the activity's facts out, or a CheckRefusal
 // thrown. It never logs, and nothing it throws carries the code.
@@ -77,28 +75,22 @@ interface ChosenSdk {
 }
 
 /**
- * Identifies the SDK over the given SDKs together with the unaccepted SDKs, which are recognised
- * so they can be refused by name. None is left; DUR-89 retires this.
+ * Identifies the SDK over the given SDKs. Code no SDK can be placed in, or that several SDKs
+ * match with nothing to decide between them, needs the publisher to choose the SDK.
  */
 const identifyChecked = (
   source: Source,
   checkedSdks: readonly CheckedSdk[],
 ): ChosenSdk => {
-  const identification = identifySdk(source.text, [
-    ...checkedSdks,
-    ...unacceptedSdks,
-  ]);
+  const identification = identifySdk(source.text, checkedSdks);
   if (identification.outcome !== "identified") {
     throw sdkChoiceNeeded(identification.outcome);
   }
   const checked = checkedSdks.find(({ sdk }) => sdk === identification.sdk);
   if (checked === undefined) {
-    const unaccepted = unacceptedSdks.find(
-      ({ sdk }) => sdk === identification.sdk,
+    throw new Error(
+      `Identification returned ${identification.sdk}, which has no entry.`,
     );
-    throw unaccepted === undefined
-      ? notTemporalActivity()
-      : unacceptedSdk(unaccepted.sdk);
   }
   return { checked, tier: identification.tier };
 };
@@ -123,8 +115,8 @@ const declaredChecked = (
  * SDK, identification is skipped and that SDK's detector decides alone. Only the SDK is ever
  * declared: every other fact comes from the detector.
  *
- * @throws {CheckRefusal} when the file is too large or empty, needs the SDK chosen, is in an
- * SDK Durables doesn't accept, or has no activity or more than one.
+ * @throws {CheckRefusal} when the file is too large or empty, needs the SDK chosen, or has no
+ * activity or more than one.
  * @throws {DetectorFailure} when a detector throws.
  */
 export const checkCode = (

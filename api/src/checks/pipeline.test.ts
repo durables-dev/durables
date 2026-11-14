@@ -186,6 +186,31 @@ describe("checkCode", () => {
     it.each([
       ["empty", ""],
       ["whitespace-only", "  \n\t\r\n   "],
+    ])("refuses %s input in words that name no SDK", (_, code: string) => {
+      expect(refusalOf(code, registeredSdks)).toEqual({
+        type: refusalTypes.notTemporalActivity,
+        status: 422,
+        title: "Not a Temporal activity",
+        detail:
+          "This doesn't look like a Temporal activity in any SDK Durables supports.",
+      });
+    });
+
+    it("asks for the SDK to be chosen, not refused, for a paste no registered SDK identifies", () => {
+      expect(
+        refusalOf("Notes from Tuesday's standup.\n", registeredSdks),
+      ).toEqual({
+        type: refusalTypes.sdkChoiceNeeded,
+        status: 422,
+        title: expect.any(String) as string,
+        detail: expect.any(String) as string,
+        reason: "not-identified",
+      });
+    });
+
+    it.each([
+      ["empty", ""],
+      ["whitespace-only", "  \n\t\r\n   "],
     ])("refuses %s input before identification runs", (_, code: string) => {
       const matchesAnything = {
         name: "anything",
@@ -204,6 +229,18 @@ describe("checkCode", () => {
         refusalTypes.notTemporalActivity,
       );
     });
+
+    it.each([
+      ["Go", goActivity],
+      ["Java", javaActivity],
+      ["PHP", phpActivity],
+    ] as const)(
+      "accepts a %s Temporal activity rather than refusing it",
+      (sdk, code) => {
+        expect(() => checkCode(code, registeredSdks)).not.toThrow();
+        expect(checkCode(code, registeredSdks).sdk).toBe(sdk);
+      },
+    );
 
     it("accepts a Go Temporal activity, which is no longer refused by name", () => {
       expect(checkCode(goActivity, registeredSdks)).toMatchObject({
@@ -239,14 +276,7 @@ describe("checkCode", () => {
         refusalOf("x".repeat(MAX_CODE_BYTES + 1), detectors).type,
       ];
       expect(new Set(types).size).toBe(types.length);
-      // No SDK is refused by name any more; DUR-89 retires that refusal type.
-      expect(new Set(types)).toEqual(
-        new Set(
-          Object.values(refusalTypes).filter(
-            (type) => type !== refusalTypes.unacceptedSdk,
-          ),
-        ),
-      );
+      expect(new Set(types)).toEqual(new Set(Object.values(refusalTypes)));
     });
   });
 
@@ -292,7 +322,7 @@ describe("checkCode", () => {
       expect(found.sdk).toBe("TypeScript");
     });
 
-    it("chooses an accepted SDK's activity over an unaccepted SDK's import", () => {
+    it("chooses the SDK whose activity marker matches over another SDK's import", () => {
       const code = `PY_SDK\nPY_ACTIVITY\nuse Temporal\\Client\\WorkflowClient;\n`;
       expect(checkCode(code, [python]).sdk).toBe("Python");
     });
@@ -518,7 +548,7 @@ describe("checkCode", () => {
       ).toMatchObject({ type: refusalTypes.noActivity, sdk: "TypeScript" });
     });
 
-    it("refuses as no activity, not as an unaccepted SDK, for a PHP activity declared as Python", () => {
+    it("refuses as no activity, naming Python, for a PHP activity declared as Python", () => {
       const empty = stub([], "Python", "PY");
       expect(refusalOf(phpActivity, [empty], "Python")).toMatchObject({
         type: refusalTypes.noActivity,

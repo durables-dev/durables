@@ -8,7 +8,6 @@ import { allMatches } from "./scan";
 import { MAX_CODE_BYTES } from "./size-limit";
 import { toSource } from "./source";
 import { typescriptDetector, typescriptPatterns } from "./typescript-detector";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
 const detect = (code: string) =>
   typescriptDetector.detect(
@@ -100,7 +99,7 @@ describe("typescriptDetector", () => {
     });
 
     it("have names no other SDK's patterns use", () => {
-      const others = [...registeredSdks, ...unacceptedSdks]
+      const others = registeredSdks
         .filter(({ sdk }) => sdk !== "TypeScript")
         .flatMap(({ recognition }) => [
           ...recognition.sdkMarkers,

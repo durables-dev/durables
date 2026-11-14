@@ -522,7 +522,20 @@ describe("POST /api/checks", () => {
       {
         refusal: "empty code",
         code: "",
-        expected: { type: refusalTypes.notTemporalActivity },
+        expected: {
+          type: refusalTypes.notTemporalActivity,
+          detail:
+            "This doesn't look like a Temporal activity in any SDK Durables supports.",
+        },
+      },
+      {
+        refusal: "whitespace-only code",
+        code: "  \n\t\n   ",
+        expected: {
+          type: refusalTypes.notTemporalActivity,
+          detail:
+            "This doesn't look like a Temporal activity in any SDK Durables supports.",
+        },
       },
       {
         refusal: "more than one activity",
