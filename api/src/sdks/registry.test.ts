@@ -1,6 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { dotnet } from "./dotnet";
+import { php } from "./php";
+import { go } from "./go";
+import { java } from "./java";
 import { python } from "./python";
+import { ruby } from "./ruby";
 import { registeredSdks, sdkRegistry } from "./registry";
 import { rust } from "./rust";
 import type { SdkEntry, SdkRegistry } from "./sdk-entry";
@@ -61,7 +65,16 @@ describe("the SDK registry", () => {
 
   it("lists its entries in the api's list's order", () => {
     expect(registeredSdks.map(({ sdk }) => sdk)).toEqual([...sdks]);
-    expect(registeredSdks).toEqual([python, typescript, dotnet, rust]);
+    expect(registeredSdks).toEqual([
+      go,
+      java,
+      python,
+      typescript,
+      dotnet,
+      ruby,
+      php,
+      rust,
+    ]);
   });
 
   it("gives every entry recognition patterns with unique names across the registry", () => {
@@ -76,6 +89,8 @@ describe("the SDK registry", () => {
 
   describe("the dependency normaliser", () => {
     it.each([
+      ["Go", "github.com/stripe/stripe-go/v87", "github.com/stripe/stripe-go"],
+      ["Go", "github.com/Slack-Go/slack", "github.com/slack-go/slack"],
       ["Python", "Stripe", "stripe"],
       ["Python", "slack_sdk", "slack_sdk"],
       ["Python", "PSYCOPG2", "psycopg2"],
@@ -86,6 +101,14 @@ describe("the SDK registry", () => {
       ["Rust", "aws-sdk-s3", "aws_sdk_s3"],
       ["Rust", "aws_sdk_s3", "aws_sdk_s3"],
       ["Rust", "Async-Stripe", "async_stripe"],
+      ["Ruby", "stripe", "stripe"],
+      ["Ruby", "aws-sdk-s3", "aws-sdk-s3"],
+      ["Ruby", "Slack-Ruby-Client", "slack-ruby-client"],
+      ["Ruby", "google/cloud/storage", "google-cloud-storage"],
+      ["PHP", "Stripe", "stripe"],
+      ["PHP", "Aws\\S3", "aws\\s3"],
+      ["PHP", "JoliCode\\Slack", "jolicode\\slack"],
+      ["PHP", "Amp\\Postgres", "amp\\postgres"],
     ] as const)(
       "maps the %s dependency %s to the integration key %s",
       (sdk, name, key) => {
@@ -96,6 +119,10 @@ describe("the SDK registry", () => {
 
   describe("the standard-library check", () => {
     it.each([
+      ["Go", "fmt", true],
+      ["Go", "net/http", true],
+      ["Go", "github.com/lib/pq", false],
+      ["Go", "go.temporal.io/sdk", false],
       ["Python", "os", true],
       ["Python", "asyncio", true],
       ["Python", "__future__", true],
@@ -115,6 +142,19 @@ describe("the SDK registry", () => {
       ["Rust", "alloc", true],
       ["Rust", "serde", false],
       ["Rust", "temporalio_sdk", false],
+      ["Ruby", "json", true],
+      ["Ruby", "net/http", true],
+      ["Ruby", "securerandom", true],
+      ["Ruby", "stripe", false],
+      ["Ruby", "aws-sdk-s3", false],
+      ["Ruby", "temporalio", false],
+      ["PHP", "DateTimeImmutable", true],
+      ["PHP", "\\PDO", true],
+      ["PHP", "Random\\Randomizer", true],
+      ["PHP", "PgSql\\Connection", true],
+      ["PHP", "Stripe\\StripeClient", false],
+      ["PHP", "Aws\\S3\\S3Client", false],
+      ["PHP", "Temporal\\Activity", false],
     ] as const)(
       "reads the %s dependency %s as standard library: %s",
       (sdk, name, expected) => {
@@ -125,10 +165,13 @@ describe("the SDK registry", () => {
 
   describe("the display profile", () => {
     it.each([
+      ["Go", "activity.go", "go.temporal.io/sdk", "go"],
       ["Python", "activities.py", "temporalio", "python"],
       ["TypeScript", "activities.ts", "@temporalio/activity", "typescript"],
       [".NET", "Activities.cs", "Temporalio", "csharp"],
       ["Rust", "activities.rs", "temporalio-sdk", "rust"],
+      ["Ruby", "activities.rb", "temporalio", "ruby"],
+      ["PHP", "Activities.php", "temporal/sdk", "php"],
     ] as const)(
       "gives %s the activity file %s, the package %s and the highlight language %s",
       (sdk, activityFileName, sdkPackage, highlightLanguage) => {
@@ -147,11 +190,28 @@ describe("the SDK registry", () => {
       },
     );
 
+    it("gives PHP wording for RoadRunner, which its generated worker runs under", () => {
+      expect(sdkRegistry.PHP.display.runsAs).toEqual({
+        sync: "Synchronous: RoadRunner runs it in a PHP worker process",
+        async: "Async",
+      });
+      expect(sdkRegistry.PHP.display.workerRequirements).toEqual({
+        sync: "This is a synchronous activity. Your worker runs under RoadRunner, which needs PHP's grpc extension. The .rr.yaml file in Implement configures it.",
+        async:
+          "This is an async activity. Your worker runs under RoadRunner, which needs PHP's grpc extension. The .rr.yaml file in Implement configures it.",
+      });
+    });
+
     const asyncRunsAs = "Async";
     const asyncWorker =
       "This is an async activity. Your worker needs no special setup to run it.";
 
     it.each([
+      [
+        "Go",
+        "Synchronous: the Go SDK runs it for you",
+        "This is a synchronous activity. The Go SDK runs it for you, so your worker needs no special setup.",
+      ],
       [
         "Python",
         "Synchronous: the worker needs a thread pool",
@@ -169,6 +229,11 @@ describe("the SDK registry", () => {
       ],
       [
         "Rust",
+        "Synchronous: the worker needs no special setup",
+        "This is a synchronous activity. Your worker needs no special setup to run it.",
+      ],
+      [
+        "Ruby",
         "Synchronous: the worker needs no special setup",
         "This is a synchronous activity. Your worker needs no special setup to run it.",
       ],

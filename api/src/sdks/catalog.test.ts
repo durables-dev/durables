@@ -38,7 +38,16 @@ describe("the SDK catalog", () => {
 
     expect(names(catalog)).toEqual(inChipOrder(sdks));
     expect([...names(catalog)].sort()).toEqual([...sdks].sort());
-    expect(names(catalog)).toEqual(["Python", "TypeScript", ".NET", "Rust"]);
+    expect(names(catalog)).toEqual([
+      "Go",
+      "Java",
+      "Python",
+      "TypeScript",
+      ".NET",
+      "Ruby",
+      "PHP",
+      "Rust",
+    ]);
   });
 
   it.each([
@@ -47,8 +56,12 @@ describe("the SDK catalog", () => {
     [
       "a shuffled order",
       [
-        sdkRegistry.Rust,
         sdkRegistry.TypeScript,
+        sdkRegistry.Go,
+        sdkRegistry.PHP,
+        sdkRegistry.Java,
+        sdkRegistry.Ruby,
+        sdkRegistry.Rust,
         sdkRegistry[".NET"],
         sdkRegistry.Python,
       ],
@@ -56,19 +69,34 @@ describe("the SDK catalog", () => {
     [
       "another shuffled order",
       [
+        sdkRegistry.Rust,
+        sdkRegistry.PHP,
         sdkRegistry[".NET"],
         sdkRegistry.Python,
-        sdkRegistry.Rust,
         sdkRegistry.TypeScript,
+        sdkRegistry.Go,
+        sdkRegistry.Java,
+        sdkRegistry.Ruby,
       ],
     ],
   ])("keeps chip order when the entries come in %s", (_order, entries) => {
     expect(names(sdkCatalog(entries))).toEqual([
+      "Go",
+      "Java",
       "Python",
       "TypeScript",
       ".NET",
+      "Ruby",
+      "PHP",
       "Rust",
     ]);
+  });
+
+  it("names no thread pool in Go's sync Runs as or its Configure wording", () => {
+    const go = sdkRegistry.Go.display;
+
+    expect(go.runsAs.sync).not.toMatch(threadPool);
+    expect(go.workerRequirements.sync).not.toMatch(threadPool);
   });
 
   it("does not reorder the entries it is given", () => {
@@ -155,6 +183,21 @@ describe("the SDK catalog", () => {
 
     expect(python.runsAs.sync).toMatch(threadPool);
     expect(python.workerRequirements.sync).toMatch(threadPool);
+  });
+
+  it("tells Ruby, whose worker sets up nothing, that it needs no special setup, with no thread pool", () => {
+    const ruby = sdkRegistry.Ruby.display;
+
+    for (const wording of [
+      ruby.runsAs.sync,
+      ruby.runsAs.async,
+      ruby.workerRequirements.sync,
+      ruby.workerRequirements.async,
+    ]) {
+      expect(wording).not.toMatch(threadPool);
+    }
+    expect(ruby.workerRequirements.sync).toContain("no special setup");
+    expect(ruby.workerRequirements.async).toContain("no special setup");
   });
 
   it("names no thread pool in .NET's sync Runs as or its Configure wording", () => {

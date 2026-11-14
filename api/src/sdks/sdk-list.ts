@@ -4,8 +4,20 @@ import { z } from "zod";
 // a registry entry does not compile. Web imports no SDK list or type: it receives SDK names in
 // api responses and from the SDK catalog.
 
-/** The Temporal SDKs Durables accepts activities from, named as listings store them. */
-export const sdks = ["Python", "TypeScript", ".NET", "Rust"] as const;
+/**
+ * The Temporal SDKs Durables accepts activities from, named as listings store them, in
+ * Temporal's order.
+ */
+export const sdks = [
+  "Go",
+  "Java",
+  "Python",
+  "TypeScript",
+  ".NET",
+  "Ruby",
+  "PHP",
+  "Rust",
+] as const;
 
 export const sdkSchema = z.enum(sdks);
 

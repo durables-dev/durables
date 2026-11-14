@@ -1,0 +1,31 @@
+import io.temporal.activity.ActivityOptions;
+import io.temporal.workflow.Workflow;
+import io.temporal.workflow.WorkflowInterface;
+import io.temporal.workflow.WorkflowMethod;
+import java.time.Duration;
+
+@WorkflowInterface
+public interface {{workflowClass}} {
+
+    @WorkflowMethod
+    {{returnType}} run(Object input);
+}
+
+// Activities stands in for the interface that declares {{activity}}. Change it to your
+// interface's name, and import it and the types it uses if they are in a package.
+class {{workflowClass}}Impl implements {{workflowClass}} {
+
+    private final Activities activities = Workflow.newActivityStub(
+            Activities.class,
+            ActivityOptions.newBuilder()
+                    // Temporal requires a start-to-close timeout. Set it for your activity.
+                    .setStartToCloseTimeout(Duration.ofSeconds(30))
+                    .build());
+
+    @Override
+    public {{returnType}} run(Object input) {
+        // Detection couldn't read what {{activity}} takes. Change Object to its input
+        // type, or fill in its arguments below.
+        {{returnKeyword}}activities.{{activity}}(input);
+    }
+}

@@ -1,0 +1,15 @@
+require "securerandom"
+require "temporalio/client"
+
+require_relative "workflow"
+
+client = Temporalio::Client.connect("localhost:7233", "default")
+# Fill in the arguments {{activity}} takes, in order.
+args = []
+result = client.execute_workflow(
+    {{workflowClass}},
+    *args,
+    id: {{workflowId}},
+    task_queue: {{taskQueue}}
+)
+puts result

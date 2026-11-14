@@ -3,8 +3,11 @@ import type { Sdk } from "../sdks/sdk-list";
 /** The SDKs Durables accepts activities from: the api's SDK list. */
 export type AcceptedSdk = Sdk;
 
-/** Temporal SDKs Durables recognises but does not accept. */
-export type UnacceptedSdk = "Java" | "Go" | "PHP";
+/**
+ * Temporal SDKs Durables recognises but does not accept. None is left now that Go, Java and
+ * PHP are accepted; DUR-89 retires the refusal that names one.
+ */
+export type UnacceptedSdk = never;
 
 /** A place in the pasted code. Lines are 1-based, numbered as the editor numbers them. */
 export interface LineRef {

@@ -513,6 +513,10 @@ describe("the address", () => {
 describe("reloading the page", () => {
   test("shows the same facts from the draft", async () => {
     const first = await openDetected(draftWith(fullFacts));
+    // The Runs as wording comes with the SDK catalog, so wait for it before reading the card.
+    await expect
+      .poll(() => factValue(first.screen, "Runs as").textContent)
+      .toBe("Synchronous: the worker needs a thread pool");
     const before = cardFacts(first.screen);
     await first.screen.unmount();
 
@@ -521,7 +525,7 @@ describe("reloading the page", () => {
 
     await expect.element(heading(screen)).toBeVisible();
     expect(router.state.location.pathname).toBe("/contribute/detected");
-    expect(cardFacts(screen)).toEqual(before);
+    await expect.poll(() => cardFacts(screen)).toEqual(before);
     expect(before).toHaveLength(8);
   });
 });

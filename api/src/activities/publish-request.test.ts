@@ -78,7 +78,7 @@ describe("the publish body's shape", () => {
       );
     }
     expect(
-      publishBody.safeParse({ ...body(), declaredSdk: "Go" }).success,
+      publishBody.safeParse({ ...body(), declaredSdk: "Kotlin" }).success,
     ).toBe(false);
   });
 
