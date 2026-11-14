@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { registeredSdks } from "../sdks/registry";
 import { identifySdk, type Recognisable } from "./identify";
+import { javaActivityAnnotation } from "./java-detector";
 import type { Pattern } from "./pattern";
 import { toSource } from "./source";
-import {
-  javaActivityAnnotation,
-  phpActivityAttribute,
-  unacceptedSdks,
-} from "./unaccepted-sdks";
+import { phpActivityAttribute, unacceptedSdks } from "./unaccepted-sdks";
 
 const marker = (name: string): Pattern => ({
   name,
@@ -187,9 +184,27 @@ describe("identifySdk", () => {
     });
 
     it("is never inferred for Python, TypeScript or .NET, whose detection is unchanged", () => {
-      for (const { recognition } of registeredSdks) {
+      for (const { recognition } of registeredSdks.filter(({ sdk }) =>
+        ["Python", "TypeScript", ".NET"].includes(sdk),
+      )) {
         expect(recognition.shapeMarkers).toEqual([]);
       }
+    });
+
+    it("is inferred for Java from an implementing class with no Temporal import", () => {
+      const implementation = lines(
+        "public class GreeterImpl implements Greeter {",
+        "    public String greet(String name) {",
+        '        return "Hello " + name;',
+        "    }",
+        "}",
+      );
+      expect(identify(implementation)).toEqual({
+        outcome: "identified",
+        sdk: "Java",
+        tier: "inferred",
+        matchedPatterns: ["java-implementation-class"],
+      });
     });
   });
 

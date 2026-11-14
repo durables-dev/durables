@@ -38,7 +38,7 @@ describe("the SDK catalog", () => {
 
     expect(names(catalog)).toEqual(inChipOrder(sdks));
     expect([...names(catalog)].sort()).toEqual([...sdks].sort());
-    expect(names(catalog)).toEqual(["Python", "TypeScript", ".NET"]);
+    expect(names(catalog)).toEqual(["Java", "Python", "TypeScript", ".NET"]);
   });
 
   it.each([
@@ -46,14 +46,25 @@ describe("the SDK catalog", () => {
     ["reverse order", [...registeredSdks].reverse()],
     [
       "a shuffled order",
-      [sdkRegistry.TypeScript, sdkRegistry[".NET"], sdkRegistry.Python],
+      [
+        sdkRegistry.TypeScript,
+        sdkRegistry.Java,
+        sdkRegistry[".NET"],
+        sdkRegistry.Python,
+      ],
     ],
     [
       "another shuffled order",
-      [sdkRegistry[".NET"], sdkRegistry.Python, sdkRegistry.TypeScript],
+      [
+        sdkRegistry[".NET"],
+        sdkRegistry.Python,
+        sdkRegistry.TypeScript,
+        sdkRegistry.Java,
+      ],
     ],
   ])("keeps chip order when the entries come in %s", (_order, entries) => {
     expect(names(sdkCatalog(entries))).toEqual([
+      "Java",
       "Python",
       "TypeScript",
       ".NET",

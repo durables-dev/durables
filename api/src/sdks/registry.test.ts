@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { dotnet } from "./dotnet";
+import { java } from "./java";
 import { python } from "./python";
 import { registeredSdks, sdkRegistry } from "./registry";
 import type { SdkEntry, SdkRegistry } from "./sdk-entry";
@@ -60,7 +61,7 @@ describe("the SDK registry", () => {
 
   it("lists its entries in the api's list's order", () => {
     expect(registeredSdks.map(({ sdk }) => sdk)).toEqual([...sdks]);
-    expect(registeredSdks).toEqual([python, typescript, dotnet]);
+    expect(registeredSdks).toEqual([java, python, typescript, dotnet]);
   });
 
   it("gives every entry recognition patterns with unique names across the registry", () => {

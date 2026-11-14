@@ -206,7 +206,6 @@ describe("checkCode", () => {
     });
 
     it.each([
-      ["Java", javaActivity],
       ["Go", goActivity],
       ["PHP", phpActivity],
     ] as const)(
@@ -222,11 +221,11 @@ describe("checkCode", () => {
       },
     );
 
-    it("names the SDK for a Java file with the SDK import but no activity annotation", () => {
-      const code = "import io.temporal.client.WorkflowClient;\n";
+    it("names the SDK for a Go file with the SDK import but no activity function", () => {
+      const code = 'import "go.temporal.io/sdk/client"\n';
       expect(refusalOf(code, [])).toMatchObject({
         type: refusalTypes.unacceptedSdk,
-        sdk: "Java",
+        sdk: "Go",
       });
     });
 
@@ -252,7 +251,7 @@ describe("checkCode", () => {
         refusalOf("STUB_SDK", detectors).type,
         refusalOf("", detectors).type,
         refusalOf("plain text", detectors).type,
-        refusalOf(javaActivity, detectors).type,
+        refusalOf(phpActivity, detectors).type,
         refusalOf("STUB_SDK", [stub([facts("a"), facts("b")])]).type,
         refusalOf("x".repeat(MAX_CODE_BYTES + 1), detectors).type,
       ];
@@ -304,14 +303,14 @@ describe("checkCode", () => {
     });
 
     it("chooses an accepted SDK's activity over an unaccepted SDK's import", () => {
-      const code = `PY_SDK\nPY_ACTIVITY\nimport io.temporal.client.WorkflowClient;\n`;
+      const code = `PY_SDK\nPY_ACTIVITY\nuse Temporal\\Client\\WorkflowClient;\n`;
       expect(checkCode(code, [python]).sdk).toBe("Python");
     });
 
     it("names an unaccepted SDK whose activity marker is the only one", () => {
-      expect(refusalOf(`PY_SDK\n${javaActivity}`, [python])).toMatchObject({
+      expect(refusalOf(`PY_SDK\n${phpActivity}`, [python])).toMatchObject({
         type: refusalTypes.unacceptedSdk,
-        sdk: "Java",
+        sdk: "PHP",
       });
     });
 
@@ -402,6 +401,7 @@ describe("checkCode", () => {
     });
 
     const samples: Record<AcceptedSdk, string> = {
+      Java: javaActivity,
       Python: [
         "from temporalio import activity",
         "",
@@ -501,9 +501,9 @@ describe("checkCode", () => {
       ).toMatchObject({ type: refusalTypes.noActivity, sdk: "TypeScript" });
     });
 
-    it("refuses as no activity, not as an unaccepted SDK, for a Java activity declared as Python", () => {
+    it("refuses as no activity, not as an unaccepted SDK, for a PHP activity declared as Python", () => {
       const empty = stub([], "Python", "PY");
-      expect(refusalOf(javaActivity, [empty], "Python")).toMatchObject({
+      expect(refusalOf(phpActivity, [empty], "Python")).toMatchObject({
         type: refusalTypes.noActivity,
         sdk: "Python",
       });
@@ -563,7 +563,7 @@ describe("checkCode", () => {
     it.each([
       ["no activity", `STUB_SDK # ${secret}`, [stub([])]],
       ["SDK choice needed", `print("${secret}")`, [stub([])]],
-      ["unaccepted SDK", `${javaActivity}\n// ${secret}`, [stub([])]],
+      ["unaccepted SDK", `${phpActivity}\n// ${secret}`, [stub([])]],
       [
         "multiple activities",
         `STUB_SDK ${secret}`,

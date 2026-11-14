@@ -21,6 +21,7 @@ const factsFor = (
   sdk,
   activity: {
     name: {
+      Java: "chargeCard",
       Python: "charge_card",
       TypeScript: "chargeCard",
       ".NET": "ChargeCardAsync",
@@ -29,10 +30,20 @@ const factsFor = (
   },
   input: "ChargeRequest",
   output: "ChargeResult",
-  runsAs: sdk === "Python" ? "sync" : "async",
+  runsAs: sdk === "Python" || sdk === "Java" ? "sync" : "async",
   nonRetryableErrors: [],
   configurationRead: [{ name: "STRIPE_API_KEY", line: 4 }],
-  dependencies: [{ name: sdk === ".NET" ? "Stripe" : "stripe", line: 2 }],
+  dependencies: [
+    {
+      name: {
+        Java: "com.stripe",
+        Python: "stripe",
+        TypeScript: "stripe",
+        ".NET": "Stripe",
+      }[sdk],
+      line: 2,
+    },
+  ],
   heartbeats: [],
   ...changes,
 });
@@ -40,6 +51,7 @@ const factsFor = (
 /** The file names of the workflow, worker and starter, for an activity in the given SDK. */
 const fileLabels = (sdk: AcceptedSdk, workflowClass = "ChargeCardWorkflow") =>
   ({
+    Java: [`${workflowClass}.java`, "ChargeCardWorker.java", "Starter.java"],
     Python: ["workflows.py", "worker.py", "start.py"],
     TypeScript: ["workflows.ts", "worker.ts", "start.ts"],
     ".NET": [`${workflowClass}.cs`, "Program.cs", "Starter.cs"],
@@ -90,6 +102,7 @@ const unbalancedBracket = (code: string, lineComment: string) => {
 };
 
 const lineComments: Record<AcceptedSdk, string> = {
+  Java: "//",
   Python: "#",
   TypeScript: "//",
   ".NET": "//",
@@ -97,6 +110,115 @@ const lineComments: Record<AcceptedSdk, string> = {
 
 /** The generated text for each SDK's fixture activity, `factsFor(sdk)` at `address`. */
 const expectedSnippets: Record<AcceptedSdk, Snippet[]> = {
+  Java: [
+    {
+      label: "Install",
+      code: [
+        "<!-- Add this to the <dependencies> section of your pom.xml. -->",
+        "<dependency>",
+        "    <groupId>io.temporal</groupId>",
+        "    <artifactId>temporal-sdk</artifactId>",
+        "    <version>1.40.0</version>",
+        "</dependency>",
+        "<!-- Also add the Maven dependencies that provide: com.stripe -->",
+      ].join("\n"),
+    },
+    {
+      label: "ChargeCardWorkflow.java",
+      code: [
+        "import io.temporal.activity.ActivityOptions;",
+        "import io.temporal.workflow.Workflow;",
+        "import io.temporal.workflow.WorkflowInterface;",
+        "import io.temporal.workflow.WorkflowMethod;",
+        "import java.time.Duration;",
+        "",
+        "@WorkflowInterface",
+        "public interface ChargeCardWorkflow {",
+        "",
+        "    @WorkflowMethod",
+        "    ChargeResult run(ChargeRequest input);",
+        "}",
+        "",
+        "// Activities stands in for the interface that declares chargeCard. Change it to your",
+        "// interface's name, and import it and the types it uses if they are in a package.",
+        "class ChargeCardWorkflowImpl implements ChargeCardWorkflow {",
+        "",
+        "    private final Activities activities = Workflow.newActivityStub(",
+        "            Activities.class,",
+        "            ActivityOptions.newBuilder()",
+        "                    // Temporal requires a start-to-close timeout. Set it for your activity.",
+        "                    .setStartToCloseTimeout(Duration.ofSeconds(30))",
+        "                    .build());",
+        "",
+        "    @Override",
+        "    public ChargeResult run(ChargeRequest input) {",
+        "        return activities.chargeCard(input);",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "ChargeCardWorker.java",
+      code: [
+        "import io.temporal.client.WorkflowClient;",
+        "import io.temporal.serviceclient.WorkflowServiceStubs;",
+        "import io.temporal.worker.Worker;",
+        "import io.temporal.worker.WorkerFactory;",
+        "",
+        "public class ChargeCardWorker {",
+        "",
+        "    public static void main(String[] args) {",
+        "        WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();",
+        "        WorkflowClient client = WorkflowClient.newInstance(service);",
+        "        WorkerFactory factory = WorkerFactory.newInstance(client);",
+        '        Worker worker = factory.newWorker("charge-card");',
+        "        worker.registerWorkflowImplementationTypes(ChargeCardWorkflowImpl.class);",
+        "        // ActivitiesImpl stands in for the class that implements chargeCard. Change it",
+        "        // to your class's name, and import it if it is in a package.",
+        "        worker.registerActivitiesImplementations(new ActivitiesImpl());",
+        "        factory.start();",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "Starter.java",
+      code: [
+        "import io.temporal.client.WorkflowClient;",
+        "import io.temporal.client.WorkflowOptions;",
+        "import io.temporal.serviceclient.WorkflowServiceStubs;",
+        "import java.util.UUID;",
+        "",
+        "public class Starter {",
+        "",
+        "    public static void main(String[] args) {",
+        "        WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();",
+        "        WorkflowClient client = WorkflowClient.newInstance(service);",
+        "        ChargeCardWorkflow workflow = client.newWorkflowStub(",
+        "                ChargeCardWorkflow.class,",
+        "                WorkflowOptions.newBuilder()",
+        '                        .setWorkflowId("charge-card-" + UUID.randomUUID())',
+        '                        .setTaskQueue("charge-card")',
+        "                        .build());",
+        "        // Fill in the input to pass to chargeCard.",
+        "        ChargeRequest input = null;",
+        "        ChargeResult result = workflow.run(input);",
+        "        System.out.println(result);",
+        "        System.exit(0);",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "Run",
+      code: [
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "mvn compile exec:java -Dexec.mainClass=ChargeCardWorker",
+        "mvn compile exec:java -Dexec.mainClass=Starter",
+      ].join("\n"),
+    },
+  ],
   Python: [
     {
       label: "Install",
@@ -945,6 +1067,7 @@ describe("generateSnippets", () => {
 
   describe("the workflow sets only the start-to-close timeout", () => {
     const timeoutLines: Record<AcceptedSdk, string> = {
+      Java: "            ActivityOptions.newBuilder()\n                    // Temporal requires a start-to-close timeout. Set it for your activity.\n                    .setStartToCloseTimeout(Duration.ofSeconds(30))\n                    .build());",
       Python:
         "            # Temporal requires a start-to-close timeout. Set it for your activity.\n            start_to_close_timeout=timedelta(seconds=30),\n        )",
       TypeScript:
@@ -1041,6 +1164,10 @@ describe("generateSnippets", () => {
 
   describe("an activity with no detected packages", () => {
     it.each([
+      [
+        "Java",
+        "<!-- Add this to the <dependencies> section of your pom.xml. -->\n<dependency>\n    <groupId>io.temporal</groupId>\n    <artifactId>temporal-sdk</artifactId>\n    <version>1.40.0</version>\n</dependency>",
+      ],
       ["Python", "pip install temporalio"],
       [
         "TypeScript",
@@ -1071,6 +1198,7 @@ describe("generateSnippets", () => {
     );
 
     it.each([
+      ["Java", "Activities.java"],
       ["Python", "activities.py"],
       ["TypeScript", "activities.ts"],
       [".NET", "Activities.cs"],
@@ -1079,6 +1207,7 @@ describe("generateSnippets", () => {
       (sdk, fileName) => {
         expect(sdkRegistry[sdk].display.activityFileName).toBe(fileName);
         const importsActivityFile = {
+          Java: "Activities",
           Python: "from activities import",
           TypeScript: 'from "./activities"',
           ".NET": "activities.ChargeCardAsync",

@@ -18,6 +18,7 @@ describe("reading the SDK catalog", () => {
     expect(response.headers.get("Content-Type")).toMatch(/^application\/json/);
     const catalog = await response.json<SdkProfile[]>();
     expect(catalog.map(({ name }) => name)).toEqual([
+      "Java",
       "Python",
       "TypeScript",
       ".NET",

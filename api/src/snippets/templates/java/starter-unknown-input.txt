@@ -1,0 +1,24 @@
+import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowOptions;
+import io.temporal.serviceclient.WorkflowServiceStubs;
+import java.util.UUID;
+
+public class Starter {
+
+    public static void main(String[] args) {
+        WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();
+        WorkflowClient client = WorkflowClient.newInstance(service);
+        {{workflowClass}} workflow = client.newWorkflowStub(
+                {{workflowClass}}.class,
+                WorkflowOptions.newBuilder()
+                        .setWorkflowId({{workflowId}})
+                        .setTaskQueue({{taskQueue}})
+                        .build());
+        // Fill in the arguments {{activity}} takes, and change Object to match
+        // the workflow's input.
+        Object input = null;
+        {{resultAssignment}}workflow.run(input);
+        {{printResult}}
+        System.exit(0);
+    }
+}
