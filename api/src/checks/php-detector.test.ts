@@ -31,7 +31,6 @@ import {
 import { checkCode } from "./pipeline";
 import { CheckRefusal, refusalTypes } from "./refusals";
 import { toSource } from "./source";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
 const detect = (code: string) =>
   phpDetector.detect(toSource(code), sdkRegistry.PHP.isStandardLibrary);
@@ -166,7 +165,7 @@ describe("the PHP patterns", () => {
     }
   });
 
-  it("recognise the activity attribute and its docblock annotation, moved from the unaccepted markers", () => {
+  it("recognise the activity attribute and its docblock annotation", () => {
     expect(
       phpActivityAttribute.regex.test(
         "#[ActivityInterface]\ninterface Greeter",
@@ -659,7 +658,7 @@ describe("checking PHP code", () => {
 
 describe("PHP and Java", () => {
   const identify = (code: string) =>
-    identifySdk(toSource(code).text, [...registeredSdks, ...unacceptedSdks]);
+    identifySdk(toSource(code).text, registeredSdks);
 
   it("resolves a Java activity to Java, not PHP", () => {
     expect(identify(javaActivity)).toMatchObject({

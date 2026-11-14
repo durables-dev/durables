@@ -97,6 +97,25 @@ describe("refusals", () => {
     },
   );
 
+  it("words the not-a-Temporal-activity refusal without naming any SDK", () => {
+    expect(notTemporalActivity().problem.detail).toBe(
+      "This doesn't look like a Temporal activity in any SDK Durables supports.",
+    );
+  });
+
+  it("has no refusal for an unaccepted SDK", () => {
+    expect(Object.keys(refusalTypes)).toEqual([
+      "noActivity",
+      "notTemporalActivity",
+      "sdkChoiceNeeded",
+      "multipleActivities",
+      "codeTooLarge",
+    ]);
+    expect(Object.values(refusalTypes)).not.toContain(
+      "https://durables.dev/problems/unaccepted-sdk",
+    );
+  });
+
   it("answers without logging", async () => {
     const spies = (["log", "info", "warn", "error"] as const).map((method) =>
       vi.spyOn(console, method).mockImplementation(() => undefined),

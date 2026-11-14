@@ -5,7 +5,6 @@ import { javaActivityAnnotation } from "./java-detector";
 import { matchesAny, type Pattern } from "./pattern";
 import { phpActivityAttribute } from "./php-detector";
 import { toSource } from "./source";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
 const marker = (name: string): Pattern => ({
   name,
@@ -29,7 +28,7 @@ const gamma = stub("Gamma", "ga");
 
 /** Identification over every SDK the checks pipeline knows. */
 const identify = (code: string) =>
-  identifySdk(toSource(code).text, [...registeredSdks, ...unacceptedSdks]);
+  identifySdk(toSource(code).text, registeredSdks);
 
 const lines = (...code: string[]) => code.join("\n");
 
@@ -414,10 +413,7 @@ describe("identifySdk", () => {
     });
 
     it("matches no other SDK's pattern in the Go sample", () => {
-      for (const { sdk, recognition } of [
-        ...registeredSdks,
-        ...unacceptedSdks,
-      ]) {
+      for (const { sdk, recognition } of registeredSdks) {
         if (sdk !== "Go") {
           expect(
             matchesAny(

@@ -9,7 +9,7 @@ import type { BrowseSort } from "./responses";
 /** The most cards one browse batch holds. */
 export const BROWSE_BATCH_SIZE = 50;
 
-/** "Choose Java, Python, TypeScript or .NET.": every SDK in the api's list, in its order. */
+/** "Choose Go, Java, … or Rust.": every SDK in the api's list, in its order. */
 export const sdkFilterMessage = `Choose ${sdks.slice(0, -1).join(", ")} or ${sdks.at(-1) ?? ""}.`;
 
 export const cursorMessage = "The page position is not valid.";

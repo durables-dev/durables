@@ -29,7 +29,6 @@ import {
 } from "./ruby-detector";
 import { isRubyStandardLibrary, rubyStandardLibrary } from "./ruby-stdlib";
 import { toSource } from "./source";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
 const detect = (code: string) =>
   rubyDetector.detect(toSource(code), sdkRegistry.Ruby.isStandardLibrary);
@@ -702,7 +701,7 @@ describe("the Ruby standard library", () => {
 });
 
 describe("identifying Ruby among the other SDKs", () => {
-  const everySdk = [...registeredSdks, ...unacceptedSdks];
+  const everySdk = registeredSdks;
   const identify = (code: string) => identifySdk(toSource(code).text, everySdk);
 
   it("identifies a Ruby activity as Ruby, detected", () => {

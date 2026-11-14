@@ -32,7 +32,6 @@ import {
   rustUseDeclaration,
 } from "./rust-detector";
 import { toSource } from "./source";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
 const detect = (code: string) =>
   rustDetector.detect(toSource(code), sdkRegistry.Rust.isStandardLibrary);
@@ -705,10 +704,11 @@ describe("rustDetector", () => {
       expect(checkCode(code, registeredSdks)).toMatchObject({ sdk: "Rust" });
     });
 
-    it("is never identified as an SDK Durables doesn't accept", () => {
-      expect(
-        identifySdk(chargeCard, [...registeredSdks, ...unacceptedSdks]),
-      ).toMatchObject({ outcome: "identified", sdk: "Rust" });
+    it("is identified as Rust among every registered SDK", () => {
+      expect(identifySdk(chargeCard, registeredSdks)).toMatchObject({
+        outcome: "identified",
+        sdk: "Rust",
+      });
     });
 
     it.each([
@@ -758,9 +758,10 @@ describe("rustDetector", () => {
         ),
       ],
     ])("leaves a %s activity to its own SDK", (sdk, code) => {
-      expect(
-        identifySdk(code, [...registeredSdks, ...unacceptedSdks]),
-      ).toMatchObject({ outcome: "identified", sdk });
+      expect(identifySdk(code, registeredSdks)).toMatchObject({
+        outcome: "identified",
+        sdk,
+      });
     });
   });
 });
