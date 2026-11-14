@@ -48,4 +48,4 @@ Identification used to prefer whichever SDK was listed first when several matche
 - Integration matching goes through each SDK's dependency normaliser.
 - A paste with activity markers from two SDKs is no longer resolved by list order. Until declaring an SDK is available, the check refuses it as not a Temporal activity. After that, it asks the publisher to choose.
 - Web reads SDK display details from the catalog endpoint. The version response keeps carrying the activity file name, so published pages are unchanged.
-- An SDK listed in the registry can't also be refused as unaccepted. Each SDK story removes its SDK from the unaccepted list when it adds the entry.
+- No SDK is refused by name. Every SDK Temporal officially supports has a registry entry, so the unaccepted list and its refusal are retired (DUR-89). Code no SDK can be identified in asks the publisher to choose the SDK.
