@@ -184,9 +184,16 @@ test.describe("as an anonymous visitor", () => {
           "aria-pressed",
           "true",
         );
+        // The SDK chips are Any, then the SDK catalog's SDKs in its order, so a new SDK needs
+        // no change here.
+        const catalog = await page.request.get("/api/sdks");
+        expect(catalog.ok()).toBe(true);
+        const sdkNames = ((await catalog.json()) as { name: string }[]).map(
+          ({ name }) => name,
+        );
         await expect(
           page.getByRole("group", { name: "Temporal SDK" }).getByRole("button"),
-        ).toHaveText(["Any", "Java", "Python", "TypeScript", ".NET"]);
+        ).toHaveText(["Any", ...sdkNames]);
         await expect(
           page
             .getByRole("group", { name: "Integrates with" })
