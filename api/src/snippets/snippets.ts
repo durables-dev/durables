@@ -10,8 +10,9 @@ export { installLabel, runLabel } from "./labels";
 
 /**
  * The Implement snippets for a version, in the order the Activity page shows them: the install
- * command, the workflow, worker and starter files, then the run commands. The same facts and
- * address always give the same snippets.
+ * command, the workflow, worker and starter files, then the run commands. An SDK whose worker
+ * needs another file sends it after the run commands, as PHP sends its RoadRunner config. The
+ * same facts and address always give the same snippets.
  */
 export const generateSnippets = (
   facts: FactValues,

@@ -133,7 +133,7 @@ export const unacceptedSdk = (sdk: UnacceptedSdk) =>
     type: refusalTypes.unacceptedSdk,
     status: 422,
     title: "SDK not accepted",
-    detail: `Durables accepts Python, TypeScript and .NET activities. This file looks like a ${sdk} activity.`,
+    detail: `Durables accepts Python, TypeScript and .NET activities. This file looks like a ${String(sdk)} activity.`,
     sdk,
   });
 

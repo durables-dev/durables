@@ -11,7 +11,6 @@ import {
   notTemporalActivity,
   refusalTypes,
   sdkChoiceNeeded,
-  unacceptedSdk,
 } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
 
@@ -69,13 +68,6 @@ describe("refusals", () => {
       { reason: "ambiguous" },
     ],
     [
-      "unaccepted SDK",
-      unacceptedSdk("Go"),
-      refusalTypes.unacceptedSdk,
-      422,
-      { sdk: "Go" },
-    ],
-    [
       "multiple activities",
       multipleActivities(3),
       refusalTypes.multipleActivities,
@@ -120,7 +112,6 @@ describe("refusals", () => {
       noActivity("TypeScript"),
       notTemporalActivity(),
       sdkChoiceNeeded("ambiguous"),
-      unacceptedSdk("PHP"),
       multipleActivities(2),
       codeTooLarge(),
     ]) {

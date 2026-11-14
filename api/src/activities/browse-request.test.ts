@@ -40,7 +40,17 @@ describe("the browse query", () => {
     });
   });
 
-  test.each(["Java", "python", "", "Python,TypeScript"])(
+  test("reads Java as an SDK filter", () => {
+    expect(browseQuery.parse({ sdk: "Java" })).toEqual({ sdk: ["Java"] });
+  });
+
+  test("names every SDK in the api's list in the filter message", () => {
+    expect(sdkFilterMessage).toBe(
+      "Choose Go, Java, Python, TypeScript, .NET, Ruby or PHP.",
+    );
+  });
+
+  test.each(["Cobol", "java", "python", "", "Python,TypeScript"])(
     "rejects the unsupported SDK %j",
     (sdk) => {
       expect(errors({ sdk })).toEqual({ sdk: sdkFilterMessage });
@@ -48,7 +58,7 @@ describe("the browse query", () => {
   );
 
   test("rejects several SDKs when one is unsupported", () => {
-    expect(errors({ sdk: ["TypeScript", "PHP"] })).toEqual({
+    expect(errors({ sdk: ["TypeScript", "Rust"] })).toEqual({
       sdk: sdkFilterMessage,
     });
   });
@@ -96,7 +106,7 @@ describe("the browse query", () => {
   );
 
   test("reports every failing field", () => {
-    expect(errors({ sdk: "Java", cursor: "!" })).toEqual({
+    expect(errors({ sdk: "Cobol", cursor: "!" })).toEqual({
       sdk: sdkFilterMessage,
       cursor: cursorMessage,
     });

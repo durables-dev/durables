@@ -1,0 +1,19 @@
+package app // Use the package name activity.go declares.
+
+import (
+    "time"
+
+    "go.temporal.io/sdk/workflow"
+)
+
+{{packagesNote}}
+func {{workflowName}}(ctx workflow.Context, args []any) {{workflowResults}} {
+    ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+        // Temporal requires a start-to-close timeout. Set it for your activity.
+        StartToCloseTimeout: 30 * time.Second,
+    })
+
+    // Detection couldn't read what {{activity}} takes. Fill in its arguments when
+    // you start the workflow.
+    {{executeActivity}}
+}

@@ -18,10 +18,13 @@ describe("reading the SDK catalog", () => {
     expect(response.headers.get("Content-Type")).toMatch(/^application\/json/);
     const catalog = await response.json<SdkProfile[]>();
     expect(catalog.map(({ name }) => name)).toEqual([
+      "Go",
+      "Java",
       "Python",
       "TypeScript",
       ".NET",
       "Ruby",
+      "PHP",
     ]);
     expect(catalog).toHaveLength(registeredSdks.length);
   });

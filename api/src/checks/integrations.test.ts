@@ -27,12 +27,11 @@ describe("the shared integration list", () => {
   });
 });
 
-/** The SDKs that normalise a dependency by lower-casing it alone. */
-const lowerCasingSdks = ["Python", "TypeScript", ".NET"] as const;
+/** The SDKs whose normaliser reads these package names unchanged, apart from case. */
+const lowerCasingSdks = sdks.filter((sdk) => sdk !== "Ruby");
 
-// Python, TypeScript and .NET normalise a dependency by lower-casing it, so each gives the
-// same integrations for the same names. Ruby reads a required path as a gem name, and has its
-// own cases below.
+// These SDKs give the same integrations for the same names. Ruby reads a required path as a
+// gem name, and has its own cases below.
 describe.each(lowerCasingSdks)("integrations from %s imports", (sdk) => {
   it("maps stripe to Stripe", () => {
     expect(integrationsFor(sdk, imports("stripe"))).toEqual(["Stripe"]);
