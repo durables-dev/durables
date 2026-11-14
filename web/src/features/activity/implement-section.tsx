@@ -2,6 +2,7 @@ import { CodeBlock } from "@/components/code-block";
 import { useSdkProfile } from "@/lib/use-sdk-profile";
 import { useId, useState, type KeyboardEvent } from "react";
 import {
+  filesHeading,
   implementSteps,
   type ImplementFile,
   type ImplementVersion,
@@ -15,9 +16,10 @@ export interface ImplementSectionProps {
   sdk: string;
 }
 
-// The Implement section: install the dependencies, add the four files, then run them. Every
-// block is the shared code block, so each has line numbers and Copy, and none is reindented.
-// The files are highlighted in the language the SDK catalog names, and are plain text without one.
+// The Implement section: install the dependencies, add the files, then run them. Every block is
+// the shared code block, so each has line numbers and Copy, and none is reindented. The files in
+// the SDK's language are highlighted in the language the SDK catalog names, and are plain text
+// without one. Any other file the worker needs is plain text.
 export function ImplementSection({ version, sdk }: ImplementSectionProps) {
   const { installCommand, files, runCommands } = implementSteps(version);
   const language = useSdkProfile(sdk)?.highlightLanguage;
@@ -32,9 +34,7 @@ export function ImplementSection({ version, sdk }: ImplementSectionProps) {
         )}
       </div>
       <div className={styles["step"]}>
-        <h3 className={styles["heading"]}>
-          2. Add these four files to your project
-        </h3>
+        <h3 className={styles["heading"]}>{filesHeading(files.length)}</h3>
         <FileTabs files={files} language={language} />
       </div>
       <div className={styles["step"]}>
@@ -119,7 +119,7 @@ function FileTabs({ files, language }: FileTabsProps) {
         <p className={styles["description"]}>{selected.description}</p>
         <CodeBlock
           code={selected.code}
-          language={language}
+          language={selected.inSdkLanguage ? language : undefined}
           label={selected.name}
         />
       </div>
