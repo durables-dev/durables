@@ -181,7 +181,8 @@ const factLabels = [
 ];
 
 interface AcceptedSample {
-  sdk: "Java" | "Python" | "TypeScript" | ".NET";
+  sdk:
+    "Go" | "Java" | "Python" | "TypeScript" | ".NET" | "Ruby" | "PHP" | "Rust";
   code: string;
   activity: string;
   /** The card's eight values, in the order of `factLabels`. */
@@ -192,6 +193,10 @@ const python = sample("python");
 const typescript = sample("typescript");
 const dotnet = sample("dotnet");
 const java = sample("java");
+const go = sample("go");
+const ruby = sample("ruby");
+const php = sample("php");
+const rust = sample("rust");
 
 const accepted: AcceptedSample[] = [
   {
@@ -254,6 +259,67 @@ const accepted: AcceptedSample[] = [
       `TWILIO_ACCOUNT_SID (line ${String(lineOf(java, 'System.getenv("TWILIO_ACCOUNT_SID")'))}), TWILIO_AUTH_TOKEN (line ${String(lineOf(java, 'System.getenv("TWILIO_AUTH_TOKEN")'))}), TWILIO_FROM_NUMBER (line ${String(lineOf(java, 'System.getenv("TWILIO_FROM_NUMBER")'))})`,
       "com.twilio",
       "Not detected",
+    ],
+  },
+  {
+    sdk: "Go",
+    code: go,
+    activity: "ArchiveReport",
+    facts: [
+      "Go",
+      "ArchiveReport",
+      "ArchiveRequest → ArchivedReport",
+      "Synchronous: the Go SDK runs it for you",
+      `Raised on line ${String(lineOf(go, "NewNonRetryableApplicationError("))}`,
+      `ARCHIVE_BUCKET (line ${String(lineOf(go, 'os.Getenv("ARCHIVE_BUCKET")'))})`,
+      "github.com/aws/aws-sdk-go-v2/aws, github.com/aws/aws-sdk-go-v2/config, github.com/aws/aws-sdk-go-v2/service/s3",
+      `Yes, line ${String(lineOf(go, "activity.RecordHeartbeat("))}`,
+    ],
+  },
+  {
+    // Ruby code declares no types, so detection can't read the input or the output.
+    sdk: "Ruby",
+    code: ruby,
+    activity: "SendInvoice",
+    facts: [
+      "Ruby",
+      "SendInvoice",
+      "—",
+      "Synchronous: the worker needs no special setup",
+      `Raised on line ${String(lineOf(ruby, "non_retryable: true"))}`,
+      `STRIPE_API_KEY (line ${String(lineOf(ruby, 'ENV.fetch("STRIPE_API_KEY")'))})`,
+      "stripe",
+      `Yes, line ${String(lineOf(ruby, ".heartbeat("))}`,
+    ],
+  },
+  {
+    sdk: "PHP",
+    code: php,
+    activity: "postMessage",
+    facts: [
+      "PHP",
+      "postMessage",
+      "SlackMessage → MessageRef",
+      "Synchronous: RoadRunner runs it in a PHP worker process",
+      `Raised on line ${String(lineOf(php, "throw new ApplicationFailure("))}`,
+      `SLACK_BOT_TOKEN (line ${String(lineOf(php, "getenv('SLACK_BOT_TOKEN')"))})`,
+      "JoliCode\\Slack",
+      `Yes, line ${String(lineOf(php, "Activity::heartbeat("))}`,
+    ],
+  },
+  {
+    sdk: "Rust",
+    code: rust,
+    activity: "record_order_status",
+    facts: [
+      "Rust",
+      "record_order_status",
+      "OrderUpdate → UpdatedOrder",
+      "Async",
+      `Raised on line ${String(lineOf(rust, "ApplicationFailure::non_retryable("))}`,
+      `DATABASE_URL (line ${String(lineOf(rust, 'env::var("DATABASE_URL")'))})`,
+      "serde, tokio_postgres",
+      `Yes, line ${String(lineOf(rust, "ctx.record_heartbeat("))}`,
     ],
   },
 ];
