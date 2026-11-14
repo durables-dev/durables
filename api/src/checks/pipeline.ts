@@ -77,8 +77,8 @@ interface ChosenSdk {
 }
 
 /**
- * Identifies the SDK over the given SDKs together with Java and Go, which are recognised
- * so they can be refused by name.
+ * Identifies the SDK over the given SDKs together with the unaccepted SDKs, which are recognised
+ * so they can be refused by name. None is left; DUR-89 retires this.
  */
 const identifyChecked = (
   source: Source,

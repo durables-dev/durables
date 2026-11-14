@@ -21,6 +21,8 @@ const factsFor = (
   sdk,
   activity: {
     name: {
+      Go: "ChargeCard",
+      Java: "chargeCard",
       Python: "charge_card",
       TypeScript: "chargeCard",
       ".NET": "ChargeCardAsync",
@@ -30,11 +32,21 @@ const factsFor = (
   },
   input: "ChargeRequest",
   output: "ChargeResult",
-  runsAs: sdk === "Python" || sdk === "PHP" ? "sync" : "async",
+  runsAs: ["Python", "Go", "Java", "PHP"].includes(sdk) ? "sync" : "async",
   nonRetryableErrors: [],
   configurationRead: [{ name: "STRIPE_API_KEY", line: 4 }],
   dependencies: [
-    { name: sdk === ".NET" || sdk === "PHP" ? "Stripe" : "stripe", line: 2 },
+    {
+      name: {
+        Go: "github.com/stripe/stripe-go/v87",
+        Java: "com.stripe",
+        Python: "stripe",
+        TypeScript: "stripe",
+        ".NET": "Stripe",
+        PHP: "Stripe",
+      }[sdk],
+      line: 2,
+    },
   ],
   heartbeats: [],
   ...changes,
@@ -43,6 +55,8 @@ const factsFor = (
 /** The file names of the workflow, worker and starter, for an activity in the given SDK. */
 const fileLabels = (sdk: AcceptedSdk, workflowClass = "ChargeCardWorkflow") =>
   ({
+    Go: ["workflow.go", "worker/main.go", "start/main.go"],
+    Java: [`${workflowClass}.java`, "ChargeCardWorker.java", "Starter.java"],
     Python: ["workflows.py", "worker.py", "start.py"],
     TypeScript: ["workflows.ts", "worker.ts", "start.ts"],
     ".NET": [`${workflowClass}.cs`, "Program.cs", "Starter.cs"],
@@ -103,6 +117,8 @@ const unbalancedBracket = (code: string, lineComment: string) => {
 };
 
 const lineComments: Record<AcceptedSdk, string> = {
+  Go: "//",
+  Java: "//",
   Python: "#",
   TypeScript: "//",
   ".NET": "//",
@@ -111,6 +127,234 @@ const lineComments: Record<AcceptedSdk, string> = {
 
 /** The generated text for each SDK's fixture activity, `factsFor(sdk)` at `address`. */
 const expectedSnippets: Record<AcceptedSdk, Snippet[]> = {
+  Go: [
+    {
+      label: "Install",
+      code: [
+        "go mod init charge-card",
+        "go get go.temporal.io/sdk",
+        "go get github.com/stripe/stripe-go/v87",
+      ].join("\n"),
+    },
+    {
+      label: "workflow.go",
+      code: [
+        "package app // Use the package name activity.go declares.",
+        "",
+        "import (",
+        '    "time"',
+        "",
+        '    "go.temporal.io/sdk/workflow"',
+        ")",
+        "",
+        "func ChargeCardWorkflow(ctx workflow.Context, input ChargeRequest) (ChargeResult, error) {",
+        "    ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{",
+        "        // Temporal requires a start-to-close timeout. Set it for your activity.",
+        "        StartToCloseTimeout: 30 * time.Second,",
+        "    })",
+        "",
+        "    var result ChargeResult",
+        "    err := workflow.ExecuteActivity(ctx, ChargeCard, input).Get(ctx, &result)",
+        "    return result, err",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "worker/main.go",
+      code: [
+        "package main",
+        "",
+        "import (",
+        '    "log"',
+        "",
+        '    app "charge-card"',
+        "",
+        '    "go.temporal.io/sdk/client"',
+        '    "go.temporal.io/sdk/worker"',
+        ")",
+        "",
+        "func main() {",
+        "    c, err := client.Dial(client.Options{})",
+        "    if err != nil {",
+        '        log.Fatalln("Unable to create client", err)',
+        "    }",
+        "    defer c.Close()",
+        "",
+        '    w := worker.New(c, "charge-card", worker.Options{})',
+        "    w.RegisterWorkflow(app.ChargeCardWorkflow)",
+        "    // If ChargeCard is a method, register a value of its type instead, such as",
+        "    // w.RegisterActivity(&app.Activities{}).",
+        "    w.RegisterActivity(app.ChargeCard)",
+        "",
+        "    err = w.Run(worker.InterruptCh())",
+        "    if err != nil {",
+        '        log.Fatalln("Unable to start worker", err)',
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "start/main.go",
+      code: [
+        "package main",
+        "",
+        "import (",
+        '    "context"',
+        '    "fmt"',
+        '    "log"',
+        '    "time"',
+        "",
+        '    app "charge-card"',
+        "",
+        '    "go.temporal.io/sdk/client"',
+        ")",
+        "",
+        "func main() {",
+        "    c, err := client.Dial(client.Options{})",
+        "    if err != nil {",
+        '        log.Fatalln("Unable to create client", err)',
+        "    }",
+        "    defer c.Close()",
+        "",
+        "    options := client.StartWorkflowOptions{",
+        '        ID:        fmt.Sprintf("charge-card-%d", time.Now().UnixNano()),',
+        '        TaskQueue: "charge-card",',
+        "    }",
+        "    // Fill in the input to pass to ChargeCard.",
+        "    var input app.ChargeRequest",
+        "    we, err := c.ExecuteWorkflow(context.Background(), options, app.ChargeCardWorkflow, input)",
+        "    if err != nil {",
+        '        log.Fatalln("Unable to execute workflow", err)',
+        "    }",
+        "",
+        "    var result app.ChargeResult",
+        "    err = we.Get(context.Background(), &result)",
+        "    if err != nil {",
+        '        log.Fatalln("Unable to get workflow result", err)',
+        "    }",
+        '    log.Println("Workflow result:", result)',
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "Run",
+      code: [
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "go run worker/main.go",
+        "go run start/main.go",
+      ].join("\n"),
+    },
+  ],
+  Java: [
+    {
+      label: "Install",
+      code: [
+        "<!-- Add this to the <dependencies> section of your pom.xml. -->",
+        "<dependency>",
+        "    <groupId>io.temporal</groupId>",
+        "    <artifactId>temporal-sdk</artifactId>",
+        "    <version>1.40.0</version>",
+        "</dependency>",
+        "<!-- Also add the Maven dependencies that provide: com.stripe -->",
+      ].join("\n"),
+    },
+    {
+      label: "ChargeCardWorkflow.java",
+      code: [
+        "import io.temporal.activity.ActivityOptions;",
+        "import io.temporal.workflow.Workflow;",
+        "import io.temporal.workflow.WorkflowInterface;",
+        "import io.temporal.workflow.WorkflowMethod;",
+        "import java.time.Duration;",
+        "",
+        "@WorkflowInterface",
+        "public interface ChargeCardWorkflow {",
+        "",
+        "    @WorkflowMethod",
+        "    ChargeResult run(ChargeRequest input);",
+        "}",
+        "",
+        "// Activities stands in for the interface that declares chargeCard. Change it to your",
+        "// interface's name, and import it and the types it uses if they are in a package.",
+        "class ChargeCardWorkflowImpl implements ChargeCardWorkflow {",
+        "",
+        "    private final Activities activities = Workflow.newActivityStub(",
+        "            Activities.class,",
+        "            ActivityOptions.newBuilder()",
+        "                    // Temporal requires a start-to-close timeout. Set it for your activity.",
+        "                    .setStartToCloseTimeout(Duration.ofSeconds(30))",
+        "                    .build());",
+        "",
+        "    @Override",
+        "    public ChargeResult run(ChargeRequest input) {",
+        "        return activities.chargeCard(input);",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "ChargeCardWorker.java",
+      code: [
+        "import io.temporal.client.WorkflowClient;",
+        "import io.temporal.serviceclient.WorkflowServiceStubs;",
+        "import io.temporal.worker.Worker;",
+        "import io.temporal.worker.WorkerFactory;",
+        "",
+        "public class ChargeCardWorker {",
+        "",
+        "    public static void main(String[] args) {",
+        "        WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();",
+        "        WorkflowClient client = WorkflowClient.newInstance(service);",
+        "        WorkerFactory factory = WorkerFactory.newInstance(client);",
+        '        Worker worker = factory.newWorker("charge-card");',
+        "        worker.registerWorkflowImplementationTypes(ChargeCardWorkflowImpl.class);",
+        "        // ActivitiesImpl stands in for the class that implements chargeCard. Change it",
+        "        // to your class's name, and import it if it is in a package.",
+        "        worker.registerActivitiesImplementations(new ActivitiesImpl());",
+        "        factory.start();",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "Starter.java",
+      code: [
+        "import io.temporal.client.WorkflowClient;",
+        "import io.temporal.client.WorkflowOptions;",
+        "import io.temporal.serviceclient.WorkflowServiceStubs;",
+        "import java.util.UUID;",
+        "",
+        "public class Starter {",
+        "",
+        "    public static void main(String[] args) {",
+        "        WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();",
+        "        WorkflowClient client = WorkflowClient.newInstance(service);",
+        "        ChargeCardWorkflow workflow = client.newWorkflowStub(",
+        "                ChargeCardWorkflow.class,",
+        "                WorkflowOptions.newBuilder()",
+        '                        .setWorkflowId("charge-card-" + UUID.randomUUID())',
+        '                        .setTaskQueue("charge-card")',
+        "                        .build());",
+        "        // Fill in the input to pass to chargeCard.",
+        "        ChargeRequest input = null;",
+        "        ChargeResult result = workflow.run(input);",
+        "        System.out.println(result);",
+        "        System.exit(0);",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "Run",
+      code: [
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "mvn compile exec:java -Dexec.mainClass=ChargeCardWorker",
+        "mvn compile exec:java -Dexec.mainClass=Starter",
+      ].join("\n"),
+    },
+  ],
   Python: [
     {
       label: "Install",
@@ -596,6 +840,109 @@ describe("generateSnippets", () => {
       );
     });
 
+    it("passes a Go activity its input type, qualified with the activity's package outside it", () => {
+      const snippets = generateSnippets(factsFor("Go"), address);
+      expect(snippet(snippets, "workflow.go")).toContain(
+        "func ChargeCardWorkflow(ctx workflow.Context, input ChargeRequest) (ChargeResult, error) {\n",
+      );
+      expect(snippet(snippets, "workflow.go")).toContain(
+        "    err := workflow.ExecuteActivity(ctx, ChargeCard, input).Get(ctx, &result)\n",
+      );
+      expect(snippet(snippets, "start/main.go")).toContain(
+        "    var input app.ChargeRequest\n",
+      );
+      expect(snippet(snippets, "start/main.go")).toContain(
+        "    var result app.ChargeResult\n",
+      );
+      expect(snippet(snippets, "worker/main.go")).toContain(
+        "    w.RegisterActivity(app.ChargeCard)\n",
+      );
+    });
+
+    it("qualifies only the Go types from the activity's package, and asks for other packages' imports", () => {
+      const snippets = generateSnippets(
+        factsFor("Go", {
+          input: "map[string][]LineItem",
+          output: "*models.Receipt",
+        }),
+        address,
+      );
+      const starter = snippet(snippets, "start/main.go");
+      expect(starter).toContain("    var input map[string][]app.LineItem\n");
+      expect(starter).toContain("    var result *models.Receipt\n");
+      expect(starter).toContain(
+        "\n// Also import the packages that provide: models\nfunc main() {",
+      );
+      const workflow = snippet(snippets, "workflow.go");
+      expect(workflow).toContain(
+        "input map[string][]LineItem) (*models.Receipt, error) {",
+      );
+      expect(workflow).toContain(
+        "// Also import the packages that provide: models\nfunc ChargeCardWorkflow(",
+      );
+      expect(
+        snippet(generateSnippets(factsFor("Go"), address), "workflow.go"),
+      ).not.toContain("Also import");
+    });
+
+    it("leaves Go's own types unqualified in the starter", () => {
+      const starter = snippet(
+        generateSnippets(
+          factsFor("Go", { input: "string", output: "[]byte" }),
+          address,
+        ),
+        "start/main.go",
+      );
+      expect(starter).toContain("    var input string\n");
+      expect(starter).toContain("    var result []byte\n");
+    });
+
+    it("returns only the Go activity's error when it has no output", () => {
+      const snippets = generateSnippets(
+        factsFor("Go", { output: null }),
+        address,
+      );
+      const workflow = snippet(snippets, "workflow.go");
+      expect(workflow).toContain("input ChargeRequest) error {\n");
+      expect(workflow).toContain(
+        "    return workflow.ExecuteActivity(ctx, ChargeCard, input).Get(ctx, nil)\n}",
+      );
+      const starter = snippet(snippets, "start/main.go");
+      expect(starter).toContain(
+        "    err = we.Get(context.Background(), nil)\n",
+      );
+      expect(starter).toContain('    log.Println("Workflow completed")\n');
+      expect(starter).not.toContain("&result");
+      expect(starter).not.toContain("var result");
+    });
+
+    it("installs the Go SDK, then every detected module in one go get", () => {
+      expect(
+        snippet(
+          generateSnippets(
+            factsFor("Go", {
+              dependencies: [
+                { name: "github.com/stripe/stripe-go/v87", line: 2 },
+                { name: "github.com/jackc/pgx/v5/pgxpool", line: 3 },
+              ],
+            }),
+            address,
+          ),
+          installLabel,
+        ),
+      ).toBe(
+        "go mod init charge-card\ngo get go.temporal.io/sdk\ngo get github.com/stripe/stripe-go/v87 github.com/jackc/pgx/v5/pgxpool",
+      );
+    });
+
+    it("imports the Go activity's package by the module's path, under one name", () => {
+      for (const label of ["worker/main.go", "start/main.go"]) {
+        expect(
+          snippet(generateSnippets(factsFor("Go"), address), label),
+        ).toContain('\n    app "charge-card"\n');
+      }
+    });
+
     it("imports the names a Python input type uses, leaving out Python's own", () => {
       const snippets = generateSnippets(
         factsFor("Python", {
@@ -817,6 +1164,29 @@ describe("generateSnippets", () => {
       expect(unbalancedBracket('call("(") # (', "#")).toBeNull();
     });
 
+    it("passes the Go arguments as a list the developer fills in", () => {
+      const snippets = generateSnippets(
+        factsFor("Go", { input: null }),
+        address,
+      );
+      const workflow = snippet(snippets, "workflow.go");
+      expect(workflow).toContain(
+        "func ChargeCardWorkflow(ctx workflow.Context, args []any) (ChargeResult, error) {\n",
+      );
+      expect(workflow).toContain(
+        "    // Detection couldn't read what ChargeCard takes. Fill in its arguments when\n",
+      );
+      expect(workflow).toContain(
+        "workflow.ExecuteActivity(ctx, ChargeCard, args...).Get(ctx, &result)",
+      );
+      const starter = snippet(snippets, "start/main.go");
+      expect(starter).toContain(
+        "    // Fill in the arguments ChargeCard takes, in order.\n    args := []any{}\n",
+      );
+      expect(starter).toContain("options, app.ChargeCardWorkflow, args)\n");
+      expect(starter).not.toContain("var input");
+    });
+
     it("leaves out the result when a .NET activity has no output", () => {
       const snippets = generateSnippets(
         factsFor(".NET", { input: null, output: null }),
@@ -935,6 +1305,17 @@ describe("generateSnippets", () => {
         String.raw`new(id: $"a\"b{{c}}\\-{Guid.NewGuid()}", taskQueue: "a\"b{c}\\")`,
       );
       expect(snippet(dotnet, installLabel)).toContain(`cd 'a"b{c}\\'`);
+      const go = generateSnippets(factsFor("Go"), { ...odd, name: 'a"b%d\\' });
+      expect(snippet(go, "start/main.go")).toContain(
+        String.raw`        ID:        fmt.Sprintf("a\"b%%d\\-%d", time.Now().UnixNano()),`,
+      );
+      expect(snippet(go, "start/main.go")).toContain(
+        String.raw`        TaskQueue: "a\"b%d\\",`,
+      );
+      expect(snippet(go, "worker/main.go")).toContain(
+        String.raw`    app "a\"b%d\\"`,
+      );
+      expect(snippet(go, installLabel)).toContain(`go mod init 'a"b%d\\'`);
     });
 
     it("asks for an environment variable the shell can't export", () => {
@@ -1054,6 +1435,43 @@ describe("generateSnippets", () => {
       );
     });
 
+    it("generates from a detected Go activity", () => {
+      const code = [
+        "package payments",
+        "",
+        "import (",
+        '    "context"',
+        '    "os"',
+        "",
+        '    "github.com/stripe/stripe-go/v87"',
+        '    "go.temporal.io/sdk/activity"',
+        ")",
+        "",
+        "func ChargeCard(ctx context.Context, req ChargeRequest) (*ChargeResult, error) {",
+        '    stripe.Key = os.Getenv("STRIPE_API_KEY")',
+        '    activity.RecordHeartbeat(ctx, "charging")',
+        "    return charge(req)",
+        "}",
+      ].join("\n");
+      const snippets = generateSnippets(
+        checkCode(code, registeredSdks),
+        address,
+      );
+      expect(snippet(snippets, "workflow.go")).toContain(
+        "func ChargeCardWorkflow(ctx workflow.Context, input ChargeRequest) (*ChargeResult, error) {",
+      );
+      expect(snippet(snippets, "start/main.go")).toContain(
+        "    var result *app.ChargeResult\n",
+      );
+      expect(snippet(snippets, installLabel)).toBe(
+        "go mod init charge-card\ngo get go.temporal.io/sdk\ngo get github.com/stripe/stripe-go/v87",
+      );
+      expect(snippet(snippets, runLabel)).toContain(
+        "export STRIPE_API_KEY=...",
+      );
+      expect(snippet(snippets, "workflow.go")).not.toMatch(/heartbeat/i);
+    });
+
     it("generates from a detected .NET activity", () => {
       const code = [
         "using Stripe;",
@@ -1083,6 +1501,8 @@ describe("generateSnippets", () => {
 
   describe("the workflow sets only the start-to-close timeout", () => {
     const timeoutLines: Record<AcceptedSdk, string> = {
+      Go: "workflow.ActivityOptions{\n        // Temporal requires a start-to-close timeout. Set it for your activity.\n        StartToCloseTimeout: 30 * time.Second,\n    })",
+      Java: "            ActivityOptions.newBuilder()\n                    // Temporal requires a start-to-close timeout. Set it for your activity.\n                    .setStartToCloseTimeout(Duration.ofSeconds(30))\n                    .build());",
       Python:
         "            # Temporal requires a start-to-close timeout. Set it for your activity.\n            start_to_close_timeout=timedelta(seconds=30),\n        )",
       TypeScript:
@@ -1180,6 +1600,11 @@ describe("generateSnippets", () => {
 
   describe("an activity with no detected packages", () => {
     it.each([
+      ["Go", "go mod init charge-card\ngo get go.temporal.io/sdk"],
+      [
+        "Java",
+        "<!-- Add this to the <dependencies> section of your pom.xml. -->\n<dependency>\n    <groupId>io.temporal</groupId>\n    <artifactId>temporal-sdk</artifactId>\n    <version>1.40.0</version>\n</dependency>",
+      ],
       ["Python", "pip install temporalio"],
       [
         "TypeScript",
@@ -1214,6 +1639,8 @@ describe("generateSnippets", () => {
     );
 
     it.each([
+      ["Go", "activity.go"],
+      ["Java", "Activities.java"],
       ["Python", "activities.py"],
       ["TypeScript", "activities.ts"],
       [".NET", "Activities.cs"],
@@ -1223,6 +1650,8 @@ describe("generateSnippets", () => {
       (sdk, fileName) => {
         expect(sdkRegistry[sdk].display.activityFileName).toBe(fileName);
         const importsActivityFile = {
+          Go: "ChargeCard",
+          Java: "Activities",
           Python: "from activities import",
           TypeScript: 'from "./activities"',
           ".NET": "activities.ChargeCardAsync",

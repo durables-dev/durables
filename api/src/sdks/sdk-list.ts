@@ -8,7 +8,14 @@ import { z } from "zod";
  * The Temporal SDKs Durables accepts activities from, named as listings store them, in
  * Temporal's order.
  */
-export const sdks = ["Python", "TypeScript", ".NET", "PHP"] as const;
+export const sdks = [
+  "Go",
+  "Java",
+  "Python",
+  "TypeScript",
+  ".NET",
+  "PHP",
+] as const;
 
 export const sdkSchema = z.enum(sdks);
 

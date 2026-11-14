@@ -1,0 +1,19 @@
+import io.temporal.client.WorkflowClient;
+import io.temporal.serviceclient.WorkflowServiceStubs;
+import io.temporal.worker.Worker;
+import io.temporal.worker.WorkerFactory;
+
+public class {{workerClass}} {
+
+    public static void main(String[] args) {
+        WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();
+        WorkflowClient client = WorkflowClient.newInstance(service);
+        WorkerFactory factory = WorkerFactory.newInstance(client);
+        Worker worker = factory.newWorker({{taskQueue}});
+        worker.registerWorkflowImplementationTypes({{workflowClass}}Impl.class);
+        // ActivitiesImpl stands in for the class that implements {{activity}}. Change it
+        // to your class's name, and import it if it is in a package.
+        worker.registerActivitiesImplementations(new ActivitiesImpl());
+        factory.start();
+    }
+}

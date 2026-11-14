@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { registeredSdks } from "../sdks/registry";
 import { identifySdk, type Recognisable } from "./identify";
-import type { Pattern } from "./pattern";
-import { toSource } from "./source";
+import { javaActivityAnnotation } from "./java-detector";
+import { matchesAny, type Pattern } from "./pattern";
 import { phpActivityAttribute } from "./php-detector";
-import { javaActivityAnnotation, unacceptedSdks } from "./unaccepted-sdks";
+import { toSource } from "./source";
+import { unacceptedSdks } from "./unaccepted-sdks";
 
 const marker = (name: string): Pattern => ({
   name,
@@ -56,6 +57,21 @@ const dotnetActivity = lines(
   "{",
   "    [Activity]",
   '    public Task<string> GreetAsync(string name) => Task.FromResult($"Hello {name}");',
+  "}",
+);
+
+const goActivity = lines(
+  "package greeting",
+  "",
+  "import (",
+  '    "context"',
+  "",
+  '    "go.temporal.io/sdk/activity"',
+  ")",
+  "",
+  "func Greet(ctx context.Context, name string) (string, error) {",
+  '    activity.GetLogger(ctx).Info("greeting")',
+  '    return "Hello " + name, nil',
   "}",
 );
 
@@ -124,6 +140,11 @@ describe("identifySdk", () => {
 
     it.each([
       [
+        "Go",
+        goActivity,
+        ["go-sdk-import", "go-activity-import", "go-activity-function"],
+      ],
+      [
         "Python",
         pythonActivity,
         ["python-sdk-import", "python-activity-decorator"],
@@ -185,9 +206,69 @@ describe("identifySdk", () => {
     });
 
     it("is never inferred for Python, TypeScript or .NET, whose detection is unchanged", () => {
-      for (const { recognition } of registeredSdks) {
+      const unchanged = registeredSdks.filter(({ sdk }) =>
+        ["Python", "TypeScript", ".NET"].includes(sdk),
+      );
+      expect(unchanged).toHaveLength(3);
+      for (const { recognition } of unchanged) {
         expect(recognition.shapeMarkers).toEqual([]);
       }
+    });
+
+    it("is inferred as Go for a Go activity with no Temporal marker", () => {
+      expect(
+        identify(
+          lines(
+            "package greeting",
+            'import "context"',
+            "func Greet(ctx context.Context, name string) (string, error) {",
+            "\treturn name, nil",
+            "}",
+          ),
+        ),
+      ).toEqual({
+        outcome: "identified",
+        sdk: "Go",
+        tier: "inferred",
+        matchedPatterns: ["go-activity-function", "go-activity-shape"],
+      });
+    });
+
+    it("is inferred as Go for Temporal's quickstart activity with no context either", () => {
+      expect(
+        identify(
+          lines(
+            "package app",
+            "",
+            'import "fmt"',
+            "",
+            "func ComposeGreeting(name string) (string, error) {",
+            '    return fmt.Sprintf("Hello %s!", name), nil',
+            "}",
+          ),
+        ),
+      ).toEqual({
+        outcome: "identified",
+        sdk: "Go",
+        tier: "inferred",
+        matchedPatterns: ["go-activity-shape"],
+      });
+    });
+
+    it("is inferred for Java from an implementing class with no Temporal import", () => {
+      const implementation = lines(
+        "public class GreeterImpl implements Greeter {",
+        "    public String greet(String name) {",
+        '        return "Hello " + name;',
+        "    }",
+        "}",
+      );
+      expect(identify(implementation)).toEqual({
+        outcome: "identified",
+        sdk: "Java",
+        tier: "inferred",
+        matchedPatterns: ["java-implementation-class"],
+      });
     });
   });
 
@@ -280,12 +361,11 @@ describe("identifySdk", () => {
         "public class Greeter { public String greet(String n) { return n; } }",
       ],
       [
-        "a Go function with no Temporal import",
+        "a Go function that is neither exported nor takes a context",
         lines(
           "package greeting",
-          'import "context"',
-          "func Greet(ctx context.Context, name string) (string, error) {",
-          "\treturn name, nil",
+          "func add(a, b int) (int, error) {",
+          "\treturn a + b, nil",
           "}",
         ),
       ],
@@ -295,6 +375,94 @@ describe("identifySdk", () => {
       ],
     ])("is not identified for %s", (_, code) => {
       expect(identify(code)).toEqual({ outcome: "not-identified" });
+    });
+  });
+
+  describe("Go beside the other SDKs", () => {
+    const samples = [
+      ["Go", goActivity],
+      ["Python", pythonActivity],
+      ["TypeScript", typescriptActivity],
+      [".NET", dotnetActivity],
+      ["Java", javaActivity],
+      ["PHP", phpActivity],
+    ] as const;
+
+    it.each(samples)(
+      "identifies the %s sample as itself and nothing else",
+      (sdk, code) => {
+        expect(identify(code)).toMatchObject({ outcome: "identified", sdk });
+      },
+    );
+
+    it("matches no Go pattern in the other SDKs' samples", () => {
+      const go = registeredSdks.find(({ sdk }) => sdk === "Go");
+      if (go === undefined) {
+        throw new Error("The registry has no Go entry.");
+      }
+      const { sdkMarkers, activityMarkers, shapeMarkers } = go.recognition;
+      for (const [sdk, code] of samples) {
+        if (sdk !== "Go") {
+          expect(
+            matchesAny(
+              [...sdkMarkers, ...activityMarkers, ...shapeMarkers],
+              code,
+            ),
+          ).toBe(false);
+        }
+      }
+    });
+
+    it("matches no other SDK's pattern in the Go sample", () => {
+      for (const { sdk, recognition } of [
+        ...registeredSdks,
+        ...unacceptedSdks,
+      ]) {
+        if (sdk !== "Go") {
+          expect(
+            matchesAny(
+              [
+                ...recognition.sdkMarkers,
+                ...recognition.activityMarkers,
+                ...recognition.shapeMarkers,
+              ],
+              goActivity,
+            ),
+          ).toBe(false);
+        }
+      }
+    });
+
+    it.each([
+      [
+        "a Java implementation with no annotation",
+        lines(
+          "public class GreeterImpl implements Greeter {",
+          "    public String greet(String name) { return name; }",
+          "}",
+        ),
+      ],
+      [
+        "a PHP class with no attribute",
+        lines(
+          "<?php",
+          "class Greeter",
+          "{",
+          "    public function Greet(string $name): string { return $name; }",
+          "}",
+        ),
+      ],
+    ])("does not infer Go for %s", (_, code) => {
+      // Java now infers its own implementation classes, so only the Go answer is ruled out.
+      expect(identify(code)).not.toMatchObject({ sdk: "Go" });
+    });
+
+    it("keeps a Go file that imports the SDK as Go when it also mentions a Java annotation in a comment", () => {
+      const code = lines(goActivity, "// Like Java's @ActivityInterface.");
+      expect(identify(code)).toMatchObject({
+        outcome: "identified",
+        sdk: "Go",
+      });
     });
   });
 

@@ -666,10 +666,6 @@ describe("PHP and Java", () => {
       outcome: "identified",
       sdk: "Java",
     });
-    expect(refusalOf(javaActivity)).toMatchObject({
-      type: refusalTypes.unacceptedSdk,
-      sdk: "Java",
-    });
   });
 
   it("resolves a PHP activity to PHP, not Java, whether it uses the attribute or a docblock annotation", () => {

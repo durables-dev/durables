@@ -205,27 +205,11 @@ describe("checkCode", () => {
       );
     });
 
-    it.each([
-      ["Java", javaActivity],
-      ["Go", goActivity],
-    ] as const)(
-      "refuses a %s Temporal activity, naming the SDK",
-      (sdk, code) => {
-        expect(refusalOf(code, [stub([facts("act")])])).toEqual({
-          type: refusalTypes.unacceptedSdk,
-          status: 422,
-          title: expect.any(String) as string,
-          detail: expect.stringContaining(sdk) as string,
-          sdk,
-        });
-      },
-    );
-
-    it("names the SDK for a Java file with the SDK import but no activity annotation", () => {
-      const code = "import io.temporal.client.WorkflowClient;\n";
-      expect(refusalOf(code, [])).toMatchObject({
-        type: refusalTypes.unacceptedSdk,
-        sdk: "Java",
+    it("accepts a Go Temporal activity, which is no longer refused by name", () => {
+      expect(checkCode(goActivity, registeredSdks)).toMatchObject({
+        sdk: "Go",
+        activity: { name: "Greet", line: 9 },
+        provenance: provenance("detected"),
       });
     });
 
@@ -251,12 +235,18 @@ describe("checkCode", () => {
         refusalOf("STUB_SDK", detectors).type,
         refusalOf("", detectors).type,
         refusalOf("plain text", detectors).type,
-        refusalOf(javaActivity, detectors).type,
         refusalOf("STUB_SDK", [stub([facts("a"), facts("b")])]).type,
         refusalOf("x".repeat(MAX_CODE_BYTES + 1), detectors).type,
       ];
       expect(new Set(types).size).toBe(types.length);
-      expect(new Set(types)).toEqual(new Set(Object.values(refusalTypes)));
+      // No SDK is refused by name any more; DUR-89 retires that refusal type.
+      expect(new Set(types)).toEqual(
+        new Set(
+          Object.values(refusalTypes).filter(
+            (type) => type !== refusalTypes.unacceptedSdk,
+          ),
+        ),
+      );
     });
   });
 
@@ -303,15 +293,8 @@ describe("checkCode", () => {
     });
 
     it("chooses an accepted SDK's activity over an unaccepted SDK's import", () => {
-      const code = `PY_SDK\nPY_ACTIVITY\nimport io.temporal.client.WorkflowClient;\n`;
+      const code = `PY_SDK\nPY_ACTIVITY\nuse Temporal\\Client\\WorkflowClient;\n`;
       expect(checkCode(code, [python]).sdk).toBe("Python");
-    });
-
-    it("names an unaccepted SDK whose activity marker is the only one", () => {
-      expect(refusalOf(`PY_SDK\n${javaActivity}`, [python])).toMatchObject({
-        type: refusalTypes.unacceptedSdk,
-        sdk: "Java",
-      });
     });
 
     it("asks for the SDK to be chosen for a file with markers for two SDKs and no activity marker", () => {
@@ -401,6 +384,17 @@ describe("checkCode", () => {
     });
 
     const samples: Record<AcceptedSdk, string> = {
+      Go: [
+        "package greeting",
+        "",
+        'import "go.temporal.io/sdk/activity"',
+        "",
+        "func Greet(ctx context.Context, name string) (string, error) {",
+        "    activity.RecordHeartbeat(ctx)",
+        '    return "Hello " + name, nil',
+        "}",
+      ].join("\n"),
+      Java: javaActivity,
       Python: [
         "from temporalio import activity",
         "",
@@ -501,9 +495,9 @@ describe("checkCode", () => {
       ).toMatchObject({ type: refusalTypes.noActivity, sdk: "TypeScript" });
     });
 
-    it("refuses as no activity, not as an unaccepted SDK, for a Java activity declared as Python", () => {
+    it("refuses as no activity, not as an unaccepted SDK, for a PHP activity declared as Python", () => {
       const empty = stub([], "Python", "PY");
-      expect(refusalOf(javaActivity, [empty], "Python")).toMatchObject({
+      expect(refusalOf(phpActivity, [empty], "Python")).toMatchObject({
         type: refusalTypes.noActivity,
         sdk: "Python",
       });
@@ -563,7 +557,6 @@ describe("checkCode", () => {
     it.each([
       ["no activity", `STUB_SDK # ${secret}`, [stub([])]],
       ["SDK choice needed", `print("${secret}")`, [stub([])]],
-      ["unaccepted SDK", `${javaActivity}\n// ${secret}`, [stub([])]],
       [
         "multiple activities",
         `STUB_SDK ${secret}`,

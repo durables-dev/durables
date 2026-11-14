@@ -181,7 +181,7 @@ const factLabels = [
 ];
 
 interface AcceptedSample {
-  sdk: "Python" | "TypeScript" | ".NET";
+  sdk: "Java" | "Python" | "TypeScript" | ".NET";
   code: string;
   activity: string;
   /** The card's eight values, in the order of `factLabels`. */
@@ -191,6 +191,7 @@ interface AcceptedSample {
 const python = sample("python");
 const typescript = sample("typescript");
 const dotnet = sample("dotnet");
+const java = sample("java");
 
 const accepted: AcceptedSample[] = [
   {
@@ -238,6 +239,23 @@ const accepted: AcceptedSample[] = [
       `Yes, line ${String(lineOf(dotnet, ".Heartbeat("))}`,
     ],
   },
+  {
+    // The interface carries the activity, so the SDK is detected. Runs as is the Java SDK's
+    // wording from the SDK catalog.
+    sdk: "Java",
+    code: java,
+    activity: "sendSms",
+    facts: [
+      "Java",
+      "sendSms",
+      "SmsRequest → String",
+      "Synchronous: the Java SDK runs it for you",
+      "None raised",
+      `TWILIO_ACCOUNT_SID (line ${String(lineOf(java, 'System.getenv("TWILIO_ACCOUNT_SID")'))}), TWILIO_AUTH_TOKEN (line ${String(lineOf(java, 'System.getenv("TWILIO_AUTH_TOKEN")'))}), TWILIO_FROM_NUMBER (line ${String(lineOf(java, 'System.getenv("TWILIO_FROM_NUMBER")'))})`,
+      "com.twilio",
+      "Not detected",
+    ],
+  },
 ];
 
 const twoActivitiesMessage =
@@ -258,12 +276,6 @@ const refusals = [
     // The api now answers this paste with sdk-choice-needed (DUR-82), which web can't show
     // until DUR-90 adds the must-choose control. DUR-92 rewrites this case for that control.
     fixme: "Waits for DUR-90 and DUR-92: the api asks for the SDK to be chosen",
-  },
-  {
-    file: "a Java activity",
-    code: sample("java"),
-    message:
-      "Durables accepts Python, TypeScript and .NET activities. This file looks like a Java activity.",
   },
   {
     file: "a file with two activities",
