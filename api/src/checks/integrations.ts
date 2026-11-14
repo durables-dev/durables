@@ -12,9 +12,10 @@ interface IntegrationPackages {
   /**
    * The integration keys of this integration's client libraries: package names for Python and
    * TypeScript, the namespace root of a `using` for .NET, the import path before any
-   * major-version suffix for Go, and a package's organisation or AWS service for Java. A
-   * dependency implies the integration when its SDK's normaliser gives one of these keys.
-   * Keys are compared without regard to case.
+   * major-version suffix for Go, a package's organisation or AWS service for Java, and the
+   * package-level namespace for PHP, such as `Aws\S3`. A dependency implies the integration
+   * when its SDK's normaliser gives one of these keys, or, for a PHP namespace, a namespace
+   * inside one of them. Keys are compared without regard to case.
    */
   readonly packages: readonly string[];
 }
@@ -33,6 +34,7 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "github.com/aws/aws-sdk-go/service/s3",
       "software.amazon.awssdk.services.s3",
       "com.amazonaws.services.s3",
+      "Aws\\S3",
     ],
   },
   {
@@ -46,6 +48,7 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "github.com/jackc/pgx",
       "github.com/lib/pq",
       "org.postgresql",
+      "Amp\\Postgres",
     ],
   },
   {
@@ -56,14 +59,25 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "SlackNet",
       "github.com/slack-go/slack",
       "com.slack",
+      "JoliCode\\Slack",
     ],
   },
-  // "stripe" is also the Stripe.net package's .NET namespace root.
+  // "stripe" is also the Stripe.net package's .NET namespace root, and stripe-php's namespace.
   {
     integration: "Stripe",
     packages: ["stripe", "github.com/stripe/stripe-go", "com.stripe"],
   },
 ];
+
+/** A PHP namespace's separator. No other SDK's integration keys contain it. */
+const namespaceSeparator = "\\";
+
+/**
+ * Whether an imported key is the package key, or a PHP namespace inside it: `stripe\exception`
+ * is inside `stripe`.
+ */
+const isWithin = (imported: string, key: string) =>
+  imported === key || imported.startsWith(`${key}${namespaceSeparator}`);
 
 /**
  * The integrations an SDK's detected third-party imports imply, each once. Each dependency
@@ -75,12 +89,12 @@ export const integrationsFor = (
   dependencies: readonly Pick<NamedLineRef, "name">[],
 ): Integration[] => {
   const { normaliseDependency } = sdkRegistry[sdk];
-  const imported = new Set(
-    dependencies.map(({ name }) => normaliseDependency(name)),
-  );
+  const imported = dependencies.map(({ name }) => normaliseDependency(name));
   return integrationPackages
     .filter(({ packages }) =>
-      packages.some((name) => imported.has(name.toLowerCase())),
+      packages.some((name) =>
+        imported.some((key) => isWithin(key, name.toLowerCase())),
+      ),
     )
     .map(({ integration }) => integration);
 };

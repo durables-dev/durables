@@ -46,7 +46,7 @@ describe("the browse query", () => {
 
   test("names every SDK in the api's list in the filter message", () => {
     expect(sdkFilterMessage).toBe(
-      "Choose Go, Java, Python, TypeScript or .NET.",
+      "Choose Go, Java, Python, TypeScript, .NET or PHP.",
     );
   });
 
@@ -58,7 +58,7 @@ describe("the browse query", () => {
   );
 
   test("rejects several SDKs when one is unsupported", () => {
-    expect(errors({ sdk: ["TypeScript", "PHP"] })).toEqual({
+    expect(errors({ sdk: ["TypeScript", "Rust"] })).toEqual({
       sdk: sdkFilterMessage,
     });
   });

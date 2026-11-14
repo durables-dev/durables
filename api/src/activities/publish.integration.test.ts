@@ -365,6 +365,46 @@ describe("POST /api/activities", () => {
       });
     });
 
+    test("stores a PHP version with its facts, its Stripe integration and its six snippets", async () => {
+      const { cookie, handle } = await newPublisher();
+      const code = [
+        "<?php",
+        "use Stripe\\StripeClient;",
+        "use Temporal\\Activity\\ActivityInterface;",
+        "",
+        "#[ActivityInterface]",
+        "class Payments",
+        "{",
+        "    public function chargeCard(ChargeRequest $request): ChargeResult",
+        "    {",
+        "        return (new StripeClient(getenv('STRIPE_API_KEY')))->charge($request);",
+        "    }",
+        "}",
+      ].join("\n");
+      const body = publishBody({ code, title: "Charge card" });
+
+      const response = await publish(cookie, body);
+
+      expect(response.status).toBe(201);
+      const address = addressOf(handle, body.name);
+      const stored = await storage().readVersionDocument(address);
+      expect(stored).toMatchObject(expectedDocument(code, address));
+      expect(stored?.facts.sdk).toBe("PHP");
+      expect(stored?.integrations).toEqual(["Stripe"]);
+      expect(stored?.snippets.map(({ label }) => label)).toEqual([
+        "Install",
+        "ChargeCardWorkflow.php",
+        "worker.php",
+        "starter.php",
+        "Run",
+        ".rr.yaml",
+      ]);
+      expect(await storage().findListing(address)).toMatchObject({
+        sdk: "PHP",
+        integrations: ["Stripe"],
+      });
+    });
+
     test("publishes a Java activity with its facts, integrations and Java snippets", async () => {
       const { cookie, handle } = await newPublisher();
       const code = lines(
@@ -809,19 +849,6 @@ describe("POST /api/activities", () => {
           "",
         ),
         type: refusalTypes.multipleActivities,
-      },
-      {
-        refusal: "an SDK not accepted",
-        code: lines(
-          "<?php",
-          "",
-          "use Temporal\\Activity\\ActivityInterface;",
-          "",
-          "#[ActivityInterface]",
-          "interface Greeting {}",
-          "",
-        ),
-        type: refusalTypes.unacceptedSdk,
       },
     ])(
       "answers 422 for $refusal, and writes nothing",

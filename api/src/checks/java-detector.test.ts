@@ -29,10 +29,11 @@ import {
 import type { Pattern } from "./pattern";
 import { checkCode } from "./pipeline";
 import { CheckRefusal, refusalTypes } from "./refusals";
+import { phpActivityAttribute } from "./php-detector";
 import { allMatches } from "./scan";
 import { MAX_CODE_BYTES } from "./size-limit";
 import { toSource } from "./source";
-import { phpActivityAttribute, unacceptedSdks } from "./unaccepted-sdks";
+import { unacceptedSdks } from "./unaccepted-sdks";
 
 const detect = (code: string) =>
   javaDetector.detect(toSource(code), sdkRegistry.Java.isStandardLibrary);
@@ -697,10 +698,6 @@ describe("Java and PHP", () => {
 
   it("resolves a PHP activity with #[ActivityInterface] to PHP, not Java", () => {
     expect(identify(php)).toMatchObject({ outcome: "identified", sdk: "PHP" });
-    expect(refusalOf(php)).toMatchObject({
-      type: refusalTypes.unacceptedSdk,
-      sdk: "PHP",
-    });
   });
 
   it("resolves a Java activity to Java, though PHP's attribute pattern takes Java's annotation", () => {

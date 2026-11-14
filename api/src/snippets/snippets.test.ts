@@ -26,12 +26,13 @@ const factsFor = (
       Python: "charge_card",
       TypeScript: "chargeCard",
       ".NET": "ChargeCardAsync",
+      PHP: "chargeCard",
     }[sdk],
     line: 1,
   },
   input: "ChargeRequest",
   output: "ChargeResult",
-  runsAs: sdk === "Python" || sdk === "Go" || sdk === "Java" ? "sync" : "async",
+  runsAs: ["Python", "Go", "Java", "PHP"].includes(sdk) ? "sync" : "async",
   nonRetryableErrors: [],
   configurationRead: [{ name: "STRIPE_API_KEY", line: 4 }],
   dependencies: [
@@ -42,6 +43,7 @@ const factsFor = (
         Python: "stripe",
         TypeScript: "stripe",
         ".NET": "Stripe",
+        PHP: "Stripe",
       }[sdk],
       line: 2,
     },
@@ -58,7 +60,11 @@ const fileLabels = (sdk: AcceptedSdk, workflowClass = "ChargeCardWorkflow") =>
     Python: ["workflows.py", "worker.py", "start.py"],
     TypeScript: ["workflows.ts", "worker.ts", "start.ts"],
     ".NET": [`${workflowClass}.cs`, "Program.cs", "Starter.cs"],
+    PHP: [`${workflowClass}.php`, "worker.php", "starter.php"],
   })[sdk];
+
+/** The snippets an SDK sends after the run commands: PHP's RoadRunner config. */
+const afterRun = (sdk: AcceptedSdk) => (sdk === "PHP" ? [".rr.yaml"] : []);
 
 /** The snippet with the label. Fails the test when there is none. */
 const snippet = (snippets: readonly Snippet[], label: string) => {
@@ -69,8 +75,14 @@ const snippet = (snippets: readonly Snippet[], label: string) => {
   return found.code;
 };
 
-/** The workflow, worker and starter files, in that order. */
-const files = (snippets: readonly Snippet[]) => snippets.slice(1, -1);
+/**
+ * The workflow, worker and starter files, in that order: every snippet but the install and run
+ * commands and PHP's RoadRunner config.
+ */
+const files = (snippets: readonly Snippet[]) =>
+  snippets.filter(
+    ({ label }) => ![installLabel, runLabel, ".rr.yaml"].includes(label),
+  );
 
 /**
  * The first bracket that doesn't close, or closes the wrong opener, outside strings and
@@ -110,6 +122,7 @@ const lineComments: Record<AcceptedSdk, string> = {
   Python: "#",
   TypeScript: "//",
   ".NET": "//",
+  PHP: "//",
 };
 
 /** The generated text for each SDK's fixture activity, `factsFor(sdk)` at `address`. */
@@ -626,6 +639,125 @@ const expectedSnippets: Record<AcceptedSdk, Snippet[]> = {
       ].join("\n"),
     },
   ],
+  PHP: [
+    {
+      label: "Install",
+      code: [
+        "composer require temporal/sdk",
+        "./vendor/bin/rr get",
+        "# RoadRunner needs PHP's grpc extension. Install it with: pecl install grpc",
+        "# Also composer require the packages that provide: Stripe",
+      ].join("\n"),
+    },
+    {
+      label: "ChargeCardWorkflow.php",
+      code: [
+        "<?php",
+        "",
+        "declare(strict_types=1);",
+        "",
+        "use Temporal\\Activity\\ActivityOptions;",
+        "use Temporal\\Workflow;",
+        "use Temporal\\Workflow\\WorkflowInterface;",
+        "use Temporal\\Workflow\\WorkflowMethod;",
+        "",
+        "// Activities stands in for the interface or class marked #[ActivityInterface] that declares",
+        "// chargeCard. Change it to that name, with its namespace if it has one.",
+        "#[WorkflowInterface]",
+        "class ChargeCardWorkflow",
+        "{",
+        "    #[WorkflowMethod]",
+        "    public function run(ChargeRequest $input)",
+        "    {",
+        "        $activities = Workflow::newActivityStub(",
+        "            Activities::class,",
+        "            // Temporal requires a start-to-close timeout. Set it for your activity.",
+        "            ActivityOptions::new()->withStartToCloseTimeout(30),",
+        "        );",
+        "",
+        "        return yield $activities->chargeCard($input);",
+        "    }",
+        "}",
+      ].join("\n"),
+    },
+    {
+      label: "worker.php",
+      code: [
+        "<?php",
+        "",
+        "declare(strict_types=1);",
+        "",
+        "use Temporal\\WorkerFactory;",
+        "",
+        "ini_set('display_errors', 'stderr');",
+        "require 'vendor/autoload.php';",
+        "require 'Activities.php';",
+        "require 'ChargeCardWorkflow.php';",
+        "",
+        "$factory = WorkerFactory::create();",
+        "$worker = $factory->newWorker('charge-card');",
+        "",
+        "$worker->registerWorkflowTypes(ChargeCardWorkflow::class);",
+        "// Activities stands in for the class that implements chargeCard. Change it to your",
+        "// class's name, with its namespace if it has one.",
+        "$worker->registerActivity(Activities::class);",
+        "",
+        "$factory->run();",
+      ].join("\n"),
+    },
+    {
+      label: "starter.php",
+      code: [
+        "<?php",
+        "",
+        "declare(strict_types=1);",
+        "",
+        "use Temporal\\Client\\GRPC\\ServiceClient;",
+        "use Temporal\\Client\\WorkflowClient;",
+        "use Temporal\\Client\\WorkflowOptions;",
+        "",
+        "ini_set('display_errors', 'stderr');",
+        "require 'vendor/autoload.php';",
+        "require 'ChargeCardWorkflow.php';",
+        "",
+        "$client = new WorkflowClient(ServiceClient::create('localhost:7233'));",
+        "$workflow = $client->newWorkflowStub(",
+        "    ChargeCardWorkflow::class,",
+        "    WorkflowOptions::new()",
+        "        ->withTaskQueue('charge-card')",
+        "        ->withWorkflowId('charge-card-' . uniqid()),",
+        ");",
+        "",
+        "// Fill in the ChargeRequest to pass to chargeCard.",
+        "$input = null;",
+        "$result = $workflow->run($input);",
+        "var_dump($result);",
+      ].join("\n"),
+    },
+    {
+      label: "Run",
+      code: [
+        "temporal server start-dev",
+        "export STRIPE_API_KEY=...",
+        "./rr serve",
+        "php starter.php",
+      ].join("\n"),
+    },
+    {
+      label: ".rr.yaml",
+      code: [
+        'version: "3"',
+        "rpc:",
+        "    listen: tcp://127.0.0.1:6001",
+        "server:",
+        '    command: "php worker.php"',
+        "temporal:",
+        '    address: "127.0.0.1:7233"',
+        "logs:",
+        "    level: info",
+      ].join("\n"),
+    },
+  ],
 };
 
 describe("generateSnippets", () => {
@@ -635,7 +767,12 @@ describe("generateSnippets", () => {
       (sdk) => {
         expect(
           generateSnippets(factsFor(sdk), address).map(({ label }) => label),
-        ).toEqual([installLabel, ...fileLabels(sdk), runLabel]);
+        ).toEqual([
+          installLabel,
+          ...fileLabels(sdk),
+          runLabel,
+          ...afterRun(sdk),
+        ]);
       },
     );
 
@@ -1372,6 +1509,7 @@ describe("generateSnippets", () => {
         '({\n    // Temporal requires a start-to-close timeout. Set it for your activity.\n    startToCloseTimeout: "30 seconds",\n});',
       ".NET":
         "            {\n                // Temporal requires a start-to-close timeout. Set it for your activity.\n                StartToCloseTimeout = TimeSpan.FromSeconds(30),\n            });",
+      PHP: "            // Temporal requires a start-to-close timeout. Set it for your activity.\n            ActivityOptions::new()->withStartToCloseTimeout(30),\n        );",
     };
 
     const workflowFile = (
@@ -1476,6 +1614,10 @@ describe("generateSnippets", () => {
         ".NET",
         "dotnet new console --output charge-card\ncd charge-card\ndotnet add package Temporalio",
       ],
+      [
+        "PHP",
+        "composer require temporal/sdk\n./vendor/bin/rr get\n# RoadRunner needs PHP's grpc extension. Install it with: pecl install grpc",
+      ],
     ] as const)("still installs the %s SDK", (sdk, command) => {
       expect(
         snippet(
@@ -1502,6 +1644,7 @@ describe("generateSnippets", () => {
       ["Python", "activities.py"],
       ["TypeScript", "activities.ts"],
       [".NET", "Activities.cs"],
+      ["PHP", "Activities.php"],
     ] as const)(
       "names the %s activity file %s, the file the workflow and worker import",
       (sdk, fileName) => {
@@ -1512,11 +1655,164 @@ describe("generateSnippets", () => {
           Python: "from activities import",
           TypeScript: 'from "./activities"',
           ".NET": "activities.ChargeCardAsync",
+          PHP: "Activities::class",
         }[sdk];
         for (const { code } of files(expectedSnippets[sdk]).slice(0, 2)) {
           expect(code).toContain(importsActivityFile);
         }
       },
     );
+  });
+});
+
+describe("the PHP snippets", () => {
+  const php = (changes: Partial<FactValues> = {}) =>
+    generateSnippets(factsFor("PHP", changes), address);
+
+  it("sends five files with the published activity: the workflow, worker, starter and .rr.yaml", () => {
+    expect(files(php()).map(({ label }) => label)).toEqual([
+      "ChargeCardWorkflow.php",
+      "worker.php",
+      "starter.php",
+    ]);
+    expect(snippet(php(), ".rr.yaml")).not.toBe("");
+    expect(sdkRegistry.PHP.display.activityFileName).toBe("Activities.php");
+  });
+
+  it("sends the RoadRunner config after the run commands, so the first five keep every SDK's order", () => {
+    const labels = php().map(({ label }) => label);
+    expect(labels.slice(0, 5)).toEqual([
+      installLabel,
+      "ChargeCardWorkflow.php",
+      "worker.php",
+      "starter.php",
+      runLabel,
+    ]);
+    expect(labels[5]).toBe(".rr.yaml");
+  });
+
+  it("installs the SDK with composer, then RoadRunner, noting the grpc extension", () => {
+    const install = snippet(php({ dependencies: [] }), installLabel).split(
+      "\n",
+    );
+    expect(install).toEqual([
+      "composer require temporal/sdk",
+      "./vendor/bin/rr get",
+      "# RoadRunner needs PHP's grpc extension. Install it with: pecl install grpc",
+    ]);
+  });
+
+  it("names each detected package namespace after the install steps", () => {
+    const install = snippet(
+      php({
+        dependencies: [
+          { name: "Stripe", line: 2 },
+          { name: "Aws\\S3", line: 3 },
+        ],
+      }),
+      installLabel,
+    );
+    expect(install.split("\n").at(-1)).toBe(
+      "# Also composer require the packages that provide: Stripe, Aws\\S3",
+    );
+  });
+
+  it("renders .rr.yaml with a server command that runs php worker.php", () => {
+    const config = snippet(php(), ".rr.yaml");
+    expect(config).toContain('server:\n    command: "php worker.php"');
+    expect(config).toContain('temporal:\n    address: "127.0.0.1:7233"');
+    expect(config.startsWith('version: "3"')).toBe(true);
+  });
+
+  it("starts the worker with ./rr serve, after the dev server and before the workflow", () => {
+    expect(
+      snippet(php({ configurationRead: [] }), runLabel).split("\n"),
+    ).toEqual(["temporal server start-dev", "./rr serve", "php starter.php"]);
+  });
+
+  it("registers the workflow and the activity on the address's task queue", () => {
+    const worker = snippet(php(), "worker.php");
+    expect(worker).toContain("$worker = $factory->newWorker('charge-card');");
+    expect(worker).toContain("require 'Activities.php';");
+    expect(worker).toContain("require 'ChargeCardWorkflow.php';");
+    expect(worker).toContain(
+      "$worker->registerWorkflowTypes(ChargeCardWorkflow::class);",
+    );
+    expect(worker).toContain("$worker->registerActivity(Activities::class);");
+  });
+
+  it("types the workflow's input when it is known, and asks for it when it isn't", () => {
+    expect(snippet(php(), "ChargeCardWorkflow.php")).toContain(
+      "    public function run(ChargeRequest $input)\n",
+    );
+    const unknown = php({ input: null });
+    expect(snippet(unknown, "ChargeCardWorkflow.php")).toContain(
+      "    public function run(mixed $input)\n",
+    );
+    expect(snippet(unknown, "ChargeCardWorkflow.php")).toContain(
+      "Detection couldn't read what chargeCard takes.",
+    );
+    expect(snippet(unknown, "starter.php")).toContain(
+      "// Fill in the arguments chargeCard takes.",
+    );
+  });
+
+  it("leaves out the result when the activity has no output", () => {
+    const snippets = php({ output: null });
+    expect(snippet(snippets, "ChargeCardWorkflow.php")).toContain(
+      "        yield $activities->chargeCard($input);",
+    );
+    expect(snippet(snippets, "ChargeCardWorkflow.php")).not.toContain("return");
+    expect(snippet(snippets, "starter.php")).not.toContain("result");
+  });
+
+  it("escapes quotes and backslashes in the address for PHP's strings", () => {
+    const snippets = generateSnippets(factsFor("PHP"), {
+      ...address,
+      name: "it's\\odd",
+    });
+    expect(snippet(snippets, "worker.php")).toContain(
+      "newWorker('it\\'s\\\\odd')",
+    );
+    expect(snippet(snippets, "starter.php")).toContain(
+      "->withWorkflowId('it\\'s\\\\odd-' . uniqid())",
+    );
+  });
+
+  it("starts the workflow class with a letter when the method name doesn't give one", () => {
+    const snippets = php({ activity: { name: "_9lives", line: 1 } });
+    expect(snippets.map(({ label }) => label)).toContain(
+      "Activity9livesWorkflow.php",
+    );
+  });
+
+  it("generates from a detected PHP activity", () => {
+    const code = [
+      "<?php",
+      "use Stripe\\StripeClient;",
+      "use Temporal\\Activity\\ActivityInterface;",
+      "",
+      "#[ActivityInterface]",
+      "class Payments",
+      "{",
+      "    public function chargeCard(ChargeRequest $request): ChargeResult",
+      "    {",
+      "        return new ChargeResult();",
+      "    }",
+      "}",
+    ].join("\n");
+    const snippets = generateSnippets(checkCode(code, registeredSdks), address);
+    expect(snippet(snippets, "ChargeCardWorkflow.php")).toContain(
+      "        return yield $activities->chargeCard($input);",
+    );
+    expect(snippet(snippets, installLabel)).toContain(
+      "# Also composer require the packages that provide: Stripe",
+    );
+  });
+
+  it("names no thread pool in any PHP snippet", () => {
+    for (const { code } of php()) {
+      expect(code).not.toMatch(/thread[ _]?pool/i);
+    }
   });
 });

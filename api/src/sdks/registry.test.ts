@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { dotnet } from "./dotnet";
+import { php } from "./php";
 import { go } from "./go";
 import { java } from "./java";
 import { python } from "./python";
@@ -62,7 +63,7 @@ describe("the SDK registry", () => {
 
   it("lists its entries in the api's list's order", () => {
     expect(registeredSdks.map(({ sdk }) => sdk)).toEqual([...sdks]);
-    expect(registeredSdks).toEqual([go, java, python, typescript, dotnet]);
+    expect(registeredSdks).toEqual([go, java, python, typescript, dotnet, php]);
   });
 
   it("gives every entry recognition patterns with unique names across the registry", () => {
@@ -86,6 +87,10 @@ describe("the SDK registry", () => {
       ["TypeScript", "pg", "pg"],
       [".NET", "Npgsql", "npgsql"],
       [".NET", "SlackNet", "slacknet"],
+      ["PHP", "Stripe", "stripe"],
+      ["PHP", "Aws\\S3", "aws\\s3"],
+      ["PHP", "JoliCode\\Slack", "jolicode\\slack"],
+      ["PHP", "Amp\\Postgres", "amp\\postgres"],
     ] as const)(
       "maps the %s dependency %s to the integration key %s",
       (sdk, name, key) => {
@@ -114,6 +119,13 @@ describe("the SDK registry", () => {
       [".NET", "Microsoft", true],
       [".NET", "Npgsql", false],
       [".NET", "Temporalio", false],
+      ["PHP", "DateTimeImmutable", true],
+      ["PHP", "\\PDO", true],
+      ["PHP", "Random\\Randomizer", true],
+      ["PHP", "PgSql\\Connection", true],
+      ["PHP", "Stripe\\StripeClient", false],
+      ["PHP", "Aws\\S3\\S3Client", false],
+      ["PHP", "Temporal\\Activity", false],
     ] as const)(
       "reads the %s dependency %s as standard library: %s",
       (sdk, name, expected) => {
@@ -128,6 +140,7 @@ describe("the SDK registry", () => {
       ["Python", "activities.py", "temporalio", "python"],
       ["TypeScript", "activities.ts", "@temporalio/activity", "typescript"],
       [".NET", "Activities.cs", "Temporalio", "csharp"],
+      ["PHP", "Activities.php", "temporal/sdk", "php"],
     ] as const)(
       "gives %s the activity file %s, the package %s and the highlight language %s",
       (sdk, activityFileName, sdkPackage, highlightLanguage) => {
@@ -145,6 +158,18 @@ describe("the SDK registry", () => {
         ]);
       },
     );
+
+    it("gives PHP wording for RoadRunner, which its generated worker runs under", () => {
+      expect(sdkRegistry.PHP.display.runsAs).toEqual({
+        sync: "Synchronous: RoadRunner runs it in a PHP worker process",
+        async: "Async",
+      });
+      expect(sdkRegistry.PHP.display.workerRequirements).toEqual({
+        sync: "This is a synchronous activity. Your worker runs under RoadRunner, which needs PHP's grpc extension. The .rr.yaml file in Implement configures it.",
+        async:
+          "This is an async activity. Your worker runs under RoadRunner, which needs PHP's grpc extension. The .rr.yaml file in Implement configures it.",
+      });
+    });
 
     const asyncRunsAs = "Async";
     const asyncWorker =

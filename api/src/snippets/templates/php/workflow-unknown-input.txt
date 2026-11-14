@@ -1,0 +1,28 @@
+<?php
+
+declare(strict_types=1);
+
+use Temporal\Activity\ActivityOptions;
+use Temporal\Workflow;
+use Temporal\Workflow\WorkflowInterface;
+use Temporal\Workflow\WorkflowMethod;
+
+// Activities stands in for the interface or class marked #[ActivityInterface] that declares
+// {{activity}}. Change it to that name, with its namespace if it has one.
+#[WorkflowInterface]
+class {{workflowClass}}
+{
+    #[WorkflowMethod]
+    public function run(mixed $input)
+    {
+        $activities = Workflow::newActivityStub(
+            Activities::class,
+            // Temporal requires a start-to-close timeout. Set it for your activity.
+            ActivityOptions::new()->withStartToCloseTimeout(30),
+        );
+
+        // Detection couldn't read what {{activity}} takes. Change mixed to its input
+        // type, or fill in its arguments below.
+        {{returnKeyword}}yield $activities->{{activity}}($input);
+    }
+}

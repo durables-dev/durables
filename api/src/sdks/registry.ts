@@ -1,4 +1,5 @@
 import { dotnet } from "./dotnet";
+import { php } from "./php";
 import { go } from "./go";
 import { java } from "./java";
 import { python } from "./python";
@@ -15,6 +16,7 @@ export const sdkRegistry: SdkRegistry = {
   Python: python,
   TypeScript: typescript,
   ".NET": dotnet,
+  PHP: php,
 };
 
 /** Every registry entry, in the api's SDK list's order. */

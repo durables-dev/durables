@@ -1,0 +1,4 @@
+temporal server start-dev
+{{environment}}
+./rr serve
+php starter.php

@@ -205,32 +205,11 @@ describe("checkCode", () => {
       );
     });
 
-    it.each([["PHP", phpActivity]] as const)(
-      "refuses a %s Temporal activity, naming the SDK",
-      (sdk, code) => {
-        expect(refusalOf(code, [stub([facts("act")])])).toEqual({
-          type: refusalTypes.unacceptedSdk,
-          status: 422,
-          title: expect.any(String) as string,
-          detail: expect.stringContaining(sdk) as string,
-          sdk,
-        });
-      },
-    );
-
     it("accepts a Go Temporal activity, which is no longer refused by name", () => {
       expect(checkCode(goActivity, registeredSdks)).toMatchObject({
         sdk: "Go",
         activity: { name: "Greet", line: 9 },
         provenance: provenance("detected"),
-      });
-    });
-
-    it("names the SDK for a PHP file with the SDK use but no activity attribute", () => {
-      const code = "use Temporal\\Client\\WorkflowClient;\n";
-      expect(refusalOf(code, [])).toMatchObject({
-        type: refusalTypes.unacceptedSdk,
-        sdk: "PHP",
       });
     });
 
@@ -256,12 +235,18 @@ describe("checkCode", () => {
         refusalOf("STUB_SDK", detectors).type,
         refusalOf("", detectors).type,
         refusalOf("plain text", detectors).type,
-        refusalOf(phpActivity, detectors).type,
         refusalOf("STUB_SDK", [stub([facts("a"), facts("b")])]).type,
         refusalOf("x".repeat(MAX_CODE_BYTES + 1), detectors).type,
       ];
       expect(new Set(types).size).toBe(types.length);
-      expect(new Set(types)).toEqual(new Set(Object.values(refusalTypes)));
+      // No SDK is refused by name any more; DUR-89 retires that refusal type.
+      expect(new Set(types)).toEqual(
+        new Set(
+          Object.values(refusalTypes).filter(
+            (type) => type !== refusalTypes.unacceptedSdk,
+          ),
+        ),
+      );
     });
   });
 
@@ -310,13 +295,6 @@ describe("checkCode", () => {
     it("chooses an accepted SDK's activity over an unaccepted SDK's import", () => {
       const code = `PY_SDK\nPY_ACTIVITY\nuse Temporal\\Client\\WorkflowClient;\n`;
       expect(checkCode(code, [python]).sdk).toBe("Python");
-    });
-
-    it("names an unaccepted SDK whose activity marker is the only one", () => {
-      expect(refusalOf(`PY_SDK\n${phpActivity}`, [python])).toMatchObject({
-        type: refusalTypes.unacceptedSdk,
-        sdk: "PHP",
-      });
     });
 
     it("asks for the SDK to be chosen for a file with markers for two SDKs and no activity marker", () => {
@@ -441,6 +419,7 @@ describe("checkCode", () => {
         '    public Task<string> GreetAsync(string name) => Task.FromResult($"Hello {name}");',
         "}",
       ].join("\n"),
+      PHP: phpActivity,
     };
 
     it.each(Object.entries(samples))(
@@ -578,7 +557,6 @@ describe("checkCode", () => {
     it.each([
       ["no activity", `STUB_SDK # ${secret}`, [stub([])]],
       ["SDK choice needed", `print("${secret}")`, [stub([])]],
-      ["unaccepted SDK", `${phpActivity}\n// ${secret}`, [stub([])]],
       [
         "multiple activities",
         `STUB_SDK ${secret}`,

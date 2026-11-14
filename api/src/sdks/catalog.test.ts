@@ -44,6 +44,7 @@ describe("the SDK catalog", () => {
       "Python",
       "TypeScript",
       ".NET",
+      "PHP",
     ]);
   });
 
@@ -55,6 +56,7 @@ describe("the SDK catalog", () => {
       [
         sdkRegistry.TypeScript,
         sdkRegistry.Go,
+        sdkRegistry.PHP,
         sdkRegistry.Java,
         sdkRegistry[".NET"],
         sdkRegistry.Python,
@@ -63,6 +65,7 @@ describe("the SDK catalog", () => {
     [
       "another shuffled order",
       [
+        sdkRegistry.PHP,
         sdkRegistry[".NET"],
         sdkRegistry.Python,
         sdkRegistry.TypeScript,
@@ -77,6 +80,7 @@ describe("the SDK catalog", () => {
       "Python",
       "TypeScript",
       ".NET",
+      "PHP",
     ]);
   });
 

@@ -4,8 +4,8 @@ import type { SdkRegistry } from "./sdk-entry";
 import { type Sdk, sdkSchema, sdks } from "./sdk-list";
 
 describe("the api's SDK list", () => {
-  it("holds Go, Java, Python, TypeScript and .NET, in Temporal's order", () => {
-    expect(sdks).toEqual(["Go", "Java", "Python", "TypeScript", ".NET"]);
+  it("holds Go, Java, Python, TypeScript, .NET and PHP, in Temporal's order", () => {
+    expect(sdks).toEqual(["Go", "Java", "Python", "TypeScript", ".NET", "PHP"]);
   });
 
   it("keys the registry, so each SDK in it needs an entry", () => {
@@ -18,7 +18,7 @@ describe("the api's SDK list", () => {
     expect(sdkSchema.parse(sdk)).toBe(sdk);
   });
 
-  it.each(["Kotlin", "go", "java", "python", "", ".net"])(
+  it.each(["Kotlin", "Rust", "go", "java", "python", "php", "", ".net"])(
     "refuses %j, which is not in the list",
     (name) => {
       expect(sdkSchema.safeParse(name).success).toBe(false);

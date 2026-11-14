@@ -23,6 +23,7 @@ describe("reading the SDK catalog", () => {
       "Python",
       "TypeScript",
       ".NET",
+      "PHP",
     ]);
     expect(catalog).toHaveLength(registeredSdks.length);
   });
