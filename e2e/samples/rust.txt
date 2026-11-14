@@ -1,0 +1,51 @@
+use std::env;
+
+use serde::{Deserialize, Serialize};
+use temporalio_macros::activities;
+use temporalio_sdk::activities::{ActivityContext, ActivityError, ApplicationFailure};
+use tokio_postgres::NoTls;
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct OrderUpdate {
+    pub order_id: i64,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdatedOrder {
+    pub order_id: i64,
+    pub rows: u64,
+}
+
+pub struct OrderActivities;
+
+#[activities]
+impl OrderActivities {
+    /// Records an order's new status in the orders database.
+    #[activity]
+    pub async fn record_order_status(
+        ctx: ActivityContext,
+        update: OrderUpdate,
+    ) -> Result<UpdatedOrder, ActivityError> {
+        let url = env::var("DATABASE_URL")?;
+        let (client, connection) = tokio_postgres::connect(&url, NoTls).await?;
+        tokio::spawn(connection);
+
+        ctx.record_heartbeat(update.order_id.to_string()).await?;
+
+        let rows = client
+            .execute(
+                "UPDATE orders SET status = $1 WHERE id = $2",
+                &[&update.status, &update.order_id],
+            )
+            .await?;
+        if rows == 0 {
+            return Err(ApplicationFailure::non_retryable("No such order").into());
+        }
+
+        Ok(UpdatedOrder {
+            order_id: update.order_id,
+            rows,
+        })
+    }
+}
