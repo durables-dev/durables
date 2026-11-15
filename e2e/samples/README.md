@@ -7,9 +7,10 @@ Activity files tests paste into the contribute flow, one per SDK, as `.txt` so P
 - `php.txt` — an accepted PHP activity, `#[ActivityInterface]` on a class, that posts a Slack message. Its Implement section has a fifth file, `.rr.yaml`.
 - `rust.txt` — an accepted Rust activity, `#[activity]` in an `#[activities]` impl, that updates an order in Postgres.
 - `go-no-marker.txt` — a Go activity that imports no Temporal package, as in Temporal's Go quickstart, so its SDK is inferred from the code.
+- `java-no-import.txt` — a Java activity interface whose Temporal annotations are written in full, with no Temporal import. No SDK identifies it, so the publisher must choose one. Choosing Java finds its activity.
 - `python-workflow-only.txt` — uses the SDK but holds a workflow and no activity.
 - `python-two-activities.txt` — two activities in one file.
 - `python-no-configuration.txt` — a synchronous activity that reads no environment variables and imports nothing beyond the standard library and the SDK, so it has no integrations and no dependencies.
-- `not-temporal.txt` — a plain Python script with no Temporal SDK.
+- `not-temporal.txt` — a plain Python script with no Temporal SDK. No SDK identifies it, and no SDK's check finds an activity in it.
 
 The file over the size limit is generated in the test.

@@ -980,3 +980,159 @@ for (const journey of sdkJourneys) {
     },
   );
 }
+
+test(
+  "a publisher whose SDK can't be identified chooses it, corrects a wrong choice, publishes, and the activity page shows the SDK they declared",
+  { tag: "@journey" },
+  async ({
+    page,
+    expectAccessible,
+    signIn,
+    uniqueHandle,
+    uniqueWord,
+    paste,
+  }) => {
+    const handle = uniqueHandle("declared");
+    const word = uniqueWord();
+    // java-no-import.txt writes its Temporal annotations in full and imports nothing from
+    // Temporal, so no SDK identifies it.
+    const code = sample("java-no-import");
+    const title = `Issue refund ${word}`;
+    const name = "issue-refund";
+    const address = `${handle}/${name}@1.0.0`;
+    const main = page.getByRole("main");
+    const continueButton = page.getByRole("button", { name: "Continue" });
+    const sdkDropdown = page.getByRole("combobox", {
+      name: "SDK",
+      exact: true,
+    });
+    const hint = page.getByText("Choose the SDK this activity is for", {
+      exact: true,
+    });
+
+    await test.step("sign in as a new publisher, choose a handle and reach the Code step", async () => {
+      await signIn({
+        name: publisherName,
+        provider: "github",
+        username: handle,
+      });
+      await openContributeFromHome(page);
+      await expect(page.getByText(`${handle} is available.`)).toBeVisible();
+      await continueButton.click();
+
+      await expectOnCodeStep(page);
+    });
+
+    await test.step("paste the activity and be asked to choose its SDK", async () => {
+      await paste(page.getByLabel("Paste your file", { exact: true }), code);
+
+      await expect(
+        page.getByText(
+          "We couldn't tell which SDK this is. Choose the one it's written for.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(sdkDropdown).toHaveValue("");
+      await expect(continueButton).toBeDisabled();
+      await expect(hint).toBeVisible();
+      await expectAccessible();
+    });
+
+    await test.step("choose Go and see that Go finds no activity, with the dropdown still there", async () => {
+      await sdkDropdown.selectOption("Go");
+
+      await expect(
+        page.getByText(
+          "No activity found for Go. Check the code, or choose a different SDK.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(sdkDropdown).toHaveValue("Go");
+      await expect(continueButton).toBeDisabled();
+      await expect(hint).toBeVisible();
+    });
+
+    await test.step("choose Java and see the activity found, declared by the publisher", async () => {
+      await sdkDropdown.selectOption("Java");
+
+      await expect(
+        page.getByText(
+          "✓ Found issueRefund (Java, declared by you). Next, check what we detected.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Change the SDK, Java", exact: true }),
+      ).toBeVisible();
+      await expect(continueButton).toBeEnabled();
+      await expectAccessible();
+    });
+
+    await test.step("see Java declared by the publisher on the What we found card", async () => {
+      await continueButton.click();
+
+      await expect(page).toHaveURL("/contribute/detected");
+      const values = page
+        .getByRole("region", { name: "What we found" })
+        .getByRole("definition");
+      await expect(values.nth(0)).toHaveText("Java");
+      await expect(values.nth(1)).toHaveText("Declared by you");
+      await expect(values.nth(2)).toHaveText("issueRefund");
+      await expectAccessible();
+    });
+
+    await test.step("describe the listing and see Java on the preview", async () => {
+      await continueButton.click();
+      await expect(page).toHaveURL("/contribute/details");
+      await page.getByLabel("Title", { exact: true }).fill(title);
+      await page.getByLabel("Name in the address", { exact: true }).fill(name);
+      await page
+        .getByLabel("One-line description", { exact: true })
+        .fill("Refunds a payment and returns the refund's receipt.");
+      await continueButton.click();
+
+      await expect(page).toHaveURL("/contribute/review");
+      const preview = page.getByRole("region", { name: "Listing preview" });
+      await expect(preview.getByRole("heading", { name: title })).toBeVisible();
+      await expect(preview.getByText("Java", { exact: true })).toBeVisible();
+      await expectAccessible();
+    });
+
+    await test.step("confirm the six terms and publish", async () => {
+      const confirmations = page
+        .getByRole("group", {
+          name: "Before you publish, confirm each of these",
+        })
+        .getByRole("checkbox");
+      await expect(confirmations).toHaveCount(6);
+      for (const box of await confirmations.all()) {
+        await box.check();
+      }
+      await page.getByRole("button", { name: "Publish 1.0.0" }).click();
+
+      await expect(page).toHaveURL("/contribute/published");
+      await expect(
+        page.getByRole("region", { name: "Published" }).getByText(/is live\./),
+      ).toContainText(`${address} is live.`);
+    });
+
+    await test.step("open the activity page and see the SDK the publisher declared", async () => {
+      await page.goto(`/${address}`);
+
+      await expect(
+        main.getByRole("heading", { level: 1, name: title }),
+      ).toBeVisible();
+      await expect(main.getByText("Java", { exact: true })).toBeVisible();
+      await expect(
+        page
+          .getByRole("region", { name: "About" })
+          .getByRole("definition")
+          .first(),
+      ).toHaveText("Java, io.temporal:temporal-sdk");
+      await expect(
+        main.getByRole("tablist", { name: "Files" }).getByRole("tab").first(),
+      ).toHaveText("Activities.java");
+      await expectAccessible();
+    });
+  },
+);
