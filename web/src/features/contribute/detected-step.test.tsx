@@ -8,6 +8,12 @@ import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
+import {
+  failCatalog,
+  rustProfile,
+  serveCatalog,
+} from "../../../test/serve-sdk-catalog";
+import { testCatalog } from "../../../test/sdk-catalog";
 import type { CheckedFacts } from "./check-result";
 import { draftStorageKey, type Draft } from "./draft";
 import { acceptedDraft, refusedCheck } from "./test-drafts";
@@ -147,6 +153,35 @@ afterEach(() => {
 });
 
 describe("the Detected step", () => {
+  test.each([
+    ["detected", "Detected"],
+    ["inferred", "Inferred from the code"],
+    ["declared", "Declared by you"],
+  ] as const)(
+    "a %s SDK shows %j in muted text under its name, read-only",
+    async (tier, note) => {
+      const { screen } = await openDetected(
+        draftWith({ ...fullFacts, sdk: "Go", provenance: { sdk: tier } }),
+      );
+
+      const value = factValue(screen, "SDK");
+      expect(value.textContent).toBe("Go");
+      const under = value.nextElementSibling;
+      if (!(under instanceof HTMLElement)) {
+        throw new Error("Expected a note under the SDK");
+      }
+      expect(under.tagName).toBe("DD");
+      expect(under.textContent).toBe(note);
+      expect(getComputedStyle(under).color).toBe(tokenColour("--fg-muted"));
+      expect(under.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        value.getBoundingClientRect().bottom,
+      );
+      const facts = card(screen);
+      expect(facts.getByRole("button").elements()).toHaveLength(0);
+      expect(facts.getByRole("combobox").elements()).toHaveLength(0);
+    },
+  );
+
   test("shows the heading, the intro and the card with all eight facts", async () => {
     const { screen } = await openDetected(draftWith(fullFacts));
 
@@ -156,16 +191,19 @@ describe("the Detected step", () => {
     await expect
       .element(card(screen).getByRole("heading", { level: 3 }))
       .toHaveTextContent("What we found");
-    expect(cardFacts(screen)).toEqual([
-      ["SDK", "Python"],
-      ["Activity", "post_slack_message"],
-      ["Input → output", "SlackMessage → MessageRef"],
-      ["Runs as", "Synchronous: the worker needs a thread pool"],
-      ["Non-retryable errors", "Raised on line 13"],
-      ["Configuration read", "SLACK_TOKEN (line 7)"],
-      ["Dependencies", "httpx"],
-      ["Heartbeats", "Yes, line 11"],
-    ]);
+    // The Runs as wording comes with the SDK catalog.
+    await expect
+      .poll(() => cardFacts(screen))
+      .toEqual([
+        ["SDK", "Python"],
+        ["Activity", "post_slack_message"],
+        ["Input → output", "SlackMessage → MessageRef"],
+        ["Runs as", "Synchronous: the worker needs a thread pool"],
+        ["Non-retryable errors", "Raised on line 13"],
+        ["Configuration read", "SLACK_TOKEN (line 7)"],
+        ["Dependencies", "httpx"],
+        ["Heartbeats", "Yes, line 11"],
+      ]);
   });
 
   test("lays the facts out in two columns, each a label above a monospace value", async () => {
@@ -226,6 +264,45 @@ describe("the Detected step", () => {
     );
 
     expect(factValue(screen, "Runs as").textContent).toBe("Async");
+  });
+
+  test("a synchronous .NET activity's Runs as matches the Configure wording, with no thread pool", async () => {
+    const { screen } = await openDetected(
+      draftWith({ ...fullFacts, sdk: ".NET", runsAs: "sync" }),
+    );
+
+    await expect
+      .poll(() => factValue(screen, "Runs as").textContent)
+      .toBe("Synchronous: the .NET SDK runs it for you");
+    expect(factValue(screen, "Runs as").textContent).not.toMatch(
+      /thread pool/i,
+    );
+  });
+
+  test("an SDK web has no code for reads the catalog's Runs as wording", async () => {
+    serveCatalog([...testCatalog, rustProfile]);
+    const { screen } = await openDetected(
+      draftWith({ ...fullFacts, sdk: "Rust", runsAs: "sync" }),
+    );
+
+    await expect
+      .poll(() => factValue(screen, "Runs as").textContent)
+      .toBe(rustProfile.runsAs.sync);
+    expect(factValue(screen, "SDK").textContent).toBe("Rust");
+  });
+
+  test("when the catalog cannot be read, Runs as says only how it runs and the card still shows", async () => {
+    const failed = failCatalog();
+    const { screen } = await openDetected(
+      draftWith({ ...fullFacts, runsAs: "sync" }),
+    );
+    await failed;
+
+    expect(factValue(screen, "Runs as").textContent).toBe("Synchronous");
+    expect(factValue(screen, "SDK").textContent).toBe("Python");
+    expect(factValue(screen, "Activity").textContent).toBe(
+      "post_slack_message",
+    );
   });
 });
 
@@ -465,6 +542,10 @@ describe("the address", () => {
 describe("reloading the page", () => {
   test("shows the same facts from the draft", async () => {
     const first = await openDetected(draftWith(fullFacts));
+    // The Runs as wording comes with the SDK catalog, so wait for it before reading the card.
+    await expect
+      .poll(() => factValue(first.screen, "Runs as").textContent)
+      .toBe("Synchronous: the worker needs a thread pool");
     const before = cardFacts(first.screen);
     await first.screen.unmount();
 
@@ -473,7 +554,7 @@ describe("reloading the page", () => {
 
     await expect.element(heading(screen)).toBeVisible();
     expect(router.state.location.pathname).toBe("/contribute/detected");
-    expect(cardFacts(screen)).toEqual(before);
+    await expect.poll(() => cardFacts(screen)).toEqual(before);
     expect(before).toHaveLength(8);
   });
 });

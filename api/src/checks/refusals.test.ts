@@ -10,7 +10,7 @@ import {
   noActivity,
   notTemporalActivity,
   refusalTypes,
-  unacceptedSdk,
+  sdkChoiceNeeded,
 } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
 
@@ -34,12 +34,18 @@ describe("refusals", () => {
   });
 
   it("are ProblemErrors, so app.onError answers them", () => {
-    expect(noActivity()).toBeInstanceOf(ProblemError);
-    expect(noActivity().name).toBe("CheckRefusal");
+    expect(noActivity("Python")).toBeInstanceOf(ProblemError);
+    expect(noActivity("Python").name).toBe("CheckRefusal");
   });
 
   it.each([
-    ["no activity", noActivity(), refusalTypes.noActivity, 422, {}],
+    [
+      "no activity",
+      noActivity(".NET"),
+      refusalTypes.noActivity,
+      422,
+      { sdk: ".NET" },
+    ],
     [
       "not a Temporal activity",
       notTemporalActivity(),
@@ -48,11 +54,18 @@ describe("refusals", () => {
       {},
     ],
     [
-      "unaccepted SDK",
-      unacceptedSdk("Go"),
-      refusalTypes.unacceptedSdk,
+      "SDK not identified",
+      sdkChoiceNeeded("not-identified"),
+      refusalTypes.sdkChoiceNeeded,
       422,
-      { sdk: "Go" },
+      { reason: "not-identified" },
+    ],
+    [
+      "ambiguous SDK",
+      sdkChoiceNeeded("ambiguous"),
+      refusalTypes.sdkChoiceNeeded,
+      422,
+      { reason: "ambiguous" },
     ],
     [
       "multiple activities",
@@ -84,6 +97,25 @@ describe("refusals", () => {
     },
   );
 
+  it("words the not-a-Temporal-activity refusal without naming any SDK", () => {
+    expect(notTemporalActivity().problem.detail).toBe(
+      "This doesn't look like a Temporal activity in any SDK Durables supports.",
+    );
+  });
+
+  it("has no refusal for an unaccepted SDK", () => {
+    expect(Object.keys(refusalTypes)).toEqual([
+      "noActivity",
+      "notTemporalActivity",
+      "sdkChoiceNeeded",
+      "multipleActivities",
+      "codeTooLarge",
+    ]);
+    expect(Object.values(refusalTypes)).not.toContain(
+      "https://durables.dev/problems/unaccepted-sdk",
+    );
+  });
+
   it("answers without logging", async () => {
     const spies = (["log", "info", "warn", "error"] as const).map((method) =>
       vi.spyOn(console, method).mockImplementation(() => undefined),
@@ -96,9 +128,9 @@ describe("refusals", () => {
 
   it("uses a type that is a stable URI, never the title or detail", () => {
     for (const refusal of [
-      noActivity(),
+      noActivity("TypeScript"),
       notTemporalActivity(),
-      unacceptedSdk("PHP"),
+      sdkChoiceNeeded("ambiguous"),
       multipleActivities(2),
       codeTooLarge(),
     ]) {

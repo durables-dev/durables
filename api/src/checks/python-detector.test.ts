@@ -1,5 +1,5 @@
+import { registeredSdks, sdkRegistry } from "../sdks/registry";
 import { describe, expect, it } from "vitest";
-import { detectors } from "./detectors";
 import type { ActivityFacts } from "./facts";
 import { checkCode } from "./pipeline";
 import { pythonDetector, pythonPatterns } from "./python-detector";
@@ -8,14 +8,15 @@ import { CheckRefusal, refusalTypes } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
 import { toSource } from "./source";
 
-const detect = (code: string) => pythonDetector.detect(toSource(code));
+const detect = (code: string) =>
+  pythonDetector.detect(toSource(code), sdkRegistry.Python.isStandardLibrary);
 
 const lines = (...code: string[]) => code.join("\n");
 
 /** The Problem Details body of the refusal the pipeline throws for the code. */
 const refusalOf = (code: string) => {
   try {
-    checkCode(code, detectors);
+    checkCode(code, registeredSdks);
   } catch (error) {
     expect(error).toBeInstanceOf(CheckRefusal);
     return (error as CheckRefusal).problem;
@@ -138,7 +139,7 @@ describe("pythonDetector", () => {
     });
 
     it("are registered with the pipeline", () => {
-      expect(detectors).toContain(pythonDetector);
+      expect(sdkRegistry.Python.detector).toBe(pythonDetector);
     });
 
     it("keep the standard library list free of the SDK", () => {
@@ -149,7 +150,7 @@ describe("pythonDetector", () => {
 
   describe("an async activity with typed input and output", () => {
     it("populates all eight facts for the screen 12 sample", () => {
-      expect(checkCode(postSlackMessage, detectors)).toEqual({
+      expect(checkCode(postSlackMessage, registeredSdks)).toEqual({
         sdk: "Python",
         activity: { name: "post_slack_message", line: 22 },
         input: "SlackMessage",
@@ -159,6 +160,16 @@ describe("pythonDetector", () => {
         configurationRead: [{ name: "SLACK_TOKEN", line: 7 }],
         dependencies: [{ name: "httpx", line: 4 }],
         heartbeats: [],
+        provenance: {
+          sdk: "detected",
+          activity: "detected",
+          inputOutput: "detected",
+          runsAs: "detected",
+          nonRetryableErrors: "detected",
+          configurationRead: "detected",
+          dependencies: "detected",
+          heartbeats: "detected",
+        },
       });
     });
 

@@ -38,3 +38,56 @@
   background: var(--notice);
   color: var(--fg);
 }
+
+/* The inferred or declared SDK's name: a link-styled button that opens the SDK dropdown. */
+.sdkLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* The must-choose dropdown sits on its own line under the message. */
+.choose {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 400;
+}
+
+.select:disabled {
+  color: var(--fg-muted);
+  cursor: default;
+}
+
+/* A label read by assistive technology only, for the dropdown that replaces the SDK link. */
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

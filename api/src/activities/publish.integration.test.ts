@@ -1,10 +1,10 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { detectors } from "../checks/detectors";
 import { integrationsFor } from "../checks/integrations";
 import { checkCode } from "../checks/pipeline";
 import { refusalTypes } from "../checks/refusals";
 import { MAX_CODE_BYTES } from "../checks/size-limit";
+import { registeredSdks } from "../sdks/registry";
 import { generateSnippets } from "../snippets/snippets";
 import {
   readAllRows,
@@ -16,6 +16,7 @@ import {
 import {
   Storage,
   type Address,
+  type Sdk,
   type VersionDocument,
 } from "../storage/storage";
 import { versionDocumentKey } from "../storage/version-document";
@@ -156,11 +157,12 @@ const addressOf = (handle: string, name: string): Address => ({
 const expectedDocument = (
   code: string,
   address: Address,
+  declared?: Sdk,
 ): Pick<VersionDocument, "facts" | "integrations" | "snippets"> => {
-  const facts = checkCode(code, detectors);
+  const facts = checkCode(code, registeredSdks, declared);
   return {
     facts,
-    integrations: integrationsFor(facts.dependencies),
+    integrations: integrationsFor(facts.sdk, facts.dependencies),
     snippets: generateSnippets(facts, address),
   };
 };
@@ -215,7 +217,7 @@ describe("POST /api/activities", () => {
       const version = await get(location);
       expect(version.status).toBe(200);
       const address = { handle, name: body.name, version: "1.0.0" };
-      const facts = checkCode(postSlackMessage, detectors);
+      const facts = checkCode(postSlackMessage, registeredSdks);
       const row = await storage().findVersion(address);
       expect(await version.json<VersionResponse>()).toEqual({
         address: `${handle}/${body.name}@1.0.0`,
@@ -228,7 +230,7 @@ describe("POST /api/activities", () => {
         code: postSlackMessage,
         activityFileName: "activities.py",
         snippets: generateSnippets(facts, address),
-        integrations: integrationsFor(facts.dependencies),
+        integrations: integrationsFor(facts.sdk, facts.dependencies),
         publishedAt: row?.publishedAt.toISOString(),
       });
       const listing = await get(`/api/activities/${handle}/${body.name}`);
@@ -289,6 +291,50 @@ describe("POST /api/activities", () => {
       });
     });
 
+    test("stores a Go activity with its facts, its Stripe integration and Go snippets", async () => {
+      const { cookie, handle } = await newPublisher();
+      const code = [
+        "package payments",
+        "",
+        "import (",
+        '    "context"',
+        '    "fmt"',
+        "",
+        '    "github.com/stripe/stripe-go/v87"',
+        ")",
+        "",
+        "func ChargeCard(ctx context.Context, input ChargeRequest) (*ChargeResult, error) {",
+        '    return nil, fmt.Errorf("not yet: %v", stripe.Key)',
+        "}",
+        "",
+      ].join("\n");
+      const body = publishBody({ code });
+
+      const response = await publish(cookie, body);
+
+      expect(response.status).toBe(201);
+      const address = addressOf(handle, body.name);
+      const stored = await storage().readVersionDocument(address);
+      expect(stored?.facts).toMatchObject({
+        sdk: "Go",
+        activity: { name: "ChargeCard", line: 10 },
+        dependencies: [{ name: "github.com/stripe/stripe-go/v87", line: 7 }],
+        provenance: { sdk: "inferred" },
+      });
+      expect(stored?.integrations).toEqual(["Stripe"]);
+      expect(stored?.snippets.map(({ label }) => label)).toEqual([
+        "Install",
+        "workflow.go",
+        "worker/main.go",
+        "start/main.go",
+        "Run",
+      ]);
+      expect(await storage().findListing(address)).toMatchObject({
+        sdk: "Go",
+        integrations: ["Stripe"],
+      });
+    });
+
     test("stores the code exactly as pasted, with the trimmed details and the re-run's facts, integrations and snippets", async () => {
       const { cookie, handle } = await newPublisher();
       const code = `${postSlackMessage.replaceAll("\n", "\r\n")}  \r\n`;
@@ -316,6 +362,81 @@ describe("POST /api/activities", () => {
         description: "Posts a message to a Slack channel.",
         sdk: "Python",
         integrations: ["Slack"],
+      });
+    });
+
+    test("stores a PHP version with its facts, its Stripe integration and its six snippets", async () => {
+      const { cookie, handle } = await newPublisher();
+      const code = [
+        "<?php",
+        "use Stripe\\StripeClient;",
+        "use Temporal\\Activity\\ActivityInterface;",
+        "",
+        "#[ActivityInterface]",
+        "class Payments",
+        "{",
+        "    public function chargeCard(ChargeRequest $request): ChargeResult",
+        "    {",
+        "        return (new StripeClient(getenv('STRIPE_API_KEY')))->charge($request);",
+        "    }",
+        "}",
+      ].join("\n");
+      const body = publishBody({ code, title: "Charge card" });
+
+      const response = await publish(cookie, body);
+
+      expect(response.status).toBe(201);
+      const address = addressOf(handle, body.name);
+      const stored = await storage().readVersionDocument(address);
+      expect(stored).toMatchObject(expectedDocument(code, address));
+      expect(stored?.facts.sdk).toBe("PHP");
+      expect(stored?.integrations).toEqual(["Stripe"]);
+      expect(stored?.snippets.map(({ label }) => label)).toEqual([
+        "Install",
+        "ChargeCardWorkflow.php",
+        "worker.php",
+        "starter.php",
+        "Run",
+        ".rr.yaml",
+      ]);
+      expect(await storage().findListing(address)).toMatchObject({
+        sdk: "PHP",
+        integrations: ["Stripe"],
+      });
+    });
+
+    test("publishes a Java activity with its facts, integrations and Java snippets", async () => {
+      const { cookie, handle } = await newPublisher();
+      const code = lines(
+        "import com.stripe.Stripe;",
+        "import io.temporal.activity.ActivityInterface;",
+        "",
+        "@ActivityInterface",
+        "public interface Payments {",
+        "    ChargeResult chargeCard(ChargeRequest request);",
+        "}",
+        "",
+      );
+      const body = publishBody({ code });
+
+      const response = await publish(cookie, body);
+
+      expect(response.status).toBe(201);
+      const address = addressOf(handle, body.name);
+      const stored = await storage().readVersionDocument(address);
+      expect(stored).toMatchObject(expectedDocument(code, address));
+      expect(stored?.facts.sdk).toBe("Java");
+      expect(stored?.integrations).toEqual(["Stripe"]);
+      expect(stored?.snippets.map(({ label }) => label)).toEqual([
+        "Install",
+        "ChargeCardWorkflow.java",
+        "ChargeCardWorker.java",
+        "Starter.java",
+        "Run",
+      ]);
+      expect(await storage().findListing(address)).toMatchObject({
+        sdk: "Java",
+        integrations: ["Stripe"],
       });
     });
 
@@ -368,6 +489,101 @@ describe("POST /api/activities", () => {
         code: postSlackMessage,
         title: "Post slack message",
       });
+    });
+  });
+
+  describe("a declared SDK", () => {
+    test("re-runs the declared SDK's detector and stores the SDK as declared", async () => {
+      const { cookie, handle } = await newPublisher();
+      const body = publishBody({ declaredSdk: "Python" });
+
+      const response = await publish(cookie, body);
+
+      expect(response.status).toBe(201);
+      const address = addressOf(handle, body.name);
+      const stored = await storage().readVersionDocument(address);
+      expect(stored).toMatchObject(
+        expectedDocument(postSlackMessage, address, "Python"),
+      );
+      expect(stored?.facts.sdk).toBe("Python");
+      expect(stored?.facts.provenance?.sdk).toBe("declared");
+      expect(stored?.facts.provenance?.activity).toBe("detected");
+      expect(await storage().findListing(address)).toMatchObject({
+        sdk: "Python",
+      });
+    });
+
+    test("stores the SDK as detected when none is declared", async () => {
+      const { cookie, handle } = await newPublisher();
+      const body = publishBody();
+
+      expect((await publish(cookie, body)).status).toBe(201);
+
+      const stored = await storage().readVersionDocument(
+        addressOf(handle, body.name),
+      );
+      expect(stored?.facts.provenance).toEqual({
+        sdk: "detected",
+        activity: "detected",
+        inputOutput: "detected",
+        runsAs: "detected",
+        nonRetryableErrors: "detected",
+        configurationRead: "detected",
+        dependencies: "detected",
+        heartbeats: "detected",
+      });
+    });
+
+    test("answers 422 no activity when the declared detector finds none, and writes nothing", async () => {
+      const { cookie } = await newPublisher();
+      const before = await snapshot();
+
+      const response = await publish(
+        cookie,
+        publishBody({ declaredSdk: "TypeScript" }),
+      );
+
+      await expectProblem(response, 422, {
+        type: refusalTypes.noActivity,
+        sdk: "TypeScript",
+      });
+      expect(await snapshot()).toEqual(before);
+    });
+
+    test("answers 400 for a declared SDK not in the list, and writes nothing", async () => {
+      const { cookie } = await newPublisher();
+      const before = await snapshot();
+
+      const response = await publish(
+        cookie,
+        publishBody({ declaredSdk: "Kotlin" }),
+      );
+
+      const problem = await expectProblem(response, 400);
+      expect(problem["errors"]).toEqual([
+        { field: "declaredSdk", message: expect.any(String) as string },
+      ]);
+      expect(await snapshot()).toEqual(before);
+    });
+
+    test("ignores facts and provenance sent by the client with a declared SDK", async () => {
+      const { cookie, handle } = await newPublisher();
+      const body = publishBody({
+        declaredSdk: "Python",
+        facts: {
+          sdk: "Python",
+          activity: { name: "forged", line: 1 },
+          provenance: { sdk: "detected" },
+        },
+        provenance: { sdk: "detected", activity: "declared" },
+      });
+
+      expect((await publish(cookie, body)).status).toBe(201);
+
+      const address = addressOf(handle, body.name);
+      expect(await storage().readVersionDocument(address)).toMatchObject(
+        expectedDocument(postSlackMessage, address, "Python"),
+      );
     });
   });
 
@@ -609,8 +825,13 @@ describe("POST /api/activities", () => {
   describe("code the checks refuse", () => {
     test.each([
       {
-        refusal: "not a Temporal activity",
+        refusal: "code no SDK is identified in",
         code: "print('hello')\n",
+        type: refusalTypes.sdkChoiceNeeded,
+      },
+      {
+        refusal: "empty code",
+        code: "   \n",
         type: refusalTypes.notTemporalActivity,
       },
       {
@@ -628,17 +849,6 @@ describe("POST /api/activities", () => {
           "",
         ),
         type: refusalTypes.multipleActivities,
-      },
-      {
-        refusal: "an SDK not accepted",
-        code: lines(
-          "import io.temporal.activity.ActivityInterface;",
-          "",
-          "@ActivityInterface",
-          "public interface Greeting {}",
-          "",
-        ),
-        type: refusalTypes.unacceptedSdk,
       },
     ])(
       "answers 422 for $refusal, and writes nothing",

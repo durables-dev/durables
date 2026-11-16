@@ -184,9 +184,16 @@ test.describe("as an anonymous visitor", () => {
           "aria-pressed",
           "true",
         );
+        // The SDK chips are Any, then the SDK catalog's SDKs in its order, so a new SDK needs
+        // no change here.
+        const catalog = await page.request.get("/api/sdks");
+        expect(catalog.ok()).toBe(true);
+        const sdkNames = ((await catalog.json()) as { name: string }[]).map(
+          ({ name }) => name,
+        );
         await expect(
           page.getByRole("group", { name: "Temporal SDK" }).getByRole("button"),
-        ).toHaveText(["Any", "Python", "TypeScript", ".NET"]);
+        ).toHaveText(["Any", ...sdkNames]);
         await expect(
           page
             .getByRole("group", { name: "Integrates with" })
@@ -704,4 +711,49 @@ test.describe("as an anonymous visitor", () => {
       await expectAccessible();
     },
   );
+});
+
+/** Every SDK Temporal officially supports, in Temporal's order (docs.temporal.io, temporal-sdks). */
+const temporalSdks = [
+  "Go",
+  "Java",
+  "Python",
+  "TypeScript",
+  ".NET",
+  "Ruby",
+  "PHP",
+  "Rust",
+];
+
+test.describe("the Temporal SDK chips", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("list Any, then all eight SDKs in Temporal's order, on home and in the results sidebar", async ({
+    page,
+    expectAccessible,
+  }) => {
+    const sdkChips = (scope: Page | Locator) =>
+      scope
+        .getByRole("group", { name: "Temporal SDK", exact: true })
+        .getByRole("button");
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /^Filters/ }).click();
+
+    await expect(sdkChips(page)).toHaveText(["Any", ...temporalSdks]);
+    await expect(chip(page, "Temporal SDK", "Any")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expectAccessible();
+
+    await page.goto("/search");
+
+    await expect(sdkChips(sidebar(page))).toHaveText(["Any", ...temporalSdks]);
+    await expect(chip(sidebar(page), "Temporal SDK", "Any")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expectAccessible();
+  });
 });

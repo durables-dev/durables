@@ -1,0 +1,14 @@
+package io.example.payments;
+
+import java.math.BigDecimal;
+
+@io.temporal.activity.ActivityInterface
+public interface RefundActivities {
+
+    @io.temporal.activity.ActivityMethod
+    RefundReceipt issueRefund(RefundRequest request);
+
+    record RefundRequest(String paymentId, BigDecimal amount) {}
+
+    record RefundReceipt(String refundId, String status) {}
+}

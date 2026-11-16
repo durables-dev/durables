@@ -113,6 +113,11 @@ test("before the grammar loads, the code is plain with line numbers", async () =
     python,
     typescript: () => import("shiki/langs/typescript.mjs"),
     csharp: () => import("shiki/langs/csharp.mjs"),
+    go: () => import("shiki/langs/go.mjs"),
+    java: () => import("shiki/langs/java.mjs"),
+    ruby: () => import("shiki/langs/ruby.mjs"),
+    php: () => import("shiki/langs/php.mjs"),
+    rust: () => import("shiki/langs/rust.mjs"),
   });
 
   const block = await renderBlock({ language: "python", highlighter });

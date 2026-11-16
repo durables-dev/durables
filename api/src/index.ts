@@ -11,6 +11,7 @@ import { notFound, onError } from "./http/error-handlers";
 import type { ProblemDetails } from "./http/problem";
 import { rateLimits } from "./http/rate-limits";
 import { sameOrigin } from "./http/same-origin";
+import { sdks } from "./sdks/sdks";
 import { session } from "./session/session";
 import { signIn } from "./session/sign-in";
 import { sitemap } from "./sitemap/sitemap";
@@ -48,6 +49,7 @@ export const createProductionApp = () =>
     .route("/api/handles", handles)
     .route("/api/checks", checks)
     .route("/api/activities", activities)
+    .route("/api/sdks", sdks)
     // Outside /api because crawlers look for it at the root. It is a route on the Worker,
     // so run_worker_first lists it beside /api/*.
     .route("/sitemap.xml", sitemap);

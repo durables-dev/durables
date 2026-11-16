@@ -1,5 +1,5 @@
-import { sdkSchema } from "@durables/schemas";
 import { z } from "zod";
+import { sdkSchema, sdks } from "../sdks/sdk-list";
 import { decodeBrowseCursor } from "./browse-cursor";
 import type { BrowseSort } from "./responses";
 
@@ -9,7 +9,8 @@ import type { BrowseSort } from "./responses";
 /** The most cards one browse batch holds. */
 export const BROWSE_BATCH_SIZE = 50;
 
-export const sdkFilterMessage = "Choose Python, TypeScript or .NET.";
+/** "Choose Go, Java, … or Rust.": every SDK in the api's list, in its order. */
+export const sdkFilterMessage = `Choose ${sdks.slice(0, -1).join(", ")} or ${sdks.at(-1) ?? ""}.`;
 
 export const cursorMessage = "The page position is not valid.";
 

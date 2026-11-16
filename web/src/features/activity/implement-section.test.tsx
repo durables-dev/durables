@@ -5,12 +5,21 @@ import { render } from "vitest-browser-react";
 import { ImplementSection } from "./implement-section";
 import {
   dotnet,
+  newSdkSamples,
+  php,
   python,
   pythonCode,
   pythonWithoutEnvironment,
   typescript,
   type TestVersion,
 } from "./test-versions";
+import { TestProviders } from "../../../test/test-providers";
+import {
+  failCatalog,
+  profileFor,
+  serveCatalog,
+} from "../../../test/serve-sdk-catalog";
+import { testCatalog } from "../../../test/sdk-catalog";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -21,6 +30,7 @@ async function renderImplement(version: TestVersion = python) {
     <section>
       <ImplementSection version={version} sdk={version.sdk} />
     </section>,
+    { wrapper: TestProviders },
   );
   await expect
     .element(screen.getByRole("heading", { level: 2, name: "Implement" }))
@@ -205,6 +215,36 @@ test("arrow keys, Home and End move between tabs, and only the selected tab is i
   ).toEqual([0, -1, -1, -1]);
 });
 
+/** How many coloured tokens the selected file's code block holds. */
+function colouredIn(screen: Screen) {
+  return screen
+    .getByRole("tabpanel")
+    .element()
+    .querySelectorAll("code span[style]").length;
+}
+
+test.each([
+  ["Python", python],
+  ["TypeScript", typescript],
+  [".NET", dotnet],
+] as const)(
+  "%s files are highlighted in the language the catalog names",
+  async (_sdk, version) => {
+    const screen = await renderImplement(version);
+
+    await expect.poll(() => colouredIn(screen)).toBeGreaterThan(0);
+  },
+);
+
+test("when the catalog cannot be read, the files show as plain text, unchanged", async () => {
+  const failed = failCatalog();
+  const screen = await renderImplement();
+  await failed;
+
+  expect(colouredIn(screen)).toBe(0);
+  expect((await codeBlock(screen, "activities.py")).text).toBe(pythonCode);
+});
+
 test("the run commands show in a code block with line numbers", async () => {
   const screen = await renderImplement(python);
 
@@ -262,4 +302,144 @@ test("Copy on a tab other than the activity's copies that file", async () => {
   await screen.getByRole("button", { name: "Copy worker.py" }).click();
 
   expect(writeText).toHaveBeenCalledExactlyOnceWith(python.snippets[2]?.code);
+});
+
+/** Serves the default catalog with a profile for each new SDK, naming its highlight language. */
+function serveNewSdkCatalog() {
+  serveCatalog([
+    ...testCatalog,
+    ...newSdkSamples.map(({ sdk, highlightLanguage, activityFileName }) =>
+      profileFor(sdk, highlightLanguage, activityFileName),
+    ),
+  ]);
+}
+
+test("PHP shows five file tabs, .rr.yaml last, with install and run in their usual places", async () => {
+  serveNewSdkCatalog();
+  const screen = await renderImplement(php);
+
+  const tabs = screen.getByRole("tablist", { name: "Files" }).getByRole("tab");
+  expect(tabs.elements().map((tab) => tab.textContent)).toEqual([
+    "Activities.php",
+    "ChargeCardWorkflow.php",
+    "worker.php",
+    "starter.php",
+    ".rr.yaml",
+  ]);
+  expect(
+    screen
+      .getByRole("heading", { level: 3 })
+      .elements()
+      .map((heading) => heading.textContent),
+  ).toEqual([
+    "1. Install the dependencies",
+    "2. Add these five files to your project",
+    "3. Run it",
+  ]);
+  expect((await codeBlock(screen, "install command")).text).toBe(
+    php.snippets[0]?.code,
+  );
+  expect((await codeBlock(screen, "run commands")).text).toBe(
+    php.snippets[4]?.code,
+  );
+
+  await screen.getByRole("tab", { name: ".rr.yaml" }).click();
+  const panel = screen.getByRole("tabpanel", { name: ".rr.yaml" });
+  await expect
+    .element(panel.getByText("Another file the worker needs."))
+    .toBeVisible();
+  expect((await codeBlock(screen, ".rr.yaml")).text).toBe(
+    php.snippets[5]?.code,
+  );
+});
+
+test("PHP's own files are highlighted as PHP, and .rr.yaml stays plain text", async () => {
+  serveNewSdkCatalog();
+  const screen = await renderImplement(php);
+
+  await expect.poll(() => colouredIn(screen)).toBeGreaterThan(0);
+  await screen.getByRole("tab", { name: "worker.php" }).click();
+  await expect.poll(() => colouredIn(screen)).toBeGreaterThan(0);
+
+  await screen.getByRole("tab", { name: ".rr.yaml" }).click();
+  expect((await codeBlock(screen, ".rr.yaml")).text).toBe(
+    php.snippets[5]?.code,
+  );
+  expect(colouredIn(screen)).toBe(0);
+});
+
+test("a version with no Run snippet shows its install and files, and the page still renders", async () => {
+  const screen = await renderImplement({
+    ...php,
+    snippets: php.snippets.filter((snippet) => snippet.label !== "Run"),
+  });
+
+  expect((await codeBlock(screen, "install command")).text).toBe(
+    php.snippets[0]?.code,
+  );
+  expect(
+    screen
+      .getByRole("tab")
+      .elements()
+      .map((tab) => tab.textContent),
+  ).toHaveLength(5);
+  await expect
+    .element(screen.getByRole("heading", { level: 3, name: "3. Run it" }))
+    .toBeVisible();
+  await expect
+    .element(screen.getByRole("region", { name: "run commands" }))
+    .not.toBeInTheDocument();
+});
+
+test.each(newSdkSamples)(
+  "$sdk files are highlighted in $highlightLanguage",
+  async ({ sdk, activityFileName, code }) => {
+    serveNewSdkCatalog();
+    const screen = await renderImplement({
+      ...python,
+      sdk,
+      code,
+      activityFileName,
+    });
+
+    await expect.poll(() => colouredIn(screen)).toBeGreaterThan(0);
+    expect((await codeBlock(screen, activityFileName)).text).toBe(code);
+  },
+);
+
+test("a highlight language web doesn't load shows the files as plain text, unchanged", async () => {
+  serveCatalog(
+    testCatalog.map((profile) =>
+      profile.name === "TypeScript"
+        ? { ...profile, highlightLanguage: "cobol" }
+        : profile,
+    ),
+  );
+  const screen = await render(
+    <>
+      <section aria-label="TypeScript">
+        <ImplementSection version={typescript} sdk="TypeScript" />
+      </section>
+      <section aria-label="Python">
+        <ImplementSection version={python} sdk="Python" />
+      </section>
+    </>,
+    { wrapper: TestProviders },
+  );
+  const coloured = (sdk: string) =>
+    screen
+      .getByRole("region", { name: sdk })
+      .getByRole("tabpanel")
+      .element()
+      .querySelectorAll("code span[style]").length;
+
+  // Both read the same catalog, so once Python is coloured, TypeScript has its profile too.
+  await expect.poll(() => coloured("Python")).toBeGreaterThan(0);
+  expect(coloured("TypeScript")).toBe(0);
+  expect(
+    screen
+      .getByRole("region", { name: "activities.ts" })
+      .element()
+      .querySelector("code")?.textContent,
+  ).toBe(typescript.code);
 });

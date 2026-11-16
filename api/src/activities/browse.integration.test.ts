@@ -1,6 +1,6 @@
-import type { Sdk } from "@durables/schemas";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
+import type { Sdk } from "../sdks/sdk-list";
 import { seedAccount, seedListing, seedVersion } from "../storage/seed";
 import { encodeBrowseCursor } from "./browse-cursor";
 import {
@@ -325,7 +325,7 @@ describe("the SDK filter", () => {
     expect(body.count).toBe(1);
   });
 
-  test.each(["Java", "python", ""])(
+  test.each(["Cobol", "java", "python", ""])(
     "answers 400 for the unsupported SDK %j",
     async (sdk) => {
       await expectInvalid({ sdk }, "sdk", sdkFilterMessage);
@@ -333,7 +333,7 @@ describe("the SDK filter", () => {
   );
 
   test("answers 400 when one of several SDKs is unsupported", async () => {
-    await expectInvalid({ sdk: ["Python", "Java"] }, "sdk", sdkFilterMessage);
+    await expectInvalid({ sdk: ["Python", "Cobol"] }, "sdk", sdkFilterMessage);
   });
 
   test("answers 200 for an SDK repeated 150 times", async () => {

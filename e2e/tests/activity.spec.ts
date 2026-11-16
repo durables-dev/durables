@@ -460,6 +460,46 @@ test.describe("as an anonymous visitor", () => {
   });
 });
 
+test.describe("an activity whose SDK was only inferred", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  // go-no-marker.txt imports no Temporal package, so its SDK is inferred from the code.
+  test("publishes, and its page shows the SDK and Implement in Go", async ({
+    page,
+    expectAccessible,
+    publishListing,
+  }) => {
+    const listing = await publishListing({
+      code: sample("go-no-marker"),
+      title: "Compose greeting",
+      name: "compose-greeting",
+      description: "Returns a greeting for a name.",
+    });
+
+    await page.goto(`/${listing.address}`);
+
+    await expect(
+      main(page).getByRole("heading", { level: 1, name: "Compose greeting" }),
+    ).toBeVisible();
+    await expect(main(page).getByText("Go", { exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "About" })
+        .getByRole("definition")
+        .first(),
+    ).toHaveText("Go, go.temporal.io/sdk");
+    await expect(
+      main(page).getByRole("tablist", { name: "Files" }).getByRole("tab"),
+    ).toHaveText([
+      "activity.go",
+      "workflow.go",
+      "worker/main.go",
+      "start/main.go",
+    ]);
+    await expectAccessible();
+  });
+});
+
 test.describe("the publisher bar and Update dialog", () => {
   const ownListing: PublishDetails = {
     ...slackListing,

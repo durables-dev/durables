@@ -1,4 +1,5 @@
 import { contributeOriginSchema } from "@/lib/contribute-origin";
+import type { SdkName } from "@/lib/sdk-catalog";
 import {
   listingDetailsSchema,
   type ListingDetails,
@@ -20,8 +21,13 @@ export interface Draft {
   origin?: string | undefined;
   /** The code in the Code step's editor, exactly as pasted. */
   code?: string | undefined;
-  /** The latest check of `code`. It goes whenever the code changes. */
+  /** The latest check of `code`. It goes whenever the code changes or an SDK is declared. */
   check?: CheckResult | undefined;
+  /**
+   * The SDK the publisher chose for `code`. Checks and publish send it, and the api runs that
+   * SDK's detector. It stays while the code is edited, and goes when the editor is emptied.
+   */
+  declaredSdk?: SdkName | undefined;
   /**
    * The listing details as the publisher entered them. A field the publisher has not edited
    * is absent, and reads as its default (see `draftDetails`). An empty string is a field the
@@ -65,7 +71,13 @@ export type DraftConfirmations = Record<PublishConfirmationKey, boolean>;
 export type DraftAction =
   | { type: "stepFinished"; step: StepId }
   | { type: "codeEdited"; code: string }
-  | { type: "checkFinished"; code: string; result: CheckResult }
+  | { type: "sdkDeclared"; sdk: SdkName }
+  | {
+      type: "checkFinished";
+      code: string;
+      declaredSdk?: SdkName | undefined;
+      result: CheckResult;
+    }
   | { type: "detailsEdited"; field: keyof ListingDetails; value: string }
   | { type: "nameUsedAtPublish"; name: string }
   | { type: "handleTakenAtPublish"; handle: string }
@@ -92,6 +104,11 @@ const draftSchema = z.object({
   code: z.string().optional(),
   // An unreadable check is dropped and the code kept, so the check can run again.
   check: checkResultSchema.optional().catch(undefined),
+  // An unreadable declared SDK is dropped, so the api identifies the SDK again.
+  declaredSdk: z
+    .custom<SdkName>((value) => typeof value === "string" && value !== "")
+    .optional()
+    .catch(undefined),
   // An unreadable field is dropped, so it reads as its default again.
   details: z
     .object({
@@ -132,10 +149,18 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
             ...draft,
             code: action.code,
             check: undefined,
+            declaredSdk:
+              action.code.trim() === "" ? undefined : draft.declaredSdk,
             confirmations: undefined,
           };
+    // The previous check was for another SDK, so it goes until the declared SDK's check answers.
+    case "sdkDeclared":
+      return action.sdk === draft.declaredSdk && draft.check !== undefined
+        ? draft
+        : { ...draft, declaredSdk: action.sdk, check: undefined };
     case "checkFinished":
-      return action.code === draft.code
+      return action.code === draft.code &&
+        action.declaredSdk === draft.declaredSdk
         ? { ...draft, check: action.result }
         : draft;
     case "detailsEdited":

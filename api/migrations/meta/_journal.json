@@ -22,6 +22,13 @@
       "when": 1793823681026,
       "tag": "0002_amazon-s3-integration-name",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794528834806,
+      "tag": "0003_widen-versions-sdk",
+      "breakpoints": true
     }
   ]
 }

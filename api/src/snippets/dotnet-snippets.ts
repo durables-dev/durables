@@ -1,4 +1,4 @@
-import type { Facts } from "../checks/facts";
+import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
@@ -32,7 +32,10 @@ export const dotnetWorkflowClass = (activity: string) => {
  * detected facts don't name the class that declares the activity, so the files use
  * `Activities` and say to change it.
  */
-export const dotnetSnippets = (facts: Facts, address: Address): Snippet[] => {
+export const dotnetSnippets = (
+  facts: FactValues,
+  address: Address,
+): Snippet[] => {
   const activity = facts.activity.name;
   const workflowClass = dotnetWorkflowClass(activity);
   const hasOutput = facts.output !== null;

@@ -1,7 +1,7 @@
 import type { Detector } from "./detector";
 import type { ActivityFacts, LineRef, NamedLineRef } from "./facts";
+import type { SdkRecognition } from "./identify";
 import type { Pattern } from "./pattern";
-import { pythonStandardLibrary } from "./python-stdlib";
 import type { Source } from "./source";
 
 // Python detection (ADR 0008). Every pattern below is part of the published rubric. A match
@@ -441,6 +441,7 @@ const readDependencies = (
   source: Source,
   lineOf: LineOf,
   inCode: (match: RegExpExecArray) => boolean,
+  isStandardLibrary: (name: string) => boolean,
 ): NamedLineRef[] => {
   const imports = allMatches(pythonImportStatement, source.text)
     .filter(inCode)
@@ -457,12 +458,19 @@ const readDependencies = (
     );
   const thirdParty = [...imports, ...fromImports]
     .filter(
-      ({ name }) =>
-        name !== temporalSdkPackage && !pythonStandardLibrary.has(name),
+      ({ name }) => name !== temporalSdkPackage && !isStandardLibrary(name),
     )
     .sort((a, b) => a.offset - b.offset)
     .map(({ name, offset }) => ({ name, line: lineOf(offset) }));
   return firstByName(thirdParty);
+};
+
+/** How identification recognises Python: the SDK import or the activity decorator. */
+export const pythonRecognition: SdkRecognition = {
+  sdkMarkers: [pythonSdkImport, pythonActivityDecorator],
+  activityMarkers: [pythonActivityDecorator],
+  // Recognised only by its markers. Inference by shape would change how it is detected.
+  shapeMarkers: [],
 };
 
 /**
@@ -470,10 +478,7 @@ const readDependencies = (
  * dependencies and heartbeats) are read from the whole file and reported on every activity.
  */
 export const pythonDetector: Detector = {
-  sdk: "Python",
-  sdkMarkers: [pythonSdkImport, pythonActivityDecorator],
-  activityMarkers: [pythonActivityDecorator],
-  detect(source) {
+  detect(source, isStandardLibrary) {
     const { text } = source;
     const lineOf = lineFinder(text);
     const ignored = ignoredSpans(text);
@@ -501,7 +506,12 @@ export const pythonDetector: Detector = {
         line: lineOf(match.index),
       })),
     );
-    const dependencies = readDependencies(source, lineOf, inCode);
+    const dependencies = readDependencies(
+      source,
+      lineOf,
+      inCode,
+      isStandardLibrary,
+    );
     const heartbeats: LineRef[] = found(pythonHeartbeatCall).map((match) => ({
       line: lineOf(match.index),
     }));

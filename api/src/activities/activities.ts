@@ -8,7 +8,6 @@ import {
   type PublisherVariables,
   requirePublisher,
 } from "../auth/require-publisher";
-import { detectors } from "../checks/detectors";
 import { integrationsFor } from "../checks/integrations";
 import { checkCode } from "../checks/pipeline";
 import { codeTooLarge } from "../checks/refusals";
@@ -21,6 +20,7 @@ import {
 import { ProblemError } from "../http/problem";
 import { publisherLimitKey } from "../http/rate-limits";
 import { problemOnInvalid } from "../http/validation";
+import { registeredSdks } from "../sdks/registry";
 import { generateSnippets } from "../snippets/snippets";
 import { encodeBrowseCursor } from "./browse-cursor";
 import { BROWSE_BATCH_SIZE, browseQuery, browseSort } from "./browse-request";
@@ -175,11 +175,12 @@ export const activities = new Hono<AppEnv>()
       if (handle === null) {
         throw handleNotChosen();
       }
-      // The publish-time run is the only one stored (ADR 0008).
-      const facts = checkCode(body.code, detectors);
+      // The publish-time run is the only one stored (ADR 0008). A declared SDK is re-run with
+      // its own detector, as the check does.
+      const facts = checkCode(body.code, registeredSdks, body.declaredSdk);
       const { title, name, description } = acceptListing(body);
       const address = { handle, name, version: FIRST_VERSION };
-      const integrations = integrationsFor(facts.dependencies);
+      const integrations = integrationsFor(facts.sdk, facts.dependencies);
 
       const result = await publishVersion(
         storage,

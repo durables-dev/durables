@@ -1,9 +1,17 @@
 import "@/styles/global.css";
 import { readSearch, searchAddress } from "@/lib/search-address";
+import { testCatalogSdks } from "../../../test/sdk-catalog";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test } from "vitest";
 import { render } from "vitest-browser-react";
 import { ListingSidebar, type ListingSidebarProps } from "./listing-sidebar";
+import { TestProviders } from "../../../test/test-providers";
+import {
+  failCatalog,
+  rustProfile,
+  serveCatalog,
+} from "../../../test/serve-sdk-catalog";
+import { testCatalog } from "../../../test/sdk-catalog";
 
 const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -32,7 +40,9 @@ async function renderSidebar(props: Partial<ListingSidebarProps> = {}) {
     ],
     { initialEntries: ["/ddieruf/charge-card@1.0.0"] },
   );
-  const screen = await render(<RouterProvider router={router} />);
+  const screen = await render(<RouterProvider router={router} />, {
+    wrapper: TestProviders,
+  });
   return Object.assign(screen, { router });
 }
 
@@ -44,7 +54,10 @@ async function searchOpened({ router, getByRole }: Rendered) {
     .element(getByRole("heading", { level: 1, name: "Results" }))
     .toBeVisible();
   expect(router.state.location.pathname).toBe("/search");
-  return readSearch(new URLSearchParams(router.state.location.search));
+  return readSearch(
+    new URLSearchParams(router.state.location.search),
+    testCatalogSdks,
+  );
 }
 
 /** The About card's rows, as [term, value] pairs in the order they show. */
@@ -63,13 +76,16 @@ test("a version with integrations and dependencies shows all five About rows", a
   await expect
     .element(about.getByRole("heading", { level: 2, name: "About" }))
     .toBeVisible();
-  expect(aboutRows(about.element() as HTMLElement)).toEqual([
-    ["SDK", "Python, temporalio"],
-    ["Integrates with", "Stripe"],
-    ["Dependencies", "stripe"],
-    ["Published", "2 days ago"],
-    ["License", "MIT-0"],
-  ]);
+  // The package arrives with the SDK catalog, after the card first renders.
+  await expect
+    .poll(() => aboutRows(about.element() as HTMLElement))
+    .toEqual([
+      ["SDK", "Python, temporalio"],
+      ["Integrates with", "Stripe"],
+      ["Dependencies", "stripe"],
+      ["Published", "2 days ago"],
+      ["License", "MIT-0"],
+    ]);
   expect(about.getByText("2 days ago").element().getAttribute("datetime")).toBe(
     twoDaysAgo,
   );
@@ -83,9 +99,74 @@ test("the SDK row names each SDK's package", async () => {
   ] as const) {
     const screen = await renderSidebar({ sdk });
     const about = screen.getByRole("region", { name: "About" });
-    expect(aboutRows(about.element() as HTMLElement)[0]).toEqual(["SDK", name]);
+    await expect
+      .poll(() => aboutRows(about.element() as HTMLElement)[0])
+      .toEqual(["SDK", name]);
     await screen.unmount();
   }
+});
+
+test("an SDK web has no code for shows its name and the catalog's package", async () => {
+  serveCatalog([...testCatalog, rustProfile]);
+  const screen = await renderSidebar({ sdk: "Rust" });
+
+  const about = screen.getByRole("region", { name: "About" });
+  await expect
+    .poll(() => aboutRows(about.element() as HTMLElement)[0])
+    .toEqual(["SDK", "Rust, temporalio-sdk"]);
+});
+
+test("an SDK the catalog does not list shows its name only", async () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/",
+        element: (
+          <>
+            <aside aria-label="Zig">
+              <ListingSidebar {...chargeCard} sdk="Zig" />
+            </aside>
+            <aside aria-label="Python">
+              <ListingSidebar {...chargeCard} />
+            </aside>
+          </>
+        ),
+      },
+    ],
+    { initialEntries: ["/"] },
+  );
+  const screen = await render(<RouterProvider router={router} />, {
+    wrapper: TestProviders,
+  });
+  const firstRow = (sdk: string) =>
+    aboutRows(
+      screen
+        .getByRole("complementary", { name: sdk })
+        .getByRole("region", { name: "About" })
+        .element() as HTMLElement,
+    )[0];
+
+  // The Python sidebar shows its package once the catalog has arrived.
+  await expect
+    .poll(() => firstRow("Python"))
+    .toEqual(["SDK", "Python, temporalio"]);
+  expect(firstRow("Zig")).toEqual(["SDK", "Zig"]);
+});
+
+test("when the catalog cannot be read, the SDK row shows the name only and the card still renders", async () => {
+  const failed = failCatalog();
+  const screen = await renderSidebar();
+  await failed;
+
+  const about = screen.getByRole("region", { name: "About" });
+  await expect.element(about).toBeVisible();
+  expect(aboutRows(about.element() as HTMLElement)).toEqual([
+    ["SDK", "Python"],
+    ["Integrates with", "Stripe"],
+    ["Dependencies", "stripe"],
+    ["Published", "2 days ago"],
+    ["License", "MIT-0"],
+  ]);
 });
 
 test("several integrations and dependencies are listed in order, and each integration is a link", async () => {
@@ -203,12 +284,14 @@ test('with no integrations and no dependencies, the row is hidden and Dependenci
 
   const about = screen.getByRole("region", { name: "About" });
   await expect.element(about).toBeVisible();
-  expect(aboutRows(about.element() as HTMLElement)).toEqual([
-    ["SDK", "Python, temporalio"],
-    ["Dependencies", "None beyond the SDK"],
-    ["Published", "2 days ago"],
-    ["License", "MIT-0"],
-  ]);
+  await expect
+    .poll(() => aboutRows(about.element() as HTMLElement))
+    .toEqual([
+      ["SDK", "Python, temporalio"],
+      ["Dependencies", "None beyond the SDK"],
+      ["Published", "2 days ago"],
+      ["License", "MIT-0"],
+    ]);
 });
 
 test("a long dependency list wraps inside the card", async () => {

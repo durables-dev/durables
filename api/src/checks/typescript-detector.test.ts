@@ -1,5 +1,5 @@
+import { registeredSdks, sdkRegistry } from "../sdks/registry";
 import { describe, expect, it } from "vitest";
-import { detectors } from "./detectors";
 import type { ActivityFacts } from "./facts";
 import { nodeBuiltinModules } from "./node-builtins";
 import { checkCode } from "./pipeline";
@@ -8,16 +8,19 @@ import { allMatches } from "./scan";
 import { MAX_CODE_BYTES } from "./size-limit";
 import { toSource } from "./source";
 import { typescriptDetector, typescriptPatterns } from "./typescript-detector";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
-const detect = (code: string) => typescriptDetector.detect(toSource(code));
+const detect = (code: string) =>
+  typescriptDetector.detect(
+    toSource(code),
+    sdkRegistry.TypeScript.isStandardLibrary,
+  );
 
 const lines = (...code: string[]) => code.join("\n");
 
 /** The Problem Details body of the refusal the pipeline throws for the code. */
 const refusalOf = (code: string) => {
   try {
-    checkCode(code, detectors);
+    checkCode(code, registeredSdks);
   } catch (error) {
     expect(error).toBeInstanceOf(CheckRefusal);
     return (error as CheckRefusal).problem;
@@ -96,11 +99,11 @@ describe("typescriptDetector", () => {
     });
 
     it("have names no other SDK's patterns use", () => {
-      const others = [...detectors, ...unacceptedSdks]
+      const others = registeredSdks
         .filter(({ sdk }) => sdk !== "TypeScript")
-        .flatMap(({ sdkMarkers, activityMarkers }) => [
-          ...sdkMarkers,
-          ...activityMarkers,
+        .flatMap(({ recognition }) => [
+          ...recognition.sdkMarkers,
+          ...recognition.activityMarkers,
         ]);
       const names = [...new Set([...typescriptPatterns, ...others])].map(
         (pattern) => pattern.name,
@@ -109,7 +112,7 @@ describe("typescriptDetector", () => {
     });
 
     it("are registered with the pipeline", () => {
-      expect(detectors).toContain(typescriptDetector);
+      expect(sdkRegistry.TypeScript.detector).toBe(typescriptDetector);
     });
 
     it("keep the built-in module list free of packages", () => {
@@ -121,7 +124,7 @@ describe("typescriptDetector", () => {
 
   describe("an exported async function with typed input and output", () => {
     it("populates all eight facts for the screen 12 sample", () => {
-      expect(checkCode(postSlackMessage, detectors)).toEqual({
+      expect(checkCode(postSlackMessage, registeredSdks)).toEqual({
         sdk: "TypeScript",
         activity: { name: "postSlackMessage", line: 13 },
         input: "SlackMessage",
@@ -131,6 +134,16 @@ describe("typescriptDetector", () => {
         configurationRead: [{ name: "SLACK_TOKEN", line: 14 }],
         dependencies: [{ name: "@slack/web-api", line: 3 }],
         heartbeats: [{ line: 15 }],
+        provenance: {
+          sdk: "detected",
+          activity: "detected",
+          inputOutput: "detected",
+          runsAs: "detected",
+          nonRetryableErrors: "detected",
+          configurationRead: "detected",
+          dependencies: "detected",
+          heartbeats: "detected",
+        },
       });
     });
 
@@ -159,7 +172,7 @@ describe("typescriptDetector", () => {
         "  return `Hello, ${name}!`;",
         "}",
       );
-      expect(checkCode(code, detectors)).toMatchObject({
+      expect(checkCode(code, registeredSdks)).toMatchObject({
         sdk: "TypeScript",
         activity: { name: "greet", line: 1 },
         input: "string",
@@ -333,7 +346,7 @@ describe("typescriptDetector", () => {
         name: "postMessage",
         line: 15,
       });
-      expect(checkCode(code, detectors).activity.name).toBe("postMessage");
+      expect(checkCode(code, registeredSdks).activity.name).toBe("postMessage");
     });
 
     it("ignores commented-out activities and exports inside strings", () => {

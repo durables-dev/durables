@@ -48,3 +48,10 @@ export const nodeBuiltinModules: ReadonlySet<string> = new Set([
   "worker_threads",
   "zlib",
 ]);
+
+/** Node's prefix for its built-in modules, as in `node:fs`. */
+const nodePrefix = "node:";
+
+/** Whether a module is a Node.js built-in: on the list, or imported with the `node:` prefix. */
+export const isNodeBuiltin = (name: string) =>
+  name.startsWith(nodePrefix) || nodeBuiltinModules.has(name);

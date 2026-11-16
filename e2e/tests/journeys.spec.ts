@@ -620,3 +620,519 @@ test(
     });
   },
 );
+
+/** A non-Python SDK's sample and what its listing shows once published. */
+interface SdkJourney {
+  sdk: "Go" | "Java" | "Ruby" | "PHP" | "Rust";
+  sample: string;
+  activity: string;
+  /** The listing's title, before the test's unique word, and its name in the address. */
+  title: string;
+  name: string;
+  description: string;
+  /** The About card's SDK row: the SDK, then its package from the SDK catalog. */
+  aboutSdk: string;
+  /** The integration the sample's imports imply, or none. */
+  integration?: "Amazon S3" | "Postgres" | "Slack" | "Stripe";
+  /** Lines the install command holds. */
+  install: string[];
+  /** The Implement tabs, in order: the published activity, then the generated files. */
+  files: string[];
+  /** Lines the run commands hold. */
+  run: string[];
+}
+
+const sdkJourneys: SdkJourney[] = [
+  {
+    sdk: "Go",
+    sample: "go",
+    activity: "ArchiveReport",
+    title: "Archive report",
+    name: "archive-report",
+    description: "Uploads a CSV report to S3 and returns where it is kept.",
+    aboutSdk: "Go, go.temporal.io/sdk",
+    integration: "Amazon S3",
+    install: [
+      "go get go.temporal.io/sdk",
+      "go get github.com/aws/aws-sdk-go-v2/aws github.com/aws/aws-sdk-go-v2/config github.com/aws/aws-sdk-go-v2/service/s3",
+    ],
+    files: ["activity.go", "workflow.go", "worker/main.go", "start/main.go"],
+    run: [
+      "temporal server start-dev",
+      "export ARCHIVE_BUCKET=...",
+      "go run worker/main.go",
+      "go run start/main.go",
+    ],
+  },
+  {
+    // The Java sample's own acceptance is in contribute.spec.ts; this checks it through publish
+    // and the SDK filter.
+    sdk: "Java",
+    sample: "java",
+    activity: "sendSms",
+    title: "Send SMS",
+    name: "send-sms",
+    description: "Sends a text message through Twilio and returns its SID.",
+    aboutSdk: "Java, io.temporal:temporal-sdk",
+    install: [
+      "<groupId>io.temporal</groupId>",
+      "<artifactId>temporal-sdk</artifactId>",
+    ],
+    files: [
+      "Activities.java",
+      "SendSmsWorkflow.java",
+      "SendSmsWorker.java",
+      "Starter.java",
+    ],
+    run: [
+      "temporal server start-dev",
+      "export TWILIO_ACCOUNT_SID=...",
+      "mvn compile exec:java -Dexec.mainClass=SendSmsWorker",
+      "mvn compile exec:java -Dexec.mainClass=Starter",
+    ],
+  },
+  {
+    sdk: "Ruby",
+    sample: "ruby",
+    activity: "SendInvoice",
+    title: "Send invoice",
+    name: "send-invoice",
+    description: "Creates a Stripe invoice for a customer and sends it.",
+    aboutSdk: "Ruby, temporalio",
+    integration: "Stripe",
+    install: ["bundle add temporalio"],
+    files: ["activities.rb", "workflow.rb", "worker.rb", "starter.rb"],
+    run: [
+      "temporal server start-dev",
+      "export STRIPE_API_KEY=...",
+      "bundle exec ruby worker.rb",
+      "bundle exec ruby starter.rb",
+    ],
+  },
+  {
+    // PHP adds a fifth file, the RoadRunner config that runs the worker.
+    sdk: "PHP",
+    sample: "php",
+    activity: "postMessage",
+    title: "Post message",
+    name: "post-message",
+    description:
+      "Posts a message to a Slack channel and returns its reference.",
+    aboutSdk: "PHP, temporal/sdk",
+    integration: "Slack",
+    install: ["composer require temporal/sdk", "./vendor/bin/rr get"],
+    files: [
+      "Activities.php",
+      "PostMessageWorkflow.php",
+      "worker.php",
+      "starter.php",
+      ".rr.yaml",
+    ],
+    run: [
+      "temporal server start-dev",
+      "export SLACK_BOT_TOKEN=...",
+      "./rr serve",
+      "php starter.php",
+    ],
+  },
+  {
+    sdk: "Rust",
+    sample: "rust",
+    activity: "record_order_status",
+    title: "Record order status",
+    name: "record-order-status",
+    description: "Records an order's new status in Postgres.",
+    aboutSdk: "Rust, temporalio-sdk",
+    integration: "Postgres",
+    install: ["[dependencies]", 'temporalio-sdk = "1.0.0"'],
+    files: ["activities.rs", "workflows.rs", "main.rs", "starter.rs"],
+    run: [
+      "temporal server start-dev",
+      "export DATABASE_URL=...",
+      "cargo run",
+      "cargo run -- start",
+    ],
+  },
+];
+
+const fileCountWords = ["four", "five"];
+
+for (const journey of sdkJourneys) {
+  test(
+    `a ${journey.sdk} publisher pastes and publishes an activity, finds it with the ${journey.sdk} chip and reads Implement in ${journey.sdk}`,
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      signIn,
+      uniqueHandle,
+      uniqueWord,
+      paste,
+    }) => {
+      const handle = uniqueHandle(journey.sample);
+      const word = uniqueWord();
+      const code = sample(journey.sample);
+      const title = `${journey.title} ${word}`;
+      const address = `${handle}/${journey.name}@1.0.0`;
+      const main = page.getByRole("main");
+      const continueButton = page.getByRole("button", { name: "Continue" });
+      const resultCard = main.getByRole("article", {
+        name: title,
+        exact: true,
+      });
+      const codeBlock = (label: string) =>
+        main.getByRole("region", { name: label, exact: true });
+
+      await test.step("sign in as a new publisher, choose a handle and reach the Code step", async () => {
+        await signIn({
+          name: publisherName,
+          provider: "github",
+          username: handle,
+        });
+        await openContributeFromHome(page);
+        await expect(page.getByText(`${handle} is available.`)).toBeVisible();
+        await continueButton.click();
+
+        await expectOnCodeStep(page);
+      });
+
+      await test.step(`paste the ${journey.sdk} activity and see the Found line naming ${journey.sdk}`, async () => {
+        await paste(page.getByLabel("Paste your file", { exact: true }), code);
+
+        await expect(
+          page.getByText(
+            `✓ Found ${journey.activity} (${journey.sdk}). Next, check what we detected.`,
+            { exact: true },
+          ),
+        ).toBeVisible();
+        await expect(continueButton).toBeEnabled();
+        await expectAccessible();
+      });
+
+      await test.step(`see ${journey.sdk} detected on the What we found card`, async () => {
+        await continueButton.click();
+
+        await expect(page).toHaveURL("/contribute/detected");
+        const card = page.getByRole("region", { name: "What we found" });
+        await expect(card.getByRole("definition").nth(0)).toHaveText(
+          journey.sdk,
+        );
+        await expect(card.getByRole("definition").nth(1)).toHaveText(
+          "Detected",
+        );
+        await expect(card.getByRole("definition").nth(2)).toHaveText(
+          journey.activity,
+        );
+        await expectAccessible();
+      });
+
+      await test.step("describe the listing and review it", async () => {
+        await continueButton.click();
+        await expect(page).toHaveURL("/contribute/details");
+        await page.getByLabel("Title", { exact: true }).fill(title);
+        await page
+          .getByLabel("Name in the address", { exact: true })
+          .fill(journey.name);
+        await page
+          .getByLabel("One-line description", { exact: true })
+          .fill(journey.description);
+        await continueButton.click();
+
+        await expect(page).toHaveURL("/contribute/review");
+        const preview = page.getByRole("region", { name: "Listing preview" });
+        await expect(
+          preview.getByRole("heading", { name: title }),
+        ).toBeVisible();
+        await expect(
+          preview.getByText(journey.sdk, { exact: true }),
+        ).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("confirm the six terms and publish", async () => {
+        const confirmations = page
+          .getByRole("group", {
+            name: "Before you publish, confirm each of these",
+          })
+          .getByRole("checkbox");
+        await expect(confirmations).toHaveCount(6);
+        for (const box of await confirmations.all()) {
+          await box.check();
+        }
+        await page.getByRole("button", { name: "Publish 1.0.0" }).click();
+
+        await expect(page).toHaveURL("/contribute/published");
+        await expect(
+          page
+            .getByRole("region", { name: "Published" })
+            .getByText(/is live\./),
+        ).toContainText(`${address} is live.`);
+      });
+
+      await test.step(`choose the ${journey.sdk} chip in search and see the activity listed`, async () => {
+        await page.goto(`/search?q=${word}`);
+        await expect(resultCard).toBeVisible();
+
+        await page
+          .getByRole("complementary", { name: "Filters" })
+          .getByRole("group", { name: "Temporal SDK", exact: true })
+          .getByRole("button", { name: journey.sdk, exact: true })
+          .click();
+
+        await expect(page).toHaveURL(
+          new RegExp(`[?&]sdk=${encodeURIComponent(journey.sdk)}(&|$)`),
+        );
+        await expect(resultCard).toBeVisible();
+        await expect(resultCard).toContainText(address);
+        await expect(
+          resultCard.getByText(journey.sdk, { exact: true }),
+        ).toBeVisible();
+        await expect(
+          main.getByRole("article").filter({
+            hasNot: page.getByText(journey.sdk, { exact: true }),
+          }),
+        ).toHaveCount(0);
+        if (journey.integration !== undefined) {
+          await expect(
+            resultCard.getByRole("link", {
+              name: journey.integration,
+              exact: true,
+            }),
+          ).toBeVisible();
+        }
+        await expectAccessible();
+      });
+
+      await test.step("open the listing and see the SDK tag and the About card", async () => {
+        await resultCard.getByRole("link", { name: "View" }).click();
+
+        await expect(page).toHaveURL(`/${address}`);
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(
+          main.getByText(journey.sdk, { exact: true }),
+        ).toBeVisible();
+
+        const about = page.getByRole("region", { name: "About" });
+        const terms = ["SDK", "Dependencies", "Published", "License"];
+        if (journey.integration !== undefined) {
+          terms.splice(1, 0, "Integrates with");
+        }
+        await expect(about.getByRole("term")).toHaveText(terms);
+        await expect(about.getByRole("definition").first()).toHaveText(
+          journey.aboutSdk,
+        );
+        if (journey.integration !== undefined) {
+          await expect(about.getByRole("definition").nth(1)).toHaveText(
+            journey.integration,
+          );
+          await expect(
+            about.getByRole("link", { name: journey.integration, exact: true }),
+          ).toBeVisible();
+        }
+        await expectAccessible();
+      });
+
+      await test.step(`Implement shows the ${journey.sdk} install command`, async () => {
+        const install = codeBlock("install command");
+        await expect(install).toBeVisible();
+        for (const line of journey.install) {
+          await expect(install.getByRole("code")).toContainText(line);
+        }
+      });
+
+      await test.step(`Implement shows the ${journey.sdk} files as tabs, the activity first and as published`, async () => {
+        await expect(
+          main.getByRole("heading", {
+            level: 3,
+            name: `2. Add these ${fileCountWords[journey.files.length - 4] ?? ""} files to your project`,
+          }),
+        ).toBeVisible();
+        const tabs = main
+          .getByRole("tablist", { name: "Files" })
+          .getByRole("tab");
+        await expect(tabs).toHaveText(journey.files);
+        await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+        const [activityFile, ...generated] = journey.files;
+        await expect(
+          codeBlock(activityFile ?? "").getByRole("code"),
+        ).toHaveJSProperty("textContent", code);
+
+        for (const file of generated) {
+          await main.getByRole("tab", { name: file, exact: true }).click();
+
+          await expect(
+            main.getByRole("tabpanel", { name: file, exact: true }),
+          ).toBeVisible();
+          await expect(codeBlock(file).getByRole("code")).not.toBeEmpty();
+        }
+      });
+
+      await test.step(`Implement shows the ${journey.sdk} run commands`, async () => {
+        const run = codeBlock("run commands");
+        await expect(run).toBeVisible();
+        for (const line of journey.run) {
+          await expect(run.getByRole("code")).toContainText(line);
+        }
+        await expectAccessible();
+      });
+    },
+  );
+}
+
+test(
+  "a publisher whose SDK can't be identified chooses it, corrects a wrong choice, publishes, and the activity page shows the SDK they declared",
+  { tag: "@journey" },
+  async ({
+    page,
+    expectAccessible,
+    signIn,
+    uniqueHandle,
+    uniqueWord,
+    paste,
+  }) => {
+    const handle = uniqueHandle("declared");
+    const word = uniqueWord();
+    // java-no-import.txt writes its Temporal annotations in full and imports nothing from
+    // Temporal, so no SDK identifies it.
+    const code = sample("java-no-import");
+    const title = `Issue refund ${word}`;
+    const name = "issue-refund";
+    const address = `${handle}/${name}@1.0.0`;
+    const main = page.getByRole("main");
+    const continueButton = page.getByRole("button", { name: "Continue" });
+    const sdkDropdown = page.getByRole("combobox", {
+      name: "SDK",
+      exact: true,
+    });
+    const hint = page.getByText("Choose the SDK this activity is for", {
+      exact: true,
+    });
+
+    await test.step("sign in as a new publisher, choose a handle and reach the Code step", async () => {
+      await signIn({
+        name: publisherName,
+        provider: "github",
+        username: handle,
+      });
+      await openContributeFromHome(page);
+      await expect(page.getByText(`${handle} is available.`)).toBeVisible();
+      await continueButton.click();
+
+      await expectOnCodeStep(page);
+    });
+
+    await test.step("paste the activity and be asked to choose its SDK", async () => {
+      await paste(page.getByLabel("Paste your file", { exact: true }), code);
+
+      await expect(
+        page.getByText(
+          "We couldn't tell which SDK this is. Choose the one it's written for.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(sdkDropdown).toHaveValue("");
+      await expect(continueButton).toBeDisabled();
+      await expect(hint).toBeVisible();
+      await expectAccessible();
+    });
+
+    await test.step("choose Go and see that Go finds no activity, with the dropdown still there", async () => {
+      await sdkDropdown.selectOption("Go");
+
+      await expect(
+        page.getByText(
+          "No activity found for Go. Check the code, or choose a different SDK.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(sdkDropdown).toHaveValue("Go");
+      await expect(continueButton).toBeDisabled();
+      await expect(hint).toBeVisible();
+    });
+
+    await test.step("choose Java and see the activity found, declared by the publisher", async () => {
+      await sdkDropdown.selectOption("Java");
+
+      await expect(
+        page.getByText(
+          "✓ Found issueRefund (Java, declared by you). Next, check what we detected.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Change the SDK, Java", exact: true }),
+      ).toBeVisible();
+      await expect(continueButton).toBeEnabled();
+      await expectAccessible();
+    });
+
+    await test.step("see Java declared by the publisher on the What we found card", async () => {
+      await continueButton.click();
+
+      await expect(page).toHaveURL("/contribute/detected");
+      const values = page
+        .getByRole("region", { name: "What we found" })
+        .getByRole("definition");
+      await expect(values.nth(0)).toHaveText("Java");
+      await expect(values.nth(1)).toHaveText("Declared by you");
+      await expect(values.nth(2)).toHaveText("issueRefund");
+      await expectAccessible();
+    });
+
+    await test.step("describe the listing and see Java on the preview", async () => {
+      await continueButton.click();
+      await expect(page).toHaveURL("/contribute/details");
+      await page.getByLabel("Title", { exact: true }).fill(title);
+      await page.getByLabel("Name in the address", { exact: true }).fill(name);
+      await page
+        .getByLabel("One-line description", { exact: true })
+        .fill("Refunds a payment and returns the refund's receipt.");
+      await continueButton.click();
+
+      await expect(page).toHaveURL("/contribute/review");
+      const preview = page.getByRole("region", { name: "Listing preview" });
+      await expect(preview.getByRole("heading", { name: title })).toBeVisible();
+      await expect(preview.getByText("Java", { exact: true })).toBeVisible();
+      await expectAccessible();
+    });
+
+    await test.step("confirm the six terms and publish", async () => {
+      const confirmations = page
+        .getByRole("group", {
+          name: "Before you publish, confirm each of these",
+        })
+        .getByRole("checkbox");
+      await expect(confirmations).toHaveCount(6);
+      for (const box of await confirmations.all()) {
+        await box.check();
+      }
+      await page.getByRole("button", { name: "Publish 1.0.0" }).click();
+
+      await expect(page).toHaveURL("/contribute/published");
+      await expect(
+        page.getByRole("region", { name: "Published" }).getByText(/is live\./),
+      ).toContainText(`${address} is live.`);
+    });
+
+    await test.step("open the activity page and see the SDK the publisher declared", async () => {
+      await page.goto(`/${address}`);
+
+      await expect(
+        main.getByRole("heading", { level: 1, name: title }),
+      ).toBeVisible();
+      await expect(main.getByText("Java", { exact: true })).toBeVisible();
+      await expect(
+        page
+          .getByRole("region", { name: "About" })
+          .getByRole("definition")
+          .first(),
+      ).toHaveText("Java, io.temporal:temporal-sdk");
+      await expect(
+        main.getByRole("tablist", { name: "Files" }).getByRole("tab").first(),
+      ).toHaveText("Activities.java");
+      await expectAccessible();
+    });
+  },
+);

@@ -1,10 +1,7 @@
-import type { Sdk } from "@durables/schemas";
+import type { Sdk } from "../sdks/sdk-list";
 
-/** The SDKs Durables accepts activities from: the shared SDK list. */
+/** The SDKs Durables accepts activities from: the api's SDK list. */
 export type AcceptedSdk = Sdk;
-
-/** Temporal SDKs Durables recognises but does not accept. */
-export type UnacceptedSdk = "Java" | "Go" | "PHP";
 
 /** A place in the pasted code. Lines are 1-based, numbered as the editor numbers them. */
 export interface LineRef {
@@ -17,8 +14,8 @@ export interface NamedLineRef extends LineRef {
 }
 
 /**
- * How the activity runs. `sync` means the worker needs a thread pool. Null when detection
- * can't tell.
+ * How the activity runs. Whether a `sync` activity needs a thread pool depends on the SDK, and
+ * its display profile says so. Null when detection can't tell.
  */
 export type RunsAs = "async" | "sync" | null;
 
@@ -46,10 +43,59 @@ export interface ActivityFacts {
 }
 
 /**
- * The eight facts detection reports about an accepted file: SDK, activity, input and output,
- * runs as, non-retryable errors, configuration read, dependencies and heartbeats. The same
- * shape is stored at publish.
+ * How a fact was established (ADR 0008, amended by ADR 0013).
+ *
+ * - `detected`: a Temporal marker or a detection pattern found it in the code.
+ * - `inferred`: the SDK was recognised from the language and the function's shape, with no
+ *   Temporal marker.
+ * - `declared`: the publisher named it. Only the SDK can be declared, and the api still runs
+ *   that SDK's detector itself.
+ * - `pattern-matched`: a behavior check's pattern found it. No fact is pattern-matched yet.
+ * - `ai-reviewed`: reserved for AI review. Nothing in the api produces it.
  */
-export interface Facts extends ActivityFacts {
+export type Tier =
+  "detected" | "inferred" | "declared" | "pattern-matched" | "ai-reviewed";
+
+/** The eight facts, by the name provenance records them under. */
+export const factNames = [
+  "sdk",
+  "activity",
+  "inputOutput",
+  "runsAs",
+  "nonRetryableErrors",
+  "configurationRead",
+  "dependencies",
+  "heartbeats",
+] as const;
+
+export type FactName = (typeof factNames)[number];
+
+/**
+ * How each of the eight facts was established. `inputOutput` covers both `input` and
+ * `output`, which are one fact.
+ */
+export type Provenance = Readonly<Record<FactName, Tier>>;
+
+/**
+ * The eight facts' values: SDK, activity, input and output, runs as, non-retryable errors,
+ * configuration read, dependencies and heartbeats. Snippets are generated from these.
+ */
+export interface FactValues extends ActivityFacts {
   readonly sdk: AcceptedSdk;
+}
+
+/**
+ * The eight facts detection reports about an accepted file, each with how it was established.
+ * The same shape is stored at publish.
+ */
+export interface Facts extends FactValues {
+  readonly provenance: Provenance;
+}
+
+/**
+ * The facts as a version document holds them. A version published before fact provenance
+ * existed has none, and published versions never change.
+ */
+export interface StoredFacts extends FactValues {
+  readonly provenance?: Provenance;
 }

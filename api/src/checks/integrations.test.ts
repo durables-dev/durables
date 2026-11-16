@@ -1,6 +1,7 @@
 import { integrations } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
-import { detectors } from "./detectors";
+import { registeredSdks } from "../sdks/registry";
+import { sdks } from "../sdks/sdk-list";
 import { integrationPackages, integrationsFor } from "./integrations";
 import { checkCode } from "./pipeline";
 
@@ -26,9 +27,14 @@ describe("the shared integration list", () => {
   });
 });
 
-describe("integrations from imports", () => {
+/** The SDKs whose normaliser reads these package names unchanged, apart from case. */
+const lowerCasingSdks = sdks.filter((sdk) => sdk !== "Ruby");
+
+// These SDKs give the same integrations for the same names. Ruby reads a required path as a
+// gem name, and has its own cases below.
+describe.each(lowerCasingSdks)("integrations from %s imports", (sdk) => {
   it("maps stripe to Stripe", () => {
-    expect(integrationsFor(imports("stripe"))).toEqual(["Stripe"]);
+    expect(integrationsFor(sdk, imports("stripe"))).toEqual(["Stripe"]);
   });
 
   it.each([
@@ -44,24 +50,24 @@ describe("integrations from imports", () => {
     ["@slack/web-api", "Slack"],
     ["SlackNet", "Slack"],
   ])("maps %s to %s", (name, integration) => {
-    expect(integrationsFor(imports(name))).toEqual([integration]);
+    expect(integrationsFor(sdk, imports(name))).toEqual([integration]);
   });
 
   it("lists an integration once when two of its packages are imported", () => {
-    expect(integrationsFor(imports("psycopg2", "asyncpg"))).toEqual([
+    expect(integrationsFor(sdk, imports("psycopg2", "asyncpg"))).toEqual([
       "Postgres",
     ]);
-    expect(integrationsFor(imports("boto3", "@aws-sdk/client-s3"))).toEqual([
-      "Amazon S3",
-    ]);
+    expect(
+      integrationsFor(sdk, imports("boto3", "@aws-sdk/client-s3")),
+    ).toEqual(["Amazon S3"]);
   });
 
   it("lists two integrations once each, in the same order whatever the import order", () => {
-    expect(integrationsFor(imports("stripe", "boto3"))).toEqual([
+    expect(integrationsFor(sdk, imports("stripe", "boto3"))).toEqual([
       "Amazon S3",
       "Stripe",
     ]);
-    expect(integrationsFor(imports("boto3", "stripe"))).toEqual([
+    expect(integrationsFor(sdk, imports("boto3", "stripe"))).toEqual([
       "Amazon S3",
       "Stripe",
     ]);
@@ -69,53 +75,112 @@ describe("integrations from imports", () => {
 
   it("lists every integration in the listed order", () => {
     expect(
-      integrationsFor(imports("@slack/web-api", "stripe", "pg", "boto3")),
+      integrationsFor(sdk, imports("@slack/web-api", "stripe", "pg", "boto3")),
     ).toEqual(["Amazon S3", "Postgres", "Slack", "Stripe"]);
   });
 
   it("maps an unknown package to nothing", () => {
-    expect(integrationsFor(imports("lodash"))).toEqual([]);
+    expect(integrationsFor(sdk, imports("lodash"))).toEqual([]);
   });
 
   it("maps no imports to nothing", () => {
-    expect(integrationsFor([])).toEqual([]);
+    expect(integrationsFor(sdk, [])).toEqual([]);
   });
 
   it("keeps only the known packages from a mix", () => {
     expect(
-      integrationsFor(imports("lodash", "stripe", "pydantic", "slack_sdk")),
+      integrationsFor(
+        sdk,
+        imports("lodash", "stripe", "pydantic", "slack_sdk"),
+      ),
     ).toEqual(["Slack", "Stripe"]);
   });
 
   it.each(["httpx", "requests", "aiohttp", "urllib3", "axios", "node-fetch"])(
     "maps the plain HTTP client %s to nothing",
     (name) => {
-      expect(integrationsFor(imports(name))).toEqual([]);
+      expect(integrationsFor(sdk, imports(name))).toEqual([]);
     },
   );
 
   it("matches package names without regard to case", () => {
-    expect(integrationsFor(imports("Stripe"))).toEqual(["Stripe"]);
-    expect(integrationsFor(imports("npgsql"))).toEqual(["Postgres"]);
-    expect(integrationsFor(imports("SLACKNET"))).toEqual(["Slack"]);
+    expect(integrationsFor(sdk, imports("Stripe"))).toEqual(["Stripe"]);
+    expect(integrationsFor(sdk, imports("npgsql"))).toEqual(["Postgres"]);
+    expect(integrationsFor(sdk, imports("SLACKNET"))).toEqual(["Slack"]);
   });
 
   it("lists an integration once when its package is imported under two casings", () => {
-    expect(integrationsFor(imports("stripe", "Stripe"))).toEqual(["Stripe"]);
+    expect(integrationsFor(sdk, imports("stripe", "Stripe"))).toEqual([
+      "Stripe",
+    ]);
   });
 
   it("does not take a package that only starts like a known one", () => {
     expect(
       integrationsFor(
+        sdk,
         imports("stripe-mock", "pgvector", "@aws-sdk/client-sqs"),
       ),
     ).toEqual([]);
   });
 });
 
+it("covers every SDK in the api's list between the shared cases and Ruby's", () => {
+  expect([...lowerCasingSdks, "Ruby"].sort()).toEqual([...sdks].sort());
+});
+
+describe("integrations from Ruby requires", () => {
+  it.each([
+    ["stripe", "Stripe"],
+    ["aws-sdk-s3", "Amazon S3"],
+    ["pg", "Postgres"],
+    ["slack-ruby-client", "Slack"],
+  ])("maps the gem %s to %s", (name, integration) => {
+    expect(integrationsFor("Ruby", imports(name))).toEqual([integration]);
+  });
+
+  it("maps a required path to the gem it names", () => {
+    expect(integrationsFor("Ruby", imports("aws/sdk/s3"))).toEqual([
+      "Amazon S3",
+    ]);
+    expect(integrationsFor("Ruby", imports("slack/ruby/client"))).toEqual([
+      "Slack",
+    ]);
+  });
+
+  it("matches gem names without regard to case", () => {
+    expect(integrationsFor("Ruby", imports("Stripe", "PG"))).toEqual([
+      "Postgres",
+      "Stripe",
+    ]);
+  });
+
+  it("lists every integration in the listed order, each once", () => {
+    expect(
+      integrationsFor(
+        "Ruby",
+        imports("slack-ruby-client", "stripe", "pg", "aws-sdk-s3", "stripe"),
+      ),
+    ).toEqual(["Amazon S3", "Postgres", "Slack", "Stripe"]);
+  });
+
+  it.each([
+    "faraday",
+    "httparty",
+    "aws-sdk-sqs",
+    "stripe-ruby-mock",
+    "pg_search",
+    "slack-notifier",
+  ])("maps %s to nothing", (name) => {
+    expect(integrationsFor("Ruby", imports(name))).toEqual([]);
+  });
+});
+
 describe("integrations from detected code", () => {
-  const integrationsIn = (code: string) =>
-    integrationsFor(checkCode(code, detectors).dependencies);
+  const integrationsIn = (code: string) => {
+    const facts = checkCode(code, registeredSdks);
+    return integrationsFor(facts.sdk, facts.dependencies);
+  };
 
   it("reads Python imports as detection reports them", () => {
     const code = [
@@ -166,6 +231,31 @@ describe("integrations from detected code", () => {
     ].join("\n");
     expect(integrationsIn(code)).toEqual(["Postgres", "Stripe"]);
   });
+  it("reads Ruby requires as detection reports them, leaving out the standard library", () => {
+    const code = [
+      'require "json"',
+      'require "net/http"',
+      'require "stripe"',
+      'require "aws-sdk-s3"',
+      'require "pg"',
+      'require "slack-ruby-client"',
+      'require "faraday"',
+      'require "temporalio/activity"',
+      "",
+      "class ChargeCard < Temporalio::Activity::Definition",
+      "    def execute(amount)",
+      '        "ok"',
+      "    end",
+      "end",
+    ].join("\n");
+    expect(integrationsIn(code)).toEqual([
+      "Amazon S3",
+      "Postgres",
+      "Slack",
+      "Stripe",
+    ]);
+  });
+
   it("reads the Stripe.net package's using as Stripe", () => {
     const code = [
       "using Stripe;",

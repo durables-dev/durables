@@ -1,16 +1,15 @@
-import type { Detector, SdkMarkers } from "./detector";
-import type { AcceptedSdk, Facts, UnacceptedSdk } from "./facts";
-import { matchesAny } from "./pattern";
+import type { Detector } from "./detector";
+import type { AcceptedSdk, Facts, Provenance, Tier } from "./facts";
+import { identifySdk, type Recognisable } from "./identify";
 import {
   codeTooLarge,
   multipleActivities,
   noActivity,
   notTemporalActivity,
-  unacceptedSdk,
+  sdkChoiceNeeded,
 } from "./refusals";
 import { isWithinSizeLimit } from "./size-limit";
 import { type Source, toSource } from "./source";
-import { unacceptedSdks } from "./unaccepted-sdks";
 
 // The checks pipeline (ADR 0008): pasted code in, the activity's facts out, or a CheckRefusal
 // thrown. It never logs, and nothing it throws carries the code.
@@ -30,52 +29,100 @@ export class DetectorFailure extends Error {
   }
 }
 
-type Candidate =
-  | { readonly accepted: true; readonly markers: Detector }
-  | {
-      readonly accepted: false;
-      readonly markers: SdkMarkers<UnacceptedSdk>;
-    };
-
 /**
- * Chooses the file's SDK. One SDK with markers is that SDK. Among several, the one with an
- * activity marker wins, taking the earliest in `candidates` if more than one has. None, or
- * several with no activity marker, is no SDK.
+ * What the pipeline needs of an accepted SDK: how to recognise it, its detector and its
+ * standard-library check.
  */
-const chooseSdk = (
-  text: string,
-  candidates: readonly Candidate[],
-): Candidate | undefined => {
-  const marked = candidates.filter(({ markers }) =>
-    matchesAny(markers.sdkMarkers, text),
-  );
-  if (marked.length <= 1) {
-    return marked[0];
-  }
-  return marked.find(({ markers }) =>
-    matchesAny(markers.activityMarkers, text),
-  );
-};
+export interface CheckedSdk extends Recognisable<AcceptedSdk> {
+  readonly detector: Detector;
+  /**
+   * Whether a dependency name, as the detector reports it, is part of the language's own
+   * library rather than a third-party package. Detection leaves these out of Dependencies.
+   */
+  readonly isStandardLibrary: (name: string) => boolean;
+}
 
-const detect = (detector: Detector, source: Source) => {
+const detect = (
+  { sdk, detector, isStandardLibrary }: CheckedSdk,
+  source: Source,
+) => {
   try {
-    return detector.detect(source);
+    return detector.detect(source, isStandardLibrary);
   } catch (error) {
-    throw new DetectorFailure(detector.sdk, error);
+    throw new DetectorFailure(sdk, error);
   }
 };
 
 /**
- * Checks pasted code and returns the activity's facts. Accepted SDKs are recognised through
- * `detectors`; Java, Go and PHP are recognised so they can be refused by name.
+ * How each fact was established. The SDK's tier comes from identification or declaration.
+ * The detector reads every other fact from the code, so each of those is detected.
+ */
+const provenanceFor = (sdkTier: Tier): Provenance => ({
+  sdk: sdkTier,
+  activity: "detected",
+  inputOutput: "detected",
+  runsAs: "detected",
+  nonRetryableErrors: "detected",
+  configurationRead: "detected",
+  dependencies: "detected",
+  heartbeats: "detected",
+});
+
+/** The SDK to run detection with, and how it was established. */
+interface ChosenSdk {
+  readonly checked: CheckedSdk;
+  readonly tier: Tier;
+}
+
+/**
+ * Identifies the SDK over the given SDKs. Code no SDK can be placed in, or that several SDKs
+ * match with nothing to decide between them, needs the publisher to choose the SDK.
+ */
+const identifyChecked = (
+  source: Source,
+  checkedSdks: readonly CheckedSdk[],
+): ChosenSdk => {
+  const identification = identifySdk(source.text, checkedSdks);
+  if (identification.outcome !== "identified") {
+    throw sdkChoiceNeeded(identification.outcome);
+  }
+  const checked = checkedSdks.find(({ sdk }) => sdk === identification.sdk);
+  if (checked === undefined) {
+    throw new Error(
+      `Identification returned ${identification.sdk}, which has no entry.`,
+    );
+  }
+  return { checked, tier: identification.tier };
+};
+
+/** The declared SDK's entry. Every SDK in the api's list has one in production. */
+const declaredChecked = (
+  declared: AcceptedSdk,
+  checkedSdks: readonly CheckedSdk[],
+): ChosenSdk => {
+  const checked = checkedSdks.find(({ sdk }) => sdk === declared);
+  if (checked === undefined) {
+    throw new Error(`No detector is given for the declared SDK ${declared}.`);
+  }
+  return { checked, tier: "declared" };
+};
+
+/**
+ * Checks pasted code and returns the activity's facts, with how each was established.
  *
- * @throws {CheckRefusal} when the file is too large, isn't a Temporal activity, is in an SDK
- * Durables doesn't accept, or has no activity or more than one.
+ * With no declared SDK, the SDK is identified from the code. Code identification can't place,
+ * or can't decide between SDKs for, needs the publisher to choose the SDK. With a declared
+ * SDK, identification is skipped and that SDK's detector decides alone. Only the SDK is ever
+ * declared: every other fact comes from the detector.
+ *
+ * @throws {CheckRefusal} when the file is too large or empty, needs the SDK chosen, or has no
+ * activity or more than one.
  * @throws {DetectorFailure} when a detector throws.
  */
 export const checkCode = (
   code: string,
-  detectors: readonly Detector[],
+  checkedSdks: readonly CheckedSdk[],
+  declared?: AcceptedSdk,
 ): Facts => {
   if (!isWithinSizeLimit(code)) {
     throw codeTooLarge();
@@ -85,26 +132,18 @@ export const checkCode = (
   }
 
   const source = toSource(code);
-  const candidates: Candidate[] = [
-    ...detectors.map((markers) => ({ accepted: true as const, markers })),
-    ...unacceptedSdks.map((markers) => ({ accepted: false as const, markers })),
-  ];
-  const chosen = chooseSdk(source.text, candidates);
-  if (chosen === undefined) {
-    throw notTemporalActivity();
-  }
-  if (!chosen.accepted) {
-    throw unacceptedSdk(chosen.markers.sdk);
-  }
+  const { checked, tier } =
+    declared === undefined
+      ? identifyChecked(source, checkedSdks)
+      : declaredChecked(declared, checkedSdks);
 
-  const detector = chosen.markers;
-  const activities = detect(detector, source);
+  const activities = detect(checked, source);
   const [only, ...rest] = activities;
   if (only === undefined) {
-    throw noActivity();
+    throw noActivity(checked.sdk);
   }
   if (rest.length > 0) {
     throw multipleActivities(activities.length);
   }
-  return { sdk: detector.sdk, ...only };
+  return { sdk: checked.sdk, ...only, provenance: provenanceFor(tier) };
 };

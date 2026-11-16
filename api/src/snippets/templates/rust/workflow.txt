@@ -1,0 +1,36 @@
+use std::time::Duration;
+
+use temporalio_macros::{workflow, workflow_methods};
+use temporalio_sdk::{ActivityOptions, WorkflowContext, WorkflowContextView, WorkflowResult};
+
+{{activitiesUse}}
+
+// Activities stands in for the type whose #[activities] impl declares {{activity}}. Change it
+// to your type's name here and in main.rs.
+#[workflow]
+pub struct {{workflowClass}} {
+    input: {{inputType}},
+}
+
+#[workflow_methods]
+impl {{workflowClass}} {
+    #[init]
+    fn new(_ctx: &WorkflowContextView, input: {{inputType}}) -> Self {
+        Self { input }
+    }
+
+    #[run]
+    pub async fn run(ctx: &mut WorkflowContext<Self>) -> WorkflowResult<{{outputType}}> {
+        // Reading the input from the workflow's state needs {{inputType}} to implement Clone.
+        let input = ctx.state(|s| s.input.clone());
+        {{resultBinding}}ctx
+            .execute_activity(
+                Activities::{{activity}},
+                input,
+                // Temporal requires a start-to-close timeout. Set it for your activity.
+                ActivityOptions::start_to_close_timeout(Duration::from_secs(30)),
+            )
+            .await?;
+        Ok({{resultValue}})
+    }
+}

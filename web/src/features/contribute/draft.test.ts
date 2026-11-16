@@ -195,6 +195,111 @@ describe("the pasted code and its check", () => {
   });
 });
 
+describe("the declared SDK", () => {
+  const declaredCheck: CheckResult = {
+    outcome: "accepted",
+    facts: { ...acceptedFacts, sdk: "Go", provenance: { sdk: "declared" } },
+  };
+
+  test("declaring an SDK records it and drops the previous check", () => {
+    const draft = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    expect(draft.declaredSdk).toBe("Go");
+    expect(draft.check).toBeUndefined();
+    expect(draft.code).toBe(pastedCode);
+  });
+
+  test("a check sent with the declared SDK is kept", () => {
+    const declared = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    const checked = draftReducer(declared, {
+      type: "checkFinished",
+      code: pastedCode,
+      declaredSdk: "Go",
+      result: declaredCheck,
+    });
+    expect(checked.check).toEqual(declaredCheck);
+  });
+
+  test("changing the SDK again replaces the previous result, and a late answer for the old SDK is dropped", () => {
+    let draft = draftReducer(acceptedDraft, { type: "sdkDeclared", sdk: "Go" });
+    draft = draftReducer(draft, { type: "sdkDeclared", sdk: "Rust" });
+    draft = draftReducer(draft, {
+      type: "checkFinished",
+      code: pastedCode,
+      declaredSdk: "Go",
+      result: declaredCheck,
+    });
+    expect(draft.declaredSdk).toBe("Rust");
+    expect(draft.check).toBeUndefined();
+  });
+
+  test("a check sent without the declared SDK is dropped", () => {
+    const declared = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    const checked = draftReducer(declared, {
+      type: "checkFinished",
+      code: pastedCode,
+      result: acceptedCheck,
+    });
+    expect(checked.check).toBeUndefined();
+  });
+
+  test("stays while the code is edited", () => {
+    const declared = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    const edited = draftReducer(declared, {
+      type: "codeEdited",
+      code: `${pastedCode}\n`,
+    });
+    expect(edited.declaredSdk).toBe("Go");
+  });
+
+  test.each(["", "  \n\t "])("goes when the editor is emptied (%j)", (code) => {
+    const declared = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    expect(
+      draftReducer(declared, { type: "codeEdited", code }).declaredSdk,
+    ).toBeUndefined();
+  });
+
+  test("is kept through a reload", () => {
+    const storage = memoryStorage();
+    const draft: Draft = {
+      ...acceptedDraft,
+      declaredSdk: "Go",
+      check: declaredCheck,
+    };
+    writeDraft(storage, draft);
+    expect(readDraft(storage)).toEqual(draft);
+  });
+
+  test("an unreadable declared SDK is dropped and the rest kept", () => {
+    const storage = memoryStorage({
+      [draftStorageKey]: JSON.stringify({ ...acceptedDraft, declaredSdk: 7 }),
+    });
+    expect(readDraft(storage)).toEqual(acceptedDraft);
+  });
+
+  test("publishing clears it", () => {
+    const draft = draftReducer(
+      { ...acceptedDraft, declaredSdk: "Go" },
+      { type: "published" },
+    );
+    expect(draft.declaredSdk).toBeUndefined();
+  });
+});
+
 describe("Code is finished", () => {
   test("once the pasted file is accepted", () => {
     expect(draftFinished(acceptedDraft)).toEqual(["profile", "code"]);
@@ -243,17 +348,17 @@ describe("reading the kept code and check back", () => {
     expect(readDraft(storage)).toEqual(refused);
   });
 
-  test("a refusal keeps the members it adds, such as the SDK", () => {
+  test("a refusal keeps the members it adds, such as why the SDK must be chosen", () => {
     const storage = memoryStorage();
     const refused: Draft = {
       ...acceptedDraft,
       check: {
         outcome: "refused",
         problem: {
-          type: "https://durables.dev/problems/unaccepted-sdk",
-          title: "SDK not accepted",
+          type: "https://durables.dev/problems/sdk-choice-needed",
+          title: "Choose an SDK",
           status: 422,
-          sdk: "Java",
+          reason: "ambiguous",
         },
       },
     };

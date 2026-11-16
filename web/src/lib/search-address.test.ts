@@ -1,12 +1,16 @@
 import { isReservedHandle } from "@durables/schemas";
 import { expect, test } from "vitest";
+import type { SdkName } from "./sdk-catalog";
 import { readSearch, searchAddress, type Search } from "./search-address";
 
+/** The SDK names the catalog lists, as the /search route passes them. */
+const catalogSdks: SdkName[] = ["Python", "TypeScript", ".NET"];
+
 /** Reads the search back from an address, as the /search route does. */
-function readAddress(address: string): Search {
+function readAddress(address: string, sdks = catalogSdks): Search {
   const url = new URL(address, "https://durables.test");
   expect(url.pathname).toBe("/search");
-  return readSearch(url.searchParams);
+  return readSearch(url.searchParams, sdks);
 }
 
 test("words, several SDKs and several integrations read back exactly as built", () => {
@@ -50,6 +54,22 @@ test("an unknown SDK and an unknown integration are dropped", () => {
       "/search?q=pay&sdk=Java&sdk=Python&sdk=python&integration=Stripe&integration=AWS+S3&integration=Twilio",
     ),
   ).toEqual({ words: "pay", sdks: ["Python"], integrations: ["Stripe"] });
+});
+
+test("an SDK is kept only when the catalog lists it", () => {
+  const address = "/search?sdk=.NET&sdk=Python&sdk=TypeScript";
+
+  expect(readAddress(address, ["Python"]).sdks).toEqual(["Python"]);
+  expect(readAddress(address, [".NET", "TypeScript"]).sdks).toEqual([
+    ".NET",
+    "TypeScript",
+  ]);
+});
+
+test("with no catalog to hand, every SDK in the address is dropped", () => {
+  expect(
+    readAddress("/search?q=pay&sdk=Python&integration=Stripe", []),
+  ).toEqual({ words: "pay", sdks: [], integrations: ["Stripe"] });
 });
 
 test("an address holding only unknown values means no filters", () => {
