@@ -17,5 +17,6 @@ Decisions that shape how Durables is built. Each record states the decision, why
 | [0011](0011-development-container.md)   | Develop and test in one dev container; running natively is not supported                                              |
 | [0012](0012-work-on-main.md)            | Work on `main` now the site is live; `mvp` and `p-o-c` are deleted                                                    |
 | [0013](0013-sdk-registry.md)            | Every SDK's specifics live in one api registry; web holds none; identification never depends on list order            |
+| [0014](0014-release-branches.md)        | Work collects on a `release/<date>` branch; one release pull request into `main` deploys it                           |
 
 Records are numbered in the order they were written and never renumbered. A superseded record stays in place with a note pointing to its replacement.
