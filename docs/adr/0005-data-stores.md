@@ -27,3 +27,4 @@ Durables stores two kinds of data. Accounts and ownership are small, relational 
   - An R2 object counts only once its D1 row exists. Reads check D1 first, so an orphaned object is never served.
   - A retried publish that finds an object with no row deletes it and writes again.
 - **2026-10-08, accepted risk.** The create-only conditional put that enforces immutability uses R2 behaviour that Cloudflare does not document, and local emulation has a reported bug with it. It was decided not to require verification against a real bucket before publishing ships.
+- **2026-11-16, description moved to each version** by [ADR 0015](0015-removal-deprecation-and-account-deletion.md). The current description is kept in D1 per version, not per listing; updating it changes only that version, and search reads the latest version's.
