@@ -1,11 +1,11 @@
-# Every check on pull requests; deploy on merge to main (docs/adr/0001, 0011).
+# Every check on pull requests and release branches; deploy on merge to main (docs/adr/0011, 0014).
 # Both run inside the dev container, so CI and a developer's machine are the same environment.
 name: CI
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
 
 permissions:
   contents: read
