@@ -126,7 +126,7 @@ test("shows the headline above the search box", async () => {
   const headline = opened.screen.getByRole("heading", { level: 1 });
   await expect
     .element(headline)
-    .toHaveTextContent("Temporal activities, ready to copy.");
+    .toHaveTextContent("Temporal activities, ready to use.");
   await expect.element(searchBox(opened)).toBeVisible();
   const headlineBottom = headline.element().getBoundingClientRect().bottom;
   const boxTop = searchBox(opened).element().getBoundingClientRect().top;

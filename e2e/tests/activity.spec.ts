@@ -182,8 +182,11 @@ test.describe("as an anonymous visitor", () => {
         await expect.poll(readClipboard).toBe(listing.address);
       });
 
-      await test.step("press Quickstart and land on Implement", async () => {
-        await main(page).getByRole("link", { name: "Quickstart" }).click();
+      await test.step("press Implement in the section bar and land on Implement", async () => {
+        await main(page)
+          .getByRole("navigation", { name: "Page sections" })
+          .getByRole("link", { name: "Implement" })
+          .click();
 
         await expect(sectionHeading(page, "Implement")).toBeInViewport();
         await expect(

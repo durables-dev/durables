@@ -85,7 +85,7 @@ test(
     await expect(
       page.getByRole("heading", {
         level: 1,
-        name: "Temporal activities, ready to copy.",
+        name: "Temporal activities, ready to use.",
       }),
     ).toBeVisible();
     await expect(page).toHaveTitle("Durables");
@@ -166,7 +166,7 @@ test.describe("the footer", () => {
       await expect(
         page.getByRole("heading", {
           level: 1,
-          name: "Temporal activities, ready to copy.",
+          name: "Temporal activities, ready to use.",
         }),
       ).toBeVisible();
 

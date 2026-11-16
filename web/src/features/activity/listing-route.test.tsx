@@ -292,7 +292,7 @@ test("the home page still opens at /", async () => {
     .element(
       screen.getByRole("heading", {
         level: 1,
-        name: "Temporal activities, ready to copy.",
+        name: "Temporal activities, ready to use.",
       }),
     )
     .toBeVisible();
@@ -559,15 +559,14 @@ test('a copy the clipboard refuses does not show "Copied" and says it failed', a
   await expect.element(status).not.toHaveTextContent("Copied");
 });
 
-test("Quickstart and the section bar link to the Implement, Configure and Source anchors", async () => {
+test("the section bar links to the Implement, Configure and Source anchors, and there is no Quickstart", async () => {
   publishChargeCard();
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
   const main = screen.getByRole("main");
-  const quickstart = main.getByRole("link", { name: "Quickstart" });
-  await expect.element(quickstart).toHaveAttribute("href", "#implement");
   const bar = main.getByRole("navigation", { name: "Page sections" });
+  await expect.element(bar).toBeVisible();
   const links = bar.getByRole("link").elements();
   expect(links.map((link) => link.textContent)).toEqual([
     "Implement",
@@ -582,21 +581,9 @@ test("Quickstart and the section bar link to the Implement, Configure and Source
   for (const id of ["implement", "configure", "source"]) {
     expect(document.getElementById(id)?.tagName).toBe("SECTION");
   }
-});
-
-test("Quickstart sits at the top right, beside the title, on a wide window", async () => {
-  await page.viewport(1280, 900);
-  publishChargeCard();
-
-  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
-
-  const title = screen.getByRole("heading", { level: 1, name: "Charge card" });
-  const quickstart = screen.getByRole("link", { name: "Quickstart" });
-  await expect.element(quickstart).toBeVisible();
-  const titleBox = title.element().getBoundingClientRect();
-  const quickstartBox = quickstart.element().getBoundingClientRect();
-  expect(quickstartBox.left).toBeGreaterThan(titleBox.right);
-  expect(quickstartBox.top).toBeLessThan(titleBox.bottom);
+  await expect
+    .element(main.getByRole("link", { name: "Quickstart" }))
+    .not.toBeInTheDocument();
 });
 
 test("on a wide window the sidebar sits beside the main column", async () => {
@@ -618,7 +605,7 @@ test("on a wide window the sidebar sits beside the main column", async () => {
   expect(sidebarBox?.top).toBe(sectionsBox?.top);
 });
 
-test("below about 960px the sidebar moves under the main column and the top stacks", async () => {
+test("below about 960px the sidebar moves under the main column", async () => {
   await page.viewport(900, 900);
   publishChargeCard();
 
@@ -634,14 +621,6 @@ test("below about 960px the sidebar moves under the main column and the top stac
     sectionsBox?.bottom ?? Infinity,
   );
   expect(sidebarBox?.left).toBe(sectionsBox?.left);
-
-  const publisher = (await topOfPage(screen)).getByText("MIT-0", {
-    exact: true,
-  });
-  const quickstart = screen.getByRole("link", { name: "Quickstart" });
-  expect(
-    quickstart.element().getBoundingClientRect().top,
-  ).toBeGreaterThanOrEqual(publisher.element().getBoundingClientRect().bottom);
 });
 
 test("the page shows no popularity signal, no Start a workflow and no version picker", async () => {

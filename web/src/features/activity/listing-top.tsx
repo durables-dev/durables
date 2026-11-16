@@ -2,8 +2,6 @@ import { AddressCopy } from "./address-copy";
 import styles from "./listing-top.module.css";
 import { publishedAgo } from "@/lib/published-ago";
 import { PublisherInitial } from "@/components/publisher-initial";
-import { scrollToSection } from "./scroll-to-section";
-import { sectionHref } from "./listing-sections";
 
 export interface ListingTopProps {
   title: string;
@@ -18,7 +16,7 @@ export interface ListingTopProps {
 }
 
 // The top of the Activity page: the icon, the title and SDK, the address with its copy
-// button, the description, the publisher line, and Quickstart at the right.
+// button, the description and the publisher line. The section bar below it links to Implement.
 export function ListingTop({
   title,
   sdk,
@@ -57,15 +55,6 @@ export function ListingTop({
           </p>
         </div>
       </div>
-      <a
-        href={sectionHref("implement")}
-        className={styles["quickstart"]}
-        onClick={(event) => {
-          scrollToSection("implement", event);
-        }}
-      >
-        Quickstart
-      </a>
     </header>
   );
 }
