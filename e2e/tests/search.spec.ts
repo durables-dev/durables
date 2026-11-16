@@ -123,7 +123,7 @@ test.describe("as an anonymous visitor", () => {
         await expect(
           page.getByRole("heading", {
             level: 1,
-            name: "Temporal activities, ready to copy.",
+            name: "Temporal activities, ready to use.",
           }),
         ).toBeVisible();
         await expect(searchBox(page)).toHaveAttribute(

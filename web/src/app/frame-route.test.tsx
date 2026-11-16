@@ -43,7 +43,7 @@ test("the logo link takes a visitor home from another page", async () => {
   await expect
     .element(
       screen.getByRole("heading", {
-        name: "Temporal activities, ready to copy.",
+        name: "Temporal activities, ready to use.",
       }),
     )
     .toBeVisible();

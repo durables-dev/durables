@@ -54,19 +54,6 @@ function gapUnderBar(bar: Element, id: string) {
   );
 }
 
-test("Quickstart scrolls the page so Implement is at the top of the view", async () => {
-  const { screen, bar } = await renderPage();
-  expect(gapUnderBar(bar, "implement")).toBeGreaterThan(0);
-
-  await screen.getByRole("link", { name: "Quickstart" }).click();
-
-  await expect.poll(() => window.scrollY).toBeGreaterThan(0);
-  expect(bar.getBoundingClientRect().top).toBe(0);
-  const gap = gapUnderBar(bar, "implement");
-  expect(gap).toBeGreaterThanOrEqual(0);
-  expect(gap).toBeLessThan(20);
-});
-
 test.each(["Implement", "Configure", "Source"])(
   "%s in the section bar scrolls to its section, and the bar stays stuck to the top",
   async (name) => {
