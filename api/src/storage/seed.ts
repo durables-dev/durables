@@ -130,8 +130,8 @@ export const seedDescription = async (
 };
 
 /**
- * Records a version's deprecation directly. Deprecating is a later story, so tests write the
- * record here.
+ * Records a version's deprecation directly, so a test that reads the listing need not sign in
+ * and deprecate it.
  */
 export const seedDeprecation = async (
   database: D1Database,
