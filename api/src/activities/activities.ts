@@ -22,6 +22,7 @@ import { publisherLimitKey } from "../http/rate-limits";
 import { problemOnInvalid } from "../http/validation";
 import { registeredSdks } from "../sdks/registry";
 import { generateSnippets } from "../snippets/snippets";
+import type { RemovalSource } from "../storage/storage";
 import { encodeBrowseCursor } from "./browse-cursor";
 import { BROWSE_BATCH_SIZE, browseQuery, browseSort } from "./browse-request";
 import { descriptionBody } from "./description-request";
@@ -51,12 +52,13 @@ import {
   type VersionResponse,
 } from "./responses";
 
-// Publishing an activity, reading it back, and saving a version's description (ADR 0005, 0006,
-// 0008, 0015). The version and the listing are read at separate endpoints so each carries its
-// own cache rule: the version's fields never change and are cached for good, and the listing
-// read answers every version's state that can change, such as its description, and is cached
-// briefly. Publishing runs the checks again and never accepts detection results from the
-// client. Nothing here logs the code, and no error carries it.
+// Publishing an activity, reading it back, saving a version's description, and taking the
+// activity out of search and returning it (ADR 0005, 0006, 0008, 0015). The version and the
+// listing are read at separate endpoints so each carries its own cache rule: the version's
+// fields never change and are cached for good, and the listing read answers the state that can
+// change, such as each version's description and the listing's removal, and is cached briefly.
+// Publishing runs the checks again and never accepts detection results from the client.
+// Nothing here logs the code, and no error carries it.
 
 /** Answers 413 Problem Details, the same refusal as oversized code, when the body is too large. */
 const publishBodyLimit = () =>
@@ -89,6 +91,16 @@ const noSuchListing = (handle: string, name: string) =>
   new ProblemError({
     status: 404,
     detail: `No activity is listed at ${handle}/${name}.`,
+  });
+
+/** Answers 409 when a removal someone other than the publisher made stays in place. */
+const notThePublishersRemoval = (removedBy: RemovalSource) =>
+  new ProblemError({
+    status: 409,
+    detail:
+      removedBy === "account-deletion"
+        ? "This activity was taken out of search when its account was deleted. Restoring the account returns it."
+        : "Durables took this activity out of search. Only Durables can return it.",
   });
 
 /**
@@ -280,6 +292,49 @@ export const activities = new Hono<AppEnv>()
       const listing = await storage.findListingVersions({ handle, name });
       if (listing === undefined) {
         throw noSuchListing(handle, name);
+      }
+      c.header("Cache-Control", noStoreCacheControl);
+      return c.json<ListingResponse>(listingResponse(listing), 200);
+    },
+  )
+  // Taking the activity out of search records the publisher as who removed it (ADR 0015). It
+  // leaves search, browse, search by publisher and the sitemap. Its listing read and every
+  // version's address keep working. Removing a removed activity changes nothing. Checks run in
+  // order: signed in (401), owner (403), then listing exists (404).
+  .put(
+    "/:handle/:name/removal",
+    requirePublisher(),
+    requireListingOwner(),
+    async (c) => {
+      const { handle, name } = c.req.param();
+      const { storage } = c.var;
+      await storage.removeFromSearch({ handle, name }, "publisher");
+      const listing = await storage.findListingVersions({ handle, name });
+      if (listing === undefined) {
+        throw noSuchListing(handle, name);
+      }
+      c.header("Cache-Control", noStoreCacheControl);
+      return c.json<ListingResponse>(listingResponse(listing), 200);
+    },
+  )
+  // Returning the activity to search clears only the publisher's own removal (ADR 0015).
+  // Returning a listed activity changes nothing. A removal made when the account was deleted, or
+  // by Durables, stays, and answers 409. Checks run in order: signed in (401), owner (403), then
+  // listing exists (404).
+  .delete(
+    "/:handle/:name/removal",
+    requirePublisher(),
+    requireListingOwner(),
+    async (c) => {
+      const { handle, name } = c.req.param();
+      const { storage } = c.var;
+      await storage.returnToSearch({ handle, name }, "publisher");
+      const listing = await storage.findListingVersions({ handle, name });
+      if (listing === undefined) {
+        throw noSuchListing(handle, name);
+      }
+      if (listing.removedBy !== null) {
+        throw notThePublishersRemoval(listing.removedBy);
       }
       c.header("Cache-Control", noStoreCacheControl);
       return c.json<ListingResponse>(listingResponse(listing), 200);

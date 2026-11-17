@@ -5,6 +5,7 @@ import {
   formatAddress,
   listingResponse,
   publishResponse,
+  shownRemoval,
   versionLocation,
   versionResponse,
 } from "./responses";
@@ -143,11 +144,12 @@ describe("the version response", () => {
 });
 
 describe("the listing response", () => {
-  test("holds the handle, the name and every version in the order given, with its current state", () => {
+  test("holds the handle, the name, the removal and every version in the order given, with its current state", () => {
     expect(
       listingResponse({
         handle: "acme",
         name: "charge-card",
+        removedBy: null,
         versions: [
           {
             version: "1.1.0",
@@ -173,6 +175,7 @@ describe("the listing response", () => {
     ).toEqual({
       handle: "acme",
       name: "charge-card",
+      removedBy: null,
       versions: [
         {
           version: "1.1.0",
@@ -202,6 +205,7 @@ describe("the listing response", () => {
       listingResponse({
         handle: "acme",
         name: "charge-card",
+        removedBy: null,
         versions: [
           {
             version: "1.0.0",
@@ -215,6 +219,26 @@ describe("the listing response", () => {
       }).versions[0]?.deprecation,
     ).toEqual({ reason: "Uses a retired API.", replacement: null });
   });
+
+  test.each([
+    ["the publisher", "publisher", "publisher"],
+    ["account deletion", "account-deletion", "publisher"],
+    ["Durables", "durables", "durables"],
+    ["nobody", null, null],
+  ] as const)(
+    "shows a removal by %s as removed by %j",
+    (_, removedBy, shown) => {
+      expect(
+        listingResponse({
+          handle: "acme",
+          name: "charge-card",
+          removedBy,
+          versions: [],
+        }).removedBy,
+      ).toBe(shown);
+      expect(shownRemoval(removedBy)).toBe(shown);
+    },
+  );
 });
 
 describe("the publish response", () => {

@@ -171,6 +171,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
       expect(await response.json<ListingResponse>()).toEqual({
         handle: address.handle,
         name: address.name,
+        removedBy: null,
         versions: [
           {
             version: "1.0.0",
