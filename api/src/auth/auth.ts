@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import {
   deleteCookie,
+  generateSignedCookie,
   getCookie,
   getSignedCookie,
   setCookie,
@@ -67,6 +68,26 @@ const sessionSchema = z.object({
 });
 
 export type Session = z.infer<typeof sessionSchema>;
+
+/**
+ * The cookie that carries the starting page through the provider round trip. Hono adds the
+ * __Host- prefix, so the browser sees __Host-sign-in-return.
+ */
+export const startingPageCookieName = "sign-in-return";
+
+const startingPageCookieOptions = {
+  prefix: "host",
+  path: "/",
+  secure: true,
+  httpOnly: true,
+  sameSite: "Lax",
+} as const;
+
+/** What the starting page cookie carries: the page, and the state of the sign-in it belongs to. */
+const startingPageSchema = z.object({
+  state: z.string().min(1),
+  page: z.string().min(1),
+});
 
 /** The provider identity a sign-in starts a session with. */
 export type SessionIdentity = Omit<
@@ -202,11 +223,13 @@ export class Auth {
    * Sends the visitor to the provider's consent screen, asking only for identity scopes, and
    * sets the state cookie the callback checks. The package does this for every provider but
    * GitLab, whose flow is hand-written. The callback URL must be the one
-   * completeProviderSignIn is given.
+   * completeProviderSignIn is given. A starting page, already checked by the caller, is kept
+   * with the state until the callback takes it with takeStartingPage.
    */
   async redirectToProvider(
     provider: Provider,
     callbackUrl: string,
+    startingPage?: string,
   ): Promise<Response> {
     const c = this.#context;
     // With a code, the package would run the exchange. Starting never does.
@@ -217,7 +240,10 @@ export class Auth {
       });
     }
     if (provider === "gitlab") {
-      return this.#redirectToGitLab(callbackUrl);
+      return this.#keepStartingPage(
+        this.#redirectToGitLab(callbackUrl),
+        startingPage,
+      );
     }
     const middleware = providerMiddleware(
       provider,
@@ -228,7 +254,72 @@ export class Auth {
     if (!(response instanceof Response)) {
       throw new Error("The sign-in package did not redirect");
     }
-    return response;
+    return this.#keepStartingPage(response, startingPage);
+  }
+
+  /**
+   * The starting page kept by the start step, and clears it. Undefined when none was kept, or
+   * when the cookie was tampered with, has expired, or belongs to a sign-in other than the one
+   * whose state the provider returned. The caller checks the page again before following it.
+   */
+  async takeStartingPage(): Promise<string | undefined> {
+    const c = this.#context;
+    if (
+      getCookie(c, startingPageCookieName, startingPageCookieOptions.prefix) ===
+      undefined
+    ) {
+      return undefined;
+    }
+    const value = await getSignedCookie(
+      c,
+      this.#key(),
+      startingPageCookieName,
+      startingPageCookieOptions.prefix,
+    );
+    deleteCookie(c, startingPageCookieName, startingPageCookieOptions);
+    if (!value) {
+      return undefined;
+    }
+    const kept = startingPageSchema.safeParse(parseJson(value));
+    const returned = c.req.query("state");
+    if (
+      !kept.success ||
+      returned === undefined ||
+      !secretsMatch(kept.data.state, returned)
+    ) {
+      return undefined;
+    }
+    return kept.data.page;
+  }
+
+  /**
+   * Adds the starting page to the redirect to the provider, in a signed cookie bound to the
+   * state the redirect carries. With no starting page the redirect is returned as it is.
+   */
+  async #keepStartingPage(
+    response: Response,
+    startingPage: string | undefined,
+  ): Promise<Response> {
+    if (startingPage === undefined) {
+      return response;
+    }
+    const location = response.headers.get("Location");
+    const state =
+      location === null ? null : new URL(location).searchParams.get("state");
+    if (!state) {
+      return response;
+    }
+    const kept = new Response(response.body, response);
+    kept.headers.append(
+      "Set-Cookie",
+      await generateSignedCookie(
+        startingPageCookieName,
+        JSON.stringify({ state, page: startingPage }),
+        this.#key(),
+        { ...startingPageCookieOptions, maxAge: stateLifetimeSeconds },
+      ),
+    );
+    return kept;
   }
 
   /**
