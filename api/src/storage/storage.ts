@@ -23,6 +23,7 @@ import {
   versionDeprecations,
   versions,
   type Provider,
+  type RemovalSource,
   type Sdk,
 } from "./schema";
 import {
@@ -33,7 +34,14 @@ import {
   type WriteVersionDocumentResult,
 } from "./version-document";
 
-export { providers, sdks, type Provider, type Sdk } from "./schema";
+export {
+  providers,
+  removalSources,
+  sdks,
+  type Provider,
+  type RemovalSource,
+  type Sdk,
+} from "./schema";
 export {
   DocumentWriteFailure,
   type Address,
@@ -131,10 +139,16 @@ export interface ListingVersion {
   description: string;
 }
 
-/** A listing and every one of its versions, from the highest version number down. */
-export interface ListingVersions {
-  handle: string;
-  name: string;
+/** A listing's handle and name, which together identify it. */
+export type ListingKey = Omit<Address, "version">;
+
+/**
+ * A listing and every one of its versions, from the highest version number down, with who took
+ * it out of search.
+ */
+export interface ListingVersions extends ListingKey {
+  /** Who took the listing out of search. Null while it is listed. */
+  removedBy: RemovalSource | null;
   versions: ListingVersion[];
 }
 
@@ -185,9 +199,10 @@ export interface BrowsePosition {
 }
 
 /**
- * What browse narrows by and where it starts. An empty or absent list does not filter. Several
- * SDKs match any one of them, as do several integrations. The publisher matches the handle.
- * Every word must appear in the title, description, address, SDK or one of the integrations.
+ * What browse narrows by and where it starts. A listing removed from search never matches,
+ * whoever removed it (ADR 0015). An empty or absent list does not filter. Several SDKs match
+ * any one of them, as do several integrations. The publisher matches the handle. Every word
+ * must appear in the title, description, address, SDK or one of the integrations.
  */
 export interface BrowseFilter {
   /** The search words. Empty or absent means no words. */
@@ -732,7 +747,9 @@ export class Storage {
             eq(listings.handle, versions.handle),
             eq(listings.name, versions.name),
           ),
-        ),
+        )
+        // A removed listing is left out of search, browse and search by publisher (ADR 0015).
+        .where(isNull(listings.removedBy)),
     );
 
     const filters: SQL[] = [eq(ranked.rank, 1)];
@@ -904,8 +921,9 @@ export class Storage {
   }
 
   /**
-   * Every listing's highest version, as the sitemap lists them: by handle, then name. The
-   * sitemap protocol allows 50,000 addresses in one file, far more than the registry holds.
+   * Every listed listing's highest version, as the sitemap lists them: by handle, then name. A
+   * listing removed from search is left out (ADR 0015). The sitemap protocol allows 50,000
+   * addresses in one file, far more than the registry holds.
    */
   async listLatestAddresses(): Promise<LatestAddress[]> {
     const ranked = this.#db.$with("ranked").as(
@@ -919,7 +937,15 @@ export class Storage {
             "rank",
           ),
         })
-        .from(versions),
+        .from(versions)
+        .innerJoin(
+          listings,
+          and(
+            eq(listings.handle, versions.handle),
+            eq(listings.name, versions.name),
+          ),
+        )
+        .where(isNull(listings.removedBy)),
     );
     return this.#db
       .with(ranked)
@@ -966,17 +992,22 @@ export class Storage {
 
   /**
    * The listing at a handle and name with every one of its versions, from the highest version
-   * number down, or undefined when there is no listing. Each version carries its current
-   * description and its deprecation. Handles and names match exactly, so a wrong-case one
+   * number down, or undefined when there is no listing. The listing carries who removed it from
+   * search, and each version carries its current description and its deprecation. A removed
+   * listing is found like any other. Handles and names match exactly, so a wrong-case one
    * finds nothing.
    */
   async findListingVersions({
     handle,
     name,
-  }: Omit<Address, "version">): Promise<ListingVersions | undefined> {
+  }: ListingKey): Promise<ListingVersions | undefined> {
     const [[listing], rows] = await this.#db.batch([
       this.#db
-        .select({ handle: listings.handle, name: listings.name })
+        .select({
+          handle: listings.handle,
+          name: listings.name,
+          removedBy: listings.removedBy,
+        })
         .from(listings)
         .where(and(eq(listings.handle, handle), eq(listings.name, name))),
       this.#db
@@ -1042,6 +1073,48 @@ export class Storage {
       )
       .returning({ version: versions.version });
     return updated.length === 1;
+  }
+
+  /**
+   * Takes a listing out of search, recording who removed it (ADR 0015). A listing that is
+   * already removed keeps the removal it has, whoever made it, so removing twice changes
+   * nothing. Nothing else is written. A missing listing is not an error, and nothing is written.
+   */
+  async removeFromSearch(
+    { handle, name }: ListingKey,
+    source: RemovalSource,
+  ): Promise<void> {
+    await this.#db
+      .update(listings)
+      .set({ removedBy: source })
+      .where(
+        and(
+          eq(listings.handle, handle),
+          eq(listings.name, name),
+          isNull(listings.removedBy),
+        ),
+      );
+  }
+
+  /**
+   * Returns a listing to search, but only when it was removed by the given source (ADR 0015).
+   * Each way back clears only its own kind of removal, so a removal by anyone else stays. A
+   * listed listing stays listed. A missing listing is not an error, and nothing is written.
+   */
+  async returnToSearch(
+    { handle, name }: ListingKey,
+    source: RemovalSource,
+  ): Promise<void> {
+    await this.#db
+      .update(listings)
+      .set({ removedBy: null })
+      .where(
+        and(
+          eq(listings.handle, handle),
+          eq(listings.name, name),
+          eq(listings.removedBy, source),
+        ),
+      );
   }
 
   /**

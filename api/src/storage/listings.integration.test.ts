@@ -298,6 +298,7 @@ describe("finding a listing's versions", () => {
     expect(found).toEqual({
       handle: listing.handle,
       name: listing.name,
+      removedBy: null,
       versions: [
         {
           version: "1.10.0",
@@ -340,6 +341,7 @@ describe("finding a listing's versions", () => {
     expect(await storage().findListingVersions(listing)).toEqual({
       handle: listing.handle,
       name: listing.name,
+      removedBy: null,
       versions: [
         {
           version: "1.0.0",

@@ -238,6 +238,7 @@ describe("POST /api/activities", () => {
       expect(await listing.json<ListingResponse>()).toEqual({
         handle,
         name: body.name,
+        removedBy: null,
         versions: [
           {
             version: "1.0.0",
