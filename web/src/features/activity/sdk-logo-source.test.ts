@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { basename, sep } from "node:path";
 import { expect, test } from "vitest";
 
 // Web holds no SDK logo files and no mapping from an SDK to its logo (ADR 0013, API map T5).
@@ -6,32 +7,64 @@ import { expect, test } from "vitest";
 
 const web = new URL("../../../", import.meta.url);
 
-/** Every file under a folder of web, as a path relative to that folder. */
+/** Every file under a folder of web, as a `/`-separated path relative to that folder. */
 function filesUnder(folder: string): string[] {
   return readdirSync(new URL(folder, web), {
     recursive: true,
     encoding: "utf8",
-  }).filter((path) => /\.[a-z]+$/i.test(path));
+  })
+    .map((path) => path.split(sep).join("/"))
+    .filter((path) => /\.[a-z]+$/i.test(path));
 }
 
 const isImage = (path: string) =>
   /\.(svg|png|jpe?g|gif|webp|avif|ico)$/i.test(path);
 
-test("web holds no image files beyond Durables' own marks and icons", () => {
-  // Component tests' screenshots are test output, not images the site shows.
-  expect(
-    filesUnder("src/")
-      .filter(isImage)
-      .filter((path) => !path.includes("__screenshots__")),
-  ).toEqual([]);
-  expect(filesUnder("public/").filter(isImage).sort()).toEqual([
-    "apple-touch-icon.png",
-    "durables-mark-on-cream.svg",
+/** A file name that names one of the eight SDKs, or a logo. Go counts only as a whole word. */
+const namesSdkOrLogo = (path: string) =>
+  /logo|typescript|python|java|dotnet|\.net|ruby|php|rust|(?<![a-z0-9])go(?![a-z0-9])/i.test(
+    basename(path),
+  );
+
+test("the SDK-or-logo file name check catches SDK and logo names, and ordinary names pass", () => {
+  for (const name of [
+    "ruby-logo.svg",
+    "Logo.png",
+    "go.svg",
+    "go-gopher.png",
+    "TypeScript.svg",
+    "python.png",
+    "java.svg",
+    "dotnet.svg",
+    ".NET.svg",
+    "php.webp",
+    "rust_crab.png",
+    "brand/ruby.svg",
+  ]) {
+    expect(namesSdkOrLogo(name), name).toBe(true);
+  }
+  for (const name of [
     "durables-mark-on-ink.svg",
-    "favicon.ico",
-    "favicon.svg",
     "og-image.png",
-  ]);
+    "favicon.ico",
+    "apple-touch-icon.png",
+    "google.png",
+    "cargo.svg",
+    "ruby/hero.png",
+  ]) {
+    expect(namesSdkOrLogo(name), name).toBe(false);
+  }
+});
+
+test("web holds no image named after an SDK or a logo", () => {
+  const images = [
+    ...filesUnder("src/")
+      // Component tests' screenshots are test output, not images the site shows.
+      .filter((path) => !path.includes("__screenshots__"))
+      .map((path) => `src/${path}`),
+    ...filesUnder("public/").map((path) => `public/${path}`),
+  ].filter(isImage);
+  expect(images.filter(namesSdkOrLogo)).toEqual([]);
 });
 
 test("no web source names a logo's address or carries a logo's credit", () => {
