@@ -93,10 +93,10 @@ const publishedRows = async (account: SeededAccount) => {
   const mine = (row: unknown) =>
     (row as { handle?: string }).handle === account.handle;
   return {
-    listings: (rows.listings ?? []).filter(mine).length,
-    versions: (rows.versions ?? []).filter(mine),
-    handles: (rows.handles ?? []).filter(mine),
-    accounts: (rows.accounts ?? []).filter(
+    listings: (rows["listings"] ?? []).filter(mine).length,
+    versions: (rows["versions"] ?? []).filter(mine),
+    handles: (rows["handles"] ?? []).filter(mine),
+    accounts: (rows["accounts"] ?? []).filter(
       (row) => (row as { id: string }).id === account.accountId,
     ).length,
   };
