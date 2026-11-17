@@ -7,7 +7,7 @@ import { python } from "./python";
 import { ruby } from "./ruby";
 import { registeredSdks, sdkRegistry } from "./registry";
 import { rust } from "./rust";
-import type { SdkEntry, SdkRegistry } from "./sdk-entry";
+import type { DisplayProfile, SdkEntry, SdkRegistry } from "./sdk-entry";
 import { type Sdk, sdks } from "./sdk-list";
 import { typescript } from "./typescript";
 
@@ -16,6 +16,9 @@ type OptionalKeys<T> = {
   [K in keyof T]-?: Record<never, never> extends Pick<T, K> ? K : never;
 }[keyof T];
 
+/** The credit the Ruby logo's licence requires. */
+const rubyCredit = "Ruby logo © 2006 Yukihiro Matsumoto, CC BY-SA 2.5";
+
 describe("the SDK registry", () => {
   describe("its types", () => {
     // These assertions are checked by `npm run typecheck`, which compiles the tests: an entry
@@ -23,7 +26,10 @@ describe("the SDK registry", () => {
 
     it("requires every capability of an entry", () => {
       expectTypeOf<OptionalKeys<SdkEntry>>().toEqualTypeOf<never>();
-      expectTypeOf<OptionalKeys<SdkEntry["display"]>>().toEqualTypeOf<never>();
+      // The logo, its credit and the light tile are the display profile's only optional fields.
+      expectTypeOf<OptionalKeys<SdkEntry["display"]>>().toEqualTypeOf<
+        "logo" | "credit" | "lightTile"
+      >();
       expectTypeOf<keyof SdkEntry>().toEqualTypeOf<
         | "sdk"
         | "recognition"
@@ -175,13 +181,23 @@ describe("the SDK registry", () => {
     ] as const)(
       "gives %s the activity file %s, the package %s and the highlight language %s",
       (sdk, activityFileName, sdkPackage, highlightLanguage) => {
-        const { runsAs, workerRequirements, ...shown } =
-          sdkRegistry[sdk].display;
+        const {
+          runsAs,
+          workerRequirements,
+          logo,
+          credit,
+          lightTile,
+          ...shown
+        } = sdkRegistry[sdk].display;
         expect(shown).toEqual({
           package: sdkPackage,
           highlightLanguage,
           activityFileName,
         });
+        // The logo fields are checked in full under "the SDK logos", below.
+        expect(logo).toEqual(expect.any(String));
+        expect(credit).toBe(sdk === "Ruby" ? rubyCredit : undefined);
+        expect(lightTile).toBe(sdk === "Rust" ? true : undefined);
         expect(Object.keys(runsAs).sort()).toEqual(["async", "sync"]);
         expect(Object.keys(workerRequirements).sort()).toEqual([
           "async",
@@ -260,6 +276,123 @@ describe("the SDK registry", () => {
         expect(wording).not.toMatch(/thread/i);
       }
       expect(workerRequirements.async).toContain("no special setup");
+    });
+  });
+
+  describe("the SDK logos", () => {
+    /** The SHA-256 digest of each logo file attached to the epic (DUR-95), in hex. */
+    const attachedLogoDigests = {
+      Go: "c89d8c4a31dd4f6487e69bc3bdb6585a52466a393f6e8d863bfc1a0189bc213c",
+      Python:
+        "baec8662a1461c2cacc326b54d2727cb2f1ce07ba02d00f5b826d035104f649f",
+      TypeScript:
+        "139ae451b37a00251fe24358191699efa665f63f1c8369cb9dad833159e159e2",
+      ".NET":
+        "f222062c4f59b7864163bd54d24fafc40f1e2f2513672e50bc08e5025d73e4e5",
+      Ruby: "128ab0befae77abb5b74f6082b9b9185a0d99558d04c98b1e56de1fa65c28ce6",
+      PHP: "2132ce6951ad588f001d6e17d7b8d6389de2f64d659c5eeb2615551ade79a9aa",
+      Rust: "9a9549ea02d34dec3a610b8299f1b8121c7b10b14a44d3baec46ba15e9a06ca2",
+    } as const satisfies Partial<Record<Sdk, string>>;
+
+    const sdksWithLogos = Object.keys(
+      attachedLogoDigests,
+    ) as (keyof typeof attachedLogoDigests)[];
+
+    /** The SHA-256 digest of a logo's UTF-8 bytes, in hex. */
+    const digest = async (svg: string) =>
+      Array.from(
+        new Uint8Array(
+          await crypto.subtle.digest("SHA-256", new TextEncoder().encode(svg)),
+        ),
+        (byte) => byte.toString(16).padStart(2, "0"),
+      ).join("");
+
+    it("gives every SDK but Java a logo", () => {
+      expect(
+        registeredSdks
+          .filter(({ display }) => display.logo !== undefined)
+          .map(({ sdk }) => sdk),
+      ).toEqual(sdks.filter((sdk) => sdk !== "Java"));
+      expect([...sdksWithLogos].sort()).toEqual(
+        sdks.filter((sdk) => sdk !== "Java").sort(),
+      );
+    });
+
+    it.each(sdksWithLogos)(
+      "gives %s its official logo, byte for byte the file attached to the epic",
+      async (sdk) => {
+        const { logo } = sdkRegistry[sdk].display;
+
+        expect(logo).toBeDefined();
+        expect(await digest(logo ?? "")).toBe(attachedLogoDigests[sdk]);
+      },
+    );
+
+    it.each(sdksWithLogos)("gives %s a logo that is an SVG document", (sdk) => {
+      const logo = (sdkRegistry[sdk].display.logo ?? "").trim();
+
+      expect(logo).not.toBe("");
+      expect(logo).toMatch(/<svg[\s>]/);
+      expect(logo).toMatch(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+      expect(logo).toMatch(/<\/svg>$/);
+    });
+
+    it("gives each SDK a different logo", () => {
+      const logos = registeredSdks.flatMap(({ display }) =>
+        display.logo === undefined ? [] : [display.logo],
+      );
+
+      expect(new Set(logos).size).toBe(sdksWithLogos.length);
+    });
+
+    it("gives Java no logo, no credit and no light tile", () => {
+      expect(java.display).not.toHaveProperty("logo");
+      expect(java.display).not.toHaveProperty("credit");
+      expect(java.display).not.toHaveProperty("lightTile");
+    });
+
+    it("sets the light tile on Rust and no other SDK", () => {
+      expect(sdkRegistry.Rust.display.lightTile).toBe(true);
+      expect(
+        registeredSdks
+          .filter(({ display }) => "lightTile" in display)
+          .map(({ sdk }) => sdk),
+      ).toEqual(["Rust"]);
+    });
+
+    it("credits the Ruby logo, and no other SDK has a credit", () => {
+      expect(sdkRegistry.Ruby.display.credit).toBe(rubyCredit);
+      expect(
+        registeredSdks
+          .filter(({ display }) => "credit" in display)
+          .map(({ sdk }) => sdk),
+      ).toEqual(["Ruby"]);
+    });
+
+    it("accepts an entry that sets none of the three fields", () => {
+      const { logo, credit, lightTile, ...plain } = python.display;
+      const display: DisplayProfile = plain;
+      const registry: SdkRegistry = {
+        ...sdkRegistry,
+        Python: { ...python, display },
+      };
+
+      expect([logo, credit, lightTile]).toEqual([
+        expect.any(String),
+        undefined,
+        undefined,
+      ]);
+      expect(registry.Python.display).toEqual(plain);
+      expect(registry.Python.display).not.toHaveProperty("logo");
+      expectTypeOf<DisplayProfile["logo"]>().toEqualTypeOf<
+        string | undefined
+      >();
+      expectTypeOf<DisplayProfile["credit"]>().toEqualTypeOf<
+        string | undefined
+      >();
+      expectTypeOf<DisplayProfile["lightTile"]>().toEqualTypeOf<
+        boolean | undefined
+      >();
     });
   });
 });

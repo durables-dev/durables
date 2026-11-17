@@ -4,6 +4,7 @@ import {
   isDotnetFrameworkNamespace,
 } from "../checks/dotnet-detector";
 import { dotnetSnippets } from "../snippets/dotnet-snippets";
+import logo from "./logos/dotnet.svg";
 import type { SdkEntry } from "./sdk-entry";
 
 /**
@@ -31,5 +32,6 @@ export const dotnet: SdkEntry<".NET"> = {
       async:
         "This is an async activity. Your worker needs no special setup to run it.",
     },
+    logo,
   },
 };

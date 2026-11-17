@@ -5,6 +5,7 @@ import {
   normaliseGoDependency,
 } from "../checks/go-detector";
 import { goSnippets } from "../snippets/go-snippets";
+import logo from "./logos/go.svg";
 import type { SdkEntry } from "./sdk-entry";
 
 /**
@@ -33,5 +34,6 @@ export const go: SdkEntry<"Go"> = {
       async:
         "This is an async activity. Your worker needs no special setup to run it.",
     },
+    logo,
   },
 };
