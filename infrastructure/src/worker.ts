@@ -27,6 +27,9 @@ export interface WorkerProps {
   readonly plainText: Readonly<Record<string, TerraformVariable>>;
 }
 
+// The api bundle's files that Wrangler emits as Text modules, which Cloudflare takes as text/plain.
+const textModuleExtensions = [".txt", ".svg"] as const;
+
 // The one Worker: the API plus the site's static assets (ADR 0003, 0010). A version is
 // immutable; each apply that changes anything creates a new version and deploys it at 100%.
 export class Worker extends Construct {
@@ -70,10 +73,13 @@ export class Worker extends Construct {
           contentType: "application/javascript+module",
           contentFile: `${bundle.path}/index.js`,
         },
-        // Wrangler's bundle imports text files (api's snippets) as separate modules beside
-        // index.js; each is uploaded as a text module under the name index.js imports.
+        // Wrangler's bundle imports text files (api's snippets, and its SDK logos through the
+        // Text rule in api/wrangler.toml) as separate modules beside index.js; each is uploaded
+        // as a text module under the name index.js imports.
         ...readdirSync(props.apiBundleDir)
-          .filter((file) => file.endsWith(".txt"))
+          .filter((file) =>
+            textModuleExtensions.some((extension) => file.endsWith(extension)),
+          )
           .sort()
           .map((file) => ({
             name: file,
