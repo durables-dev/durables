@@ -10,7 +10,7 @@ import app from "../index";
 import { readAllRows, seedAccount } from "../storage/seed";
 import {
   noAccountPath,
-  signedInPath,
+  defaultLandingPath,
   signIn as signInRoutes,
   signInFailedPath,
 } from "./sign-in";
@@ -269,9 +269,16 @@ const sessionPayload = (response: Response): Record<string, unknown> => {
   >;
 };
 
-const expectFailureRedirect = (response: Response) => {
+/** The failure redirect for a sign-in started from /acme/charge-card, which keeps that page. */
+const failedFromChargeCard =
+  "/sign-in?sign-in=failed&returnTo=%2Facme%2Fcharge-card";
+
+const expectFailureRedirect = (
+  response: Response,
+  location: string = signInFailedPath,
+) => {
   expect(response.status).toBe(302);
-  expect(response.headers.get("Location")).toBe(signInFailedPath);
+  expect(response.headers.get("Location")).toBe(location);
   expect(cookieNamed(response, "__Host-session")).toBeUndefined();
 };
 
@@ -439,7 +446,7 @@ describe("GET /api/session/providers/:provider/callback", () => {
 
       const response = await signIn(provider);
 
-      expect(response.headers.get("Location")).toBe(signedInPath);
+      expect(response.headers.get("Location")).toBe(defaultLandingPath);
       expect(await readSession(response)).toMatchObject({
         user: { provider, accountExists: true },
       });
@@ -656,7 +663,7 @@ describe("where a finished sign-in lands", () => {
   };
 
   test("lands an existing account on the home page by default", () => {
-    expect(signedInPath).toBe("/");
+    expect(defaultLandingPath).toBe("/");
   });
 
   test("sends someone with no account into Contribute at Profile & Handle", () => {
@@ -681,6 +688,36 @@ describe("where a finished sign-in lands", () => {
       });
     },
   );
+
+  test("keeps the starting page on the failure redirect when the provider can't be used", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = await app.request(
+      "/api/session/providers/github?returnTo=%2Fsearch%3Fq%3Dstripe",
+      {},
+      { ...env, GITHUB_CLIENT_SECRET: undefined },
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe(
+      "/sign-in?sign-in=failed&returnTo=%2Fsearch%3Fq%3Dstripe",
+    );
+  });
+
+  test("leaves a refused starting page off the failure redirect", async () => {
+    const { state, stateCookie, startingPageCookie } = await start(
+      "github",
+      "https://evil.example/x",
+    );
+
+    const response = await callback(
+      "github",
+      `error=access_denied&state=${encodeURIComponent(state)}`,
+      cookieHeader(stateCookie, startingPageCookie),
+    );
+
+    expect(response.headers.get("Location")).toBe(signInFailedPath);
+  });
 
   test("keeps the starting page's version and query", async () => {
     await existingAccount("github");
@@ -744,7 +781,7 @@ describe("where a finished sign-in lands", () => {
 
     expect(started.startingPageCookie).toBeUndefined();
     expect(response.status).toBe(302);
-    expect(response.headers.get("Location")).toBe(signedInPath);
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
   });
 
   test("lands on the home page when no starting page is given", async () => {
@@ -754,7 +791,7 @@ describe("where a finished sign-in lands", () => {
     const response = await signIn("google");
 
     expect(startingPageCookie).toBeUndefined();
-    expect(response.headers.get("Location")).toBe(signedInPath);
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
   });
 
   test("falls back to the home page when the starting page cookie is lost", async () => {
@@ -767,7 +804,7 @@ describe("where a finished sign-in lands", () => {
       stateCookie,
     );
 
-    expect(response.headers.get("Location")).toBe(signedInPath);
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
   });
 
   test("falls back to the home page when the starting page cookie is tampered with", async () => {
@@ -788,7 +825,7 @@ describe("where a finished sign-in lands", () => {
       cookieHeader(stateCookie, tampered),
     );
 
-    expect(response.headers.get("Location")).toBe(signedInPath);
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
   });
 
   test("falls back to the home page when the starting page belongs to another sign-in", async () => {
@@ -803,7 +840,7 @@ describe("where a finished sign-in lands", () => {
     );
 
     expect(earlier.startingPageCookie).toBeDefined();
-    expect(response.headers.get("Location")).toBe(signedInPath);
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
   });
 
   test("checks the kept starting page again at the callback", async () => {
@@ -823,7 +860,7 @@ describe("where a finished sign-in lands", () => {
       cookieHeader(stateCookie, signed.split(";")[0]),
     );
 
-    expect(response.headers.get("Location")).toBe(signedInPath);
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
   });
 
   test.each(providers)(
@@ -842,7 +879,7 @@ describe("where a finished sign-in lands", () => {
   );
 
   test.each(providers)(
-    "sends a cancelled %s sign-in to the Sign in page and clears the starting page",
+    "sends a cancelled %s sign-in to the Sign in page, keeping the starting page there, and clears the cookie",
     async (provider) => {
       fakeProvider(provider);
       const { state, stateCookie, startingPageCookie } = await start(
@@ -856,13 +893,13 @@ describe("where a finished sign-in lands", () => {
         cookieHeader(stateCookie, startingPageCookie),
       );
 
-      expectFailureRedirect(response);
+      expectFailureRedirect(response, failedFromChargeCard);
       expect(startingPageSetCookie(response)).toContain("Max-Age=0");
     },
   );
 
   test.each(providers)(
-    "sends a %s sign-in whose exchange fails to the Sign in page",
+    "sends a %s sign-in whose exchange fails to the Sign in page, keeping the starting page",
     async (provider) => {
       vi.spyOn(console, "warn").mockImplementation(() => undefined);
       fakeProvider(provider, {
@@ -880,7 +917,7 @@ describe("where a finished sign-in lands", () => {
 
       const response = await signIn(provider, "/acme/charge-card");
 
-      expectFailureRedirect(response);
+      expectFailureRedirect(response, failedFromChargeCard);
     },
   );
 });

@@ -245,10 +245,10 @@ describe("choosing a provider", () => {
     }
 
     expect(navigation.visited).toEqual([
-      "/api/session/providers/github",
-      "/api/session/providers/gitlab",
-      "/api/session/providers/google",
-      "/api/session/providers/microsoft",
+      "/api/session/providers/github?returnTo=%2Fcontribute",
+      "/api/session/providers/gitlab?returnTo=%2Fcontribute",
+      "/api/session/providers/google?returnTo=%2Fcontribute",
+      "/api/session/providers/microsoft?returnTo=%2Fcontribute",
     ]);
     expect(router.state.location.pathname).toBe("/contribute/profile");
   });
@@ -339,7 +339,9 @@ describe("back from the provider", () => {
     } finally {
       navigation.stop();
     }
-    expect(navigation.visited).toEqual(["/api/session/providers/microsoft"]);
+    expect(navigation.visited).toEqual([
+      "/api/session/providers/microsoft?returnTo=%2Fcontribute",
+    ]);
     expect(providerLinks(screen).elements()).toHaveLength(4);
     expect(document.querySelector('input[type="password"]')).toBeNull();
   });
@@ -448,7 +450,9 @@ describe("coming back from the handle step", () => {
     } finally {
       navigation.stop();
     }
-    expect(navigation.visited).toEqual(["/api/session/providers/github"]);
+    expect(navigation.visited).toEqual([
+      "/api/session/providers/github?returnTo=%2Fcontribute",
+    ]);
     expect(router.state.location.pathname).toBe("/contribute/profile");
   });
 

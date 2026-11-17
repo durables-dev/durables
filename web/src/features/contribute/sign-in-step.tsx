@@ -14,9 +14,16 @@ export interface SignInStepProps {
   signedIn: boolean;
 }
 
+/**
+ * Where a returning publisher's finished sign-in comes back to: Contribute, which picks the
+ * step from the session. Someone with no account goes to Profile & Handle whatever this says.
+ */
+const contributeReturnPath = "/contribute";
+
 // The sign-in step: four providers as equal choices, and no Durables password. Each provider
 // is a plain link to the API's start route, so the browser leaves for the provider's consent
-// screen. Back returns to the page the flow was opened from, or home.
+// screen, and a finished sign-in returns to Contribute. Back returns to the page the flow was
+// opened from, or home.
 export function SignInStep({ failed, signedIn }: SignInStepProps) {
   const navigate = useNavigate();
   const { draft } = useContributeDraft();
@@ -42,7 +49,7 @@ export function SignInStep({ failed, signedIn }: SignInStepProps) {
         {signInProviders.map(({ id, name }) => (
           <li key={id}>
             <a
-              href={signInStartPath(id)}
+              href={signInStartPath(id, contributeReturnPath)}
               className={styles["provider"]}
               data-provider={id}
             >
