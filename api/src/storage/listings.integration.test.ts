@@ -307,6 +307,7 @@ describe("changing a listing's description", () => {
         handle: listing.handle,
         name: listing.name,
         description: "Posts a message and returns its timestamp.",
+        removedBy: null,
       },
     ]);
     for (const table of Object.keys(before).filter((t) => t !== "listings")) {
@@ -420,6 +421,7 @@ describe("the migrations", () => {
       "handle",
       "name",
       "description",
+      "removed_by",
     ]);
     expect(await columns("versions")).toEqual([
       "handle",
@@ -429,6 +431,9 @@ describe("the migrations", () => {
       "sdk",
       "integrations",
       "published_at",
+      "description",
+      "what_changed",
+      "based_on",
     ]);
   });
 });

@@ -29,6 +29,13 @@
       "when": 1794528834806,
       "tag": "0003_widen-versions-sdk",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794922691099,
+      "tag": "0004_manage-published-activities",
+      "breakpoints": true
     }
   ]
 }

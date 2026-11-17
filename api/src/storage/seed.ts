@@ -6,8 +6,10 @@ import {
   listings,
   providerAccounts,
   retiredHandles,
+  versionDeprecations,
   versions,
   type Provider,
+  type RemovalSource,
   type Sdk,
 } from "./schema";
 
@@ -115,6 +117,36 @@ export const seedDescription = async (
     );
 };
 
+/**
+ * Records a version's deprecation directly. Deprecating is a later story, so tests write the
+ * record here.
+ */
+export const seedDeprecation = async (
+  database: D1Database,
+  deprecation: {
+    handle: string;
+    name: string;
+    version: string;
+    reason: string;
+    replacement?: string | null;
+  },
+): Promise<void> => {
+  await drizzle(database).insert(versionDeprecations).values(deprecation);
+};
+
+/** Records who removed a listing from search, or null to list it again, directly. */
+export const seedRemoval = async (
+  database: D1Database,
+  listing: { handle: string; name: string; removedBy: RemovalSource | null },
+): Promise<void> => {
+  await drizzle(database)
+    .update(listings)
+    .set({ removedBy: listing.removedBy })
+    .where(
+      and(eq(listings.handle, listing.handle), eq(listings.name, listing.name)),
+    );
+};
+
 /** Every row in every table, so a test can check what was stored. */
 export const readAllRows = async (
   database: D1Database,
@@ -127,6 +159,7 @@ export const readAllRows = async (
     retiredHandleRows,
     listingRows,
     versionRows,
+    versionDeprecationRows,
   ] = await db.batch([
     db.select().from(accounts),
     db.select().from(providerAccounts),
@@ -134,6 +167,7 @@ export const readAllRows = async (
     db.select().from(retiredHandles),
     db.select().from(listings),
     db.select().from(versions),
+    db.select().from(versionDeprecations),
   ]);
   return {
     accounts: accountRows,
@@ -142,5 +176,6 @@ export const readAllRows = async (
     retiredHandles: retiredHandleRows,
     listings: listingRows,
     versions: versionRows,
+    versionDeprecations: versionDeprecationRows,
   };
 };
