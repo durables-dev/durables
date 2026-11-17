@@ -424,7 +424,16 @@ describe("the Published screen", () => {
         HttpResponse.json({
           handle: "ddieruf",
           name: "post-slack-message",
-          description,
+          versions: [
+            {
+              version: "1.0.0",
+              publishedAt: new Date().toISOString(),
+              whatChanged: null,
+              basedOn: null,
+              deprecation: null,
+              description,
+            },
+          ],
         }),
       ),
     );
