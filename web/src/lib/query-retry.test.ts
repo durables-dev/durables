@@ -16,6 +16,10 @@ test("a 404 is never tried again", () => {
   expect(retryQuery(0, apiError(404))).toBe(false);
 });
 
+test("a 401 is never tried again", () => {
+  expect(retryQuery(0, apiError(401))).toBe(false);
+});
+
 test("a server error is tried again up to three times", () => {
   expect(retryQuery(0, apiError(500))).toBe(true);
   expect(retryQuery(2, apiError(500))).toBe(true);

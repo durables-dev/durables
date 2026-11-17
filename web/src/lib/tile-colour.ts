@@ -1,10 +1,10 @@
-/** The brand colours a result card's icon tile is drawn in. */
+/** The brand colours an activity's icon tile is drawn in. */
 export const tileColours = ["tangerine", "gold", "ember", "lagoon"] as const;
 
 export type TileColour = (typeof tileColours)[number];
 
 /**
- * The colour of a result card's icon tile, picked from the brand colours by the activity's
+ * The colour of an activity's icon tile, picked from the brand colours by the activity's
  * title and its publisher's handle. The same title and handle always get the same colour.
  */
 export function tileColour(title: string, handle: string): TileColour {
