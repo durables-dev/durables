@@ -59,6 +59,12 @@
   --notice: rgb(255 183 0 / 14%);
   /* The dimmed page behind a dialog. Ink at 60% under both themes. */
   --scrim: rgb(11 8 6 / 60%);
+  /* The dark red of destructive controls and the Delete your account section (D48): text and
+     borders. Never Ember. A lighter shade on Ink, so it keeps AA contrast there. */
+  --danger: #ff6b7d;
+  /* A filled destructive button and its text. The dark red under both themes. */
+  --danger-fill: #b3142c;
+  --on-danger: var(--color-cream);
 
   /* The code panel. It is Ink under both themes, so no theme block changes these. */
   --code-background: var(--color-ink);
@@ -136,5 +142,6 @@
     --tile-lagoon: var(--color-lagoon-deep);
     --tile-lagoon-tint: rgb(15 116 113 / 12%);
     --notice: rgb(255 183 0 / 16%);
+    --danger: #b3142c;
   }
 }
