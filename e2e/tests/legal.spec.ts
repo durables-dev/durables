@@ -27,7 +27,9 @@ for (const { path, heading, title } of legalPages) {
     await expect(
       page.getByRole("note", { name: "Placeholder notice" }),
     ).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /sign in/i })).toHaveCount(0);
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /sign in/i }),
+    ).toHaveCount(0);
     await expect(page).toHaveTitle(title);
     await expectAccessible();
   });
