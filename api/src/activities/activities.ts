@@ -1,3 +1,4 @@
+import { compareVersionNumbers } from "@durables/schemas";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -28,11 +29,15 @@ import { encodeBrowseCursor } from "./browse-cursor";
 import { BROWSE_BATCH_SIZE, browseQuery, browseSort } from "./browse-request";
 import { deprecationBody } from "./deprecation-request";
 import { descriptionBody } from "./description-request";
+import { acceptNewVersion, newVersionBody } from "./new-version-request";
 import {
   addressTaken,
+  baseNotFound,
   handleNotChosen,
   handleTaken,
   publishLimited,
+  versionNotHigher,
+  versionTaken,
 } from "./publish-problems";
 import {
   acceptListing,
@@ -54,7 +59,7 @@ import {
   type VersionResponse,
 } from "./responses";
 
-// Publishing an activity, reading it back, saving a version's description, deprecating a version
+// Publishing an activity or a later version of it, reading it back, saving a version's description, deprecating a version
 // or undoing it, and taking the activity out of search and returning it (ADR 0005, 0006, 0008,
 // 0015). The version and the listing are read at separate endpoints so each carries its own
 // cache rule: the version's fields never change and are cached for good, and the listing read
@@ -247,6 +252,82 @@ export const activities = new Hono<AppEnv>()
         publishResponse(address, result.accountCreated),
         201,
       );
+    },
+  )
+  // Publishing a later version of an existing listing (ADR 0015). The first publish above is
+  // unchanged. The new version records the version it was based on and its What changed note,
+  // and can deprecate its base with itself as the replacement. Publishing ends a removal from
+  // search the publisher made. All of it is one database write, after the document, and no
+  // published version's row or document changes. Checks run in order: signed in (401), owner
+  // or pending account (403), listing exists (404), body size (413), rate limit (429), the
+  // body's shape (400), its content (422), the base is the listing's (422), the version is
+  // unused (409) and higher than the latest (422), then the checks pipeline.
+  .post(
+    "/:handle/:name/versions",
+    requirePublisher(),
+    requireListingOwner(),
+    publishBodyLimit(),
+    publishRateLimit(),
+    zValidator("json", newVersionBody, problemOnInvalid),
+    async (c) => {
+      const { handle, name } = c.req.param();
+      const body = c.req.valid("json");
+      const { storage } = c.var;
+      const { title, description, version, whatChanged, deprecateBase } =
+        acceptNewVersion(body);
+      const listing = await storage.findListingVersions({ handle, name });
+      if (listing === undefined) {
+        throw noSuchListing(handle, name);
+      }
+      const published = listing.versions.map((each) => each.version);
+      if (!published.includes(body.basedOn)) {
+        throw baseNotFound(`${handle}/${name}`, body.basedOn);
+      }
+      if (published.includes(version)) {
+        throw versionTaken(version);
+      }
+      // The listing's versions come highest first, so the first is the latest.
+      const latest = published[0];
+      if (latest !== undefined && compareVersionNumbers(version, latest) <= 0) {
+        throw versionNotHigher(latest);
+      }
+      // The publish-time run is the only one stored (ADR 0008).
+      const facts = checkCode(body.code, registeredSdks, body.declaredSdk);
+      const address = { handle, name, version };
+      const integrations = integrationsFor(facts.sdk, facts.dependencies);
+
+      const result = await publishVersion(
+        storage,
+        {
+          listing: {
+            ...address,
+            title,
+            description,
+            sdk: facts.sdk,
+            integrations,
+          },
+          document: {
+            code: body.code,
+            facts,
+            integrations,
+            snippets: generateSnippets(facts, address),
+            title,
+            description,
+          },
+          nextVersion: { basedOn: body.basedOn, whatChanged, deprecateBase },
+        },
+        { requestId: c.var.requestId },
+      );
+      if (result.outcome === "address-taken") {
+        // Another publish of the same version won since the listing was read.
+        throw versionTaken(version);
+      }
+      if (result.outcome === "handle-taken") {
+        throw new Error("A later version never creates an account.");
+      }
+      c.header("Cache-Control", "no-store");
+      c.header("Location", versionLocation(address));
+      return c.json<PublishResponse>(publishResponse(address, false), 201);
     },
   )
   .get(
