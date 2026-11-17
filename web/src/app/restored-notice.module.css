@@ -1,0 +1,18 @@
+/* Lines up with the profile page's column. */
+.notice {
+  width: 100%;
+  max-width: 1080px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 16px 20px 0;
+}
+
+/* A status message, so neutral colour and text, never Ember (web/CONVENTIONS.md). */
+.message {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: var(--text-small);
+}
