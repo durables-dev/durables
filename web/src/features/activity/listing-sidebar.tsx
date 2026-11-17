@@ -6,6 +6,7 @@ import { searchAddress } from "@/lib/search-address";
 import { IntegrationLink } from "@/components/integration-link";
 import { PublisherInitial } from "@/components/publisher-initial";
 import { useSdkProfile } from "@/lib/use-sdk-profile";
+import { SdkAboutValue } from "./sdk-about-value";
 
 export interface ListingSidebarProps {
   /** The activity's SDK, named as the api names it. */
@@ -25,7 +26,8 @@ export interface ListingSidebarProps {
 // The Activity page's sidebar: the About and Publisher cards, then the note that Durables
 // doesn't review published code. Each integration links to results for that integration,
 // and the handle and "Search all activities by" link to that publisher's activities. The SDK's
-// package comes from the SDK catalog; without the catalog's profile, the SDK row is its name.
+// logo and package come from the SDK catalog; without the catalog's profile, the SDK row is its
+// name.
 export function ListingSidebar({
   sdk,
   integrations,
@@ -45,12 +47,7 @@ export function ListingSidebar({
         </h2>
         <dl className={styles["rows"]}>
           <AboutRow term="SDK">
-            {sdk}
-            {profile === undefined ? null : (
-              <>
-                , <span className={styles["mono"]}>{profile.package}</span>
-              </>
-            )}
+            <SdkAboutValue sdk={sdk} profile={profile} />
           </AboutRow>
           {integrations.length === 0 ? null : (
             <AboutRow term="Integrates with">
