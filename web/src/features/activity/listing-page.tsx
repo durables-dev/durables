@@ -73,12 +73,17 @@ export function ListingPage({ address }: ListingPageProps) {
     );
   }
 
+  // Each version has its own description (ADR 0015); the page shows the viewed one's.
+  const description =
+    listing.data.versions.find((entry) => entry.version === address.version)
+      ?.description ?? "";
+
   return (
     <>
       <PageTitle
         page={version.data.title}
         description={listingSearchDescription({
-          description: listing.data.description,
+          description,
           sdk: version.data.sdk,
           handle: version.data.handle,
         })}
@@ -89,17 +94,14 @@ export function ListingPage({ address }: ListingPageProps) {
             title={version.data.title}
             sdk={version.data.sdk}
             address={version.data.address}
-            description={listing.data.description}
+            description={description}
             handle={version.data.handle}
             publishedAt={version.data.publishedAt}
           />
         }
         publisherBar={
           isListingPublisher(user, listing.data.handle) ? (
-            <PublisherBar
-              address={address}
-              description={listing.data.description}
-            />
+            <PublisherBar address={address} description={description} />
           ) : null
         }
         implement={

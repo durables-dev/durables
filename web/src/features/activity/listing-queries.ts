@@ -25,7 +25,7 @@ export function versionQuery({ handle, name, version }: ListingAddress) {
   });
 }
 
-/** One listing: its current description. */
+/** One listing: its versions, newest first, each with its own description (ADR 0015). */
 export function listingQuery({ handle, name }: ListingAddress) {
   return queryOptions({
     queryKey: ["listings", handle, name],

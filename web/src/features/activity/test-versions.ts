@@ -253,3 +253,25 @@ export const newSdkSamples = [
     code: "pub async fn charge_card(input: Charge) -> Result<String, Error> {\n    let id = input.id;\n    Ok(id)\n}\n",
   },
 ] as const;
+
+/**
+ * ddieruf/charge-card's listing as the API answers it: each version, newest first, with the
+ * same description.
+ */
+export function chargeCardListing(
+  description: string,
+  versions: string[] = ["1.0.0"],
+) {
+  return {
+    handle: "ddieruf",
+    name: "charge-card",
+    versions: versions.map((version) => ({
+      version,
+      publishedAt: new Date().toISOString(),
+      whatChanged: null,
+      basedOn: null,
+      deprecation: null,
+      description,
+    })),
+  };
+}
