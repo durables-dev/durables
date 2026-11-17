@@ -4,6 +4,7 @@ import {
   typescriptRecognition,
 } from "../checks/typescript-detector";
 import { typescriptSnippets } from "../snippets/typescript-snippets";
+import logo from "./logos/typescript.svg";
 import type { SdkEntry } from "./sdk-entry";
 
 /** The TypeScript SDK. Dependencies are npm package names, matched without regard to case. */
@@ -30,5 +31,6 @@ export const typescript: SdkEntry<"TypeScript"> = {
       async:
         "This is an async activity. Your worker needs no special setup to run it.",
     },
+    logo,
   },
 };

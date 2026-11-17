@@ -1,6 +1,7 @@
 import { pythonDetector, pythonRecognition } from "../checks/python-detector";
 import { isPythonStandardLibrary } from "../checks/python-stdlib";
 import { pythonSnippets } from "../snippets/python-snippets";
+import logo from "./logos/python.svg";
 import type { SdkEntry } from "./sdk-entry";
 
 /** The Python SDK. Dependencies are top-level package names, matched without regard to case. */
@@ -24,5 +25,6 @@ export const python: SdkEntry<"Python"> = {
       async:
         "This is an async activity. Your worker needs no special setup to run it.",
     },
+    logo,
   },
 };

@@ -1,6 +1,7 @@
 import { isPhpBuiltin } from "../checks/php-builtins";
 import { phpDetector, phpRecognition } from "../checks/php-detector";
 import { phpActivityFileName, phpSnippets } from "../snippets/php-snippets";
+import logo from "./logos/php.svg";
 import type { SdkEntry } from "./sdk-entry";
 
 /**
@@ -30,5 +31,6 @@ export const php: SdkEntry<"PHP"> = {
       async:
         "This is an async activity. Your worker runs under RoadRunner, which needs PHP's grpc extension. The .rr.yaml file in Implement configures it.",
     },
+    logo,
   },
 };
