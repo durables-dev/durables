@@ -597,6 +597,41 @@ describe("when a read fails", () => {
 });
 
 describe("after signing out", () => {
+  test("signing out on the profile goes home and reads the profile no more", async () => {
+    serveOwner();
+    const reads: string[] = [];
+    worker.use(
+      http.delete("/api/session", () => {
+        worker.use(
+          http.get("/api/session", () => HttpResponse.json({ user: null })),
+          http.get("/api/profile", ({ request }) => {
+            reads.push(new URL(request.url).pathname);
+            return unauthorized();
+          }),
+          http.get("/api/profile/activities", ({ request }) => {
+            reads.push(new URL(request.url).pathname);
+            return unauthorized();
+          }),
+        );
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { screen, router } = await openProfile();
+    await expect.element(heading(screen)).toBeVisible();
+
+    await screen
+      .getByRole("banner")
+      .getByRole("button", { name: "Account menu" })
+      .click();
+    await screen.getByRole("menuitem", { name: "Sign out" }).click();
+    await expect.poll(() => router.state.location.pathname).toBe("/");
+
+    // A read sent after signing out would answer 401 and send the visitor to Sign in.
+    await new Promise((settle) => setTimeout(settle, 500));
+    expect(router.state.location.pathname).toBe("/");
+    expect(reads).toEqual([]);
+  });
+
   test("opening the profile again in the same tab never shows the last owner's details", async () => {
     serveOwner();
     // Signing out ends the session on the server too: from then on the session read answers
