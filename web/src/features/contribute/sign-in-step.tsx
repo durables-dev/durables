@@ -1,6 +1,6 @@
+import { SignInProviderList } from "@/components/sign-in-provider-list";
 import { useNavigate } from "react-router";
 import styles from "./sign-in-step.module.css";
-import { signInProviders, signInStartPath } from "./sign-in-providers";
 import { StepFooter } from "./step-footer";
 import stepStyles from "./step.module.css";
 import { stepPath } from "./steps";
@@ -45,19 +45,7 @@ export function SignInStep({ failed, signedIn }: SignInStepProps) {
           Sign-in didn&apos;t finish. Try again, or choose another provider.
         </p>
       ) : null}
-      <ul className={styles["providers"]} aria-label="Sign-in providers">
-        {signInProviders.map(({ id, name }) => (
-          <li key={id}>
-            <a
-              href={signInStartPath(id, contributeReturnPath)}
-              className={styles["provider"]}
-              data-provider={id}
-            >
-              Continue with {name}
-            </a>
-          </li>
-        ))}
-      </ul>
+      <SignInProviderList returnTo={contributeReturnPath} />
       <p className={styles["note"]}>
         We keep your name, email and avatar from the provider.
       </p>

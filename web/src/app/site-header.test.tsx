@@ -10,28 +10,45 @@ import { TestProviders } from "../../test/test-providers";
 import { SiteHeader } from "./site-header";
 
 interface RenderOptions {
-  /** False renders the header as the Contribute pages do. */
+  /** False renders the header without the Contribute button, as the Contribute pages do. */
   contribute?: boolean;
+  /** False renders the header without the Sign in link, as the Contribute and Sign in pages do. */
+  signIn?: boolean;
+  /** The page the header is on. */
+  path?: string;
 }
 
-// The header above a page body, with a stand-in for the Contribute flow to land on.
-function renderHeader({ contribute = true }: RenderOptions = {}) {
-  const router = createMemoryRouter([
-    {
-      path: "/",
-      element: (
-        <>
-          <SiteHeader contribute={contribute} />
-          <p>Page body</p>
-        </>
-      ),
-    },
-    { path: "/contribute", element: <h1>Contribute flow</h1> },
-  ]);
-  return render(<RouterProvider router={router} />, {
+// The header above a page body, at the home page, an activity page and the profile, with
+// stand-ins for the Contribute flow and the Sign in page to land on.
+async function renderHeader({
+  contribute = true,
+  signIn = true,
+  path = "/",
+}: RenderOptions = {}) {
+  const page = (body: string) => (
+    <>
+      <SiteHeader contribute={contribute} signIn={signIn} />
+      <p>{body}</p>
+    </>
+  );
+  const router = createMemoryRouter(
+    [
+      { path: "/", element: page("Page body") },
+      { path: "/acme/charge-card", element: page("Activity page") },
+      { path: "/profile", element: page("Profile page") },
+      { path: "/contribute", element: <h1>Contribute flow</h1> },
+      { path: "/sign-in", element: <h1>Sign in page</h1> },
+    ],
+    { initialEntries: [path] },
+  );
+  const rendered = await render(<RouterProvider router={router} />, {
     wrapper: TestProviders,
   });
+  return Object.assign(rendered, { router });
 }
+
+// The header as the Contribute pages render it: no Contribute button and no Sign in link.
+const contributePages: RenderOptions = { contribute: false, signIn: false };
 
 const publisher: SessionUser = {
   name: "Dana Dieruf",
@@ -54,6 +71,16 @@ function signIn(user: SessionUser = publisher) {
 }
 
 type Screen = Awaited<ReturnType<typeof renderHeader>>;
+
+function signInLink(screen: Screen) {
+  return screen.getByRole("banner").getByRole("link", { name: "Sign in" });
+}
+
+// Records the address a click on a link sends the router to.
+function addressOf(screen: Screen) {
+  const { pathname, search } = screen.router.state.location;
+  return `${pathname}${search}`;
+}
 
 function initials(screen: Screen) {
   return screen.getByRole("banner").getByRole("button", {
@@ -147,7 +174,8 @@ test("the header carries no Temporal wording, logo or colour", async () => {
   const screen = await renderHeader();
 
   const header = screen.getByRole("banner").element();
-  expect(header.textContent).toBe("DurablesContribute");
+  // Signed out, the right side reads Sign in, then Contribute.
+  expect(header.textContent).toBe("DurablesSign inContribute");
   expect(header.textContent).not.toMatch(/temporal|official/i);
 
   const images = [...header.querySelectorAll("img, source")].map(
@@ -220,6 +248,63 @@ describe("signed out", () => {
   });
 });
 
+describe("the Sign in link", () => {
+  test("signed out, it sits to the left of Contribute", async () => {
+    const screen = await renderHeader();
+
+    const link = signInLink(screen);
+    const contribute = contributeLink(screen);
+    await expect.element(link).toBeVisible();
+    await expect.element(contribute).toBeVisible();
+
+    const linkBox = link.element().getBoundingClientRect();
+    const contributeBox = contribute.element().getBoundingClientRect();
+    expect(linkBox.right).toBeLessThanOrEqual(contributeBox.left);
+    expect(
+      link.element().compareDocumentPosition(contribute.element()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  test("opens the Sign in page with the page it was opened from as returnTo", async () => {
+    const screen = await renderHeader({ path: "/acme/charge-card" });
+
+    const link = signInLink(screen);
+    await expect
+      .element(link)
+      .toHaveAttribute("href", "/sign-in?returnTo=%2Facme%2Fcharge-card");
+    await link.click();
+
+    await expect
+      .element(screen.getByRole("heading", { name: "Sign in page" }))
+      .toBeVisible();
+    expect(addressOf(screen)).toBe("/sign-in?returnTo=%2Facme%2Fcharge-card");
+  });
+
+  test("hidden when the page opts out, as the Contribute and Sign in pages do", async () => {
+    const reads = { count: 0 };
+    worker.use(
+      http.get("/api/session", () => {
+        reads.count += 1;
+        return HttpResponse.json({ user: null });
+      }),
+    );
+    const screen = await renderHeader({ signIn: false });
+
+    await expect.element(contributeLink(screen)).toBeVisible();
+    await expect.poll(() => reads.count).toBe(1);
+    await expect.element(signInLink(screen)).not.toBeInTheDocument();
+  });
+
+  test("signed in, it is not shown", async () => {
+    signIn();
+    const screen = await renderHeader();
+
+    await expect.element(initials(screen)).toBeVisible();
+    await expect.element(signInLink(screen)).not.toBeInTheDocument();
+  });
+});
+
 describe("signed in", () => {
   test("shows Contribute, then the initials, with Contribute to the left", async () => {
     signIn();
@@ -273,7 +358,7 @@ describe("signed in", () => {
     expect(style.borderRadius).not.toBe("0px");
   });
 
-  test("the initials open a menu with exactly one item, Sign out", async () => {
+  test("the initials open a menu with two items, Your profile then Sign out", async () => {
     signIn();
     const screen = await renderHeader();
 
@@ -283,10 +368,73 @@ describe("signed in", () => {
     const menu = await openMenu(screen);
 
     const items = menu.getByRole("menuitem");
-    expect(items.elements()).toHaveLength(1);
-    await expect.element(items).toHaveAccessibleName("Sign out");
-    await expect.element(items).toHaveFocus();
-    expect(menu.getByRole("link").elements()).toHaveLength(0);
+    expect(items.elements().map((item) => item.textContent)).toEqual([
+      "Your profile",
+      "Sign out",
+    ]);
+    const profile = menu.getByRole("menuitem", { name: "Your profile" });
+    await expect.element(profile).toHaveFocus();
+    // Your profile is a link to the profile; Sign out is a button.
+    await expect.element(profile).toHaveAttribute("href", "/profile");
+    expect(items.elements().map((item) => item.tagName)).toEqual([
+      "A",
+      "BUTTON",
+    ]);
+  });
+
+  test("Your profile opens the profile and closes the menu", async () => {
+    signIn();
+    const screen = await renderHeader();
+
+    const menu = await openMenu(screen);
+    await menu.getByRole("menuitem", { name: "Your profile" }).click();
+
+    await expect.element(screen.getByText("Profile page")).toBeVisible();
+    expect(screen.router.state.location.pathname).toBe("/profile");
+    await expect.element(menu).not.toBeVisible();
+  });
+
+  test("the arrow keys move between the items and wrap; Home and End go to the ends", async () => {
+    signIn();
+    const screen = await renderHeader();
+
+    const menu = await openMenu(screen);
+    const profile = menu.getByRole("menuitem", { name: "Your profile" });
+    const signOut = menu.getByRole("menuitem", { name: "Sign out" });
+    await expect.element(profile).toHaveFocus();
+
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(signOut).toHaveFocus();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(profile).toHaveFocus();
+    await userEvent.keyboard("{ArrowUp}");
+    await expect.element(signOut).toHaveFocus();
+    await userEvent.keyboard("{ArrowUp}");
+    await expect.element(profile).toHaveFocus();
+    await userEvent.keyboard("{End}");
+    await expect.element(signOut).toHaveFocus();
+    await userEvent.keyboard("{Home}");
+    await expect.element(profile).toHaveFocus();
+  });
+
+  test("the menu opens from the keyboard, and Escape closes it with focus back on the initials", async () => {
+    signIn();
+    const screen = await renderHeader();
+
+    await expect.element(initials(screen)).toBeVisible();
+    initials(screen).element().focus();
+    await userEvent.keyboard("{Enter}");
+    const menu = accountMenu(screen);
+    await expect.element(menu).toBeVisible();
+    await expect
+      .element(menu.getByRole("menuitem", { name: "Your profile" }))
+      .toHaveFocus();
+
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{Escape}");
+
+    await expect.element(menu).not.toBeVisible();
+    await expect.element(initials(screen)).toHaveFocus();
   });
 
   test("signing out returns the header to its signed-out state", async () => {
@@ -307,6 +455,66 @@ describe("signed in", () => {
     await expect.element(contributeLink(screen)).toBeVisible();
     await expect.element(menu).not.toBeInTheDocument();
     expect(signOuts.count).toBe(1);
+  });
+
+  test("signing out on an activity page stays on that page", async () => {
+    signIn();
+    worker.use(
+      http.delete(
+        "/api/session",
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    );
+    const screen = await renderHeader({ path: "/acme/charge-card" });
+
+    const menu = await openMenu(screen);
+    await menu.getByRole("menuitem", { name: "Sign out" }).click();
+
+    await expect.element(initials(screen)).not.toBeInTheDocument();
+    await expect.element(screen.getByText("Activity page")).toBeVisible();
+    expect(screen.router.state.location.pathname).toBe("/acme/charge-card");
+  });
+
+  test("signing out on the profile goes to the home page", async () => {
+    signIn();
+    worker.use(
+      http.delete(
+        "/api/session",
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    );
+    const screen = await renderHeader({ path: "/profile" });
+
+    const menu = await openMenu(screen);
+    await menu.getByRole("menuitem", { name: "Sign out" }).click();
+
+    await expect.element(screen.getByText("Page body")).toBeVisible();
+    expect(screen.router.state.location.pathname).toBe("/");
+    await expect.element(initials(screen)).not.toBeInTheDocument();
+    await expect
+      .element(screen.getByText("Profile page"))
+      .not.toBeInTheDocument();
+  });
+
+  test("a failed sign-out on the profile stays on the profile", async () => {
+    signIn();
+    worker.use(
+      http.delete("/api/session", () =>
+        HttpResponse.json(
+          { type: "about:blank", title: "Internal Server Error", status: 500 },
+          { status: 500 },
+        ),
+      ),
+    );
+    const screen = await renderHeader({ path: "/profile" });
+
+    const menu = await openMenu(screen);
+    await menu.getByRole("menuitem", { name: "Sign out" }).click();
+
+    await expect
+      .element(screen.getByRole("status"))
+      .toHaveTextContent("Sign-out didn't finish. Try again.");
+    expect(screen.router.state.location.pathname).toBe("/profile");
   });
 
   test("a failed sign-out keeps the menu open and the header signed in", async () => {
@@ -366,7 +574,7 @@ describe("on the Contribute pages", () => {
         return HttpResponse.json({ user: null });
       }),
     );
-    const screen = await renderHeader({ contribute: false });
+    const screen = await renderHeader(contributePages);
 
     const header = screen.getByRole("banner");
     await expect.element(header).toBeVisible();
@@ -378,7 +586,7 @@ describe("on the Contribute pages", () => {
 
   test("signed in, the header shows the logo and the initials, with no Contribute button", async () => {
     signIn();
-    const screen = await renderHeader({ contribute: false });
+    const screen = await renderHeader(contributePages);
 
     await expect.element(initials(screen)).toBeVisible();
     const header = screen.getByRole("banner");

@@ -6,11 +6,12 @@ import {
   useRouteError,
 } from "react-router";
 import { PageFrame } from "./page-frame";
-import { showsContribute, showsFooter } from "./route-handle";
+import { showsContribute, showsFooter, showsSignIn } from "./route-handle";
 
 // Layout route module: every page renders inside the frame. A page opts out of the footer
 // slot with `handle: { footer: false }`, and out of the header's Contribute button with
-// `handle: { contribute: false }` (see route-handle.ts).
+// `handle: { contribute: false }`, and out of its Sign in link with `handle: { signIn: false }`
+// (see route-handle.ts).
 export function Component() {
   const matches = useMatches();
 
@@ -18,6 +19,7 @@ export function Component() {
     <PageFrame
       footer={showsFooter(matches)}
       contribute={showsContribute(matches)}
+      signIn={showsSignIn(matches)}
     >
       <Outlet />
     </PageFrame>

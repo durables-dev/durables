@@ -109,3 +109,42 @@ test("every page outside the Contribute flow shows the Contribute pill", async (
     await screen.unmount();
   }
 });
+
+test("signed out, every page outside Contribute and Sign in shows the Sign in link", async () => {
+  for (const path of [
+    "/",
+    "/elsewhere",
+    "/search",
+    "/terms",
+    "/no-such-page",
+  ]) {
+    const screen = await renderAt(path);
+
+    await expect
+      .element(
+        screen.getByRole("banner").getByRole("link", { name: "Sign in" }),
+      )
+      .toBeVisible();
+    await screen.unmount();
+  }
+});
+
+test("the Contribute pages and the Sign in page leave the Sign in link out", async () => {
+  for (const [path, heading] of [
+    ["/contribute", "Sign in to contribute"],
+    ["/contribute/profile", "Sign in to contribute"],
+    ["/sign-in", "Sign in"],
+  ] as const) {
+    const screen = await renderAt(path);
+
+    await expect
+      .element(screen.getByRole("heading", { name: heading, exact: true }))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("banner").getByRole("link", { name: "Sign in" }),
+      )
+      .not.toBeInTheDocument();
+    await screen.unmount();
+  }
+});

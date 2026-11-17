@@ -4,6 +4,8 @@ export interface RouteHandle {
   footer?: boolean;
   /** Set to false to leave the Contribute button out of the header, as the Contribute flow does. */
   contribute?: boolean;
+  /** Set to false to leave the Sign in link out of the header, as the Contribute and Sign in pages do. */
+  signIn?: boolean;
 }
 
 function optsOut(
@@ -25,4 +27,9 @@ export function showsContribute(
   matches: readonly { handle: unknown }[],
 ): boolean {
   return !optsOut(matches, "contribute");
+}
+
+/** Whether the header shows the Sign in link for the matched routes. Any match can opt out. */
+export function showsSignIn(matches: readonly { handle: unknown }[]): boolean {
+  return !optsOut(matches, "signIn");
 }
