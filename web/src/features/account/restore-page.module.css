@@ -1,0 +1,89 @@
+.page {
+  max-width: 668px;
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--text-h1);
+  font-weight: 600;
+  letter-spacing: -0.023em;
+}
+
+.prompt,
+.nothing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.lede {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+
+.text {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-small);
+  line-height: 1.5;
+}
+
+.handle {
+  font-family: var(--font-mono);
+}
+
+/* A status message, so neutral colour and text, never Ember (web/CONVENTIONS.md). */
+.failure {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: var(--text-small);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.restore,
+.startOver,
+.onward {
+  height: 40px;
+  padding: 0 23px;
+  border-radius: var(--radius-pill);
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.restore,
+.onward {
+  border: 1px solid var(--fg);
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.startOver {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+}
+
+.restore:disabled,
+.startOver:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

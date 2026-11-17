@@ -8,6 +8,7 @@ const contributeHandle: RouteHandle = {
   signIn: false,
 };
 const signInHandle: RouteHandle = { signIn: false };
+const restoreHandle: RouteHandle = { signIn: false, contribute: false };
 
 // React Router in data mode (web/CONVENTIONS.md). Every page route is lazy, so each feature
 // is its own chunk. A route module exports Component, loader and friends by name.
@@ -39,6 +40,14 @@ export const routes: RouteObject[] = [
         path: "/sign-in",
         lazy: () => import("@/features/account/sign-in-route"),
         handle: signInHandle,
+      },
+      {
+        // The Restore prompt, where a sign-in lands when its account is pending deletion.
+        // Every other page leads back here until a choice is made (frame-route.tsx), so the
+        // header offers neither Sign in nor Contribute.
+        path: "/sign-in/restore",
+        lazy: () => import("@/features/account/restore-route"),
+        handle: restoreHandle,
       },
       {
         // The signed-in owner's profile. Only its owner can see it.
