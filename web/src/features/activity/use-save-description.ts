@@ -1,14 +1,9 @@
 import { api } from "@/lib/api-client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { parseResponse } from "hono/client";
+import { browseResultsKey } from "./browse-results-key";
 import type { ListingAddress } from "./listing-address";
 import { listingQuery } from "./listing-queries";
-
-/**
- * The root of every cached browse result. The search feature keys each search under it
- * (search: browse-query). Features never import from each other, so the key is named here.
- */
-const browseResultsKey = ["activities"] as const;
 
 /**
  * Saves the viewed version's one-line description (ADR 0015); other versions keep theirs.

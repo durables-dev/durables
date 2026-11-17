@@ -1,0 +1,58 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kept {
+  margin: 0;
+  padding-left: 20px;
+  font-size: var(--text-small);
+  line-height: 1.7;
+}
+
+.failed {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: var(--notice);
+  color: var(--fg);
+  font-size: var(--text-label);
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.cancel,
+.remove {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancel {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+}
+
+/* A destructive action: the dark red, never Ember (DUR-2). */
+.remove {
+  border: 0;
+  background: var(--danger-strong);
+  color: var(--on-danger);
+}
+
+.remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
