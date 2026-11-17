@@ -5,6 +5,7 @@ import { cache } from "hono/cache";
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../app-env";
 import {
+  accountPendingDeletion,
   type PublisherVariables,
   requirePublisher,
 } from "../auth/require-publisher";
@@ -92,9 +93,10 @@ const noSuchListing = (handle: string, name: string) =>
   });
 
 /**
- * Answers 403 when the signed-in publisher's account handle is not the address's handle, then
- * 404 when the account has no listing at that name. A session with no account owns nothing.
- * It runs before the body is validated, so ownership is answered first.
+ * Answers 403 when the signed-in publisher's account handle is not the address's handle, or the
+ * account is pending deletion (ADR 0015), then 404 when the account has no listing at that name.
+ * A session with no account owns nothing. It runs after requirePublisher and before the body is
+ * validated, so ownership is answered first.
  */
 const requireListingOwner = () =>
   createMiddleware<AppEnv & PublisherVariables>(async (c, next) => {
@@ -103,13 +105,15 @@ const requireListingOwner = () =>
     if (handle === undefined || name === undefined) {
       throw new Error("The listing owner check is mounted without an address.");
     }
-    const { publisher, storage } = c.var;
-    const account = await storage.findAccountByProviderIdentity(publisher);
+    const { account, storage } = c.var;
     if (account?.handle !== handle) {
       throw new ProblemError({
         status: 403,
         detail: "Only the listing's publisher can change it.",
       });
+    }
+    if (account.deletionRequestedAt !== null) {
+      throw accountPendingDeletion();
     }
     const listing = await storage.findListingVersions({ handle, name });
     if (listing === undefined) {
@@ -167,10 +171,9 @@ export const activities = new Hono<AppEnv>()
     zValidator("json", publishBody, problemOnInvalid),
     async (c) => {
       const body = c.req.valid("json");
-      const { publisher, storage } = c.var;
-      // An account's handle is permanent. Until the account exists, the session carries the
-      // chosen handle (ADR 0007).
-      const account = await storage.findAccountByProviderIdentity(publisher);
+      // requirePublisher has refused an account pending deletion (ADR 0015). An account's handle
+      // is permanent. Until the account exists, the session carries the chosen handle (ADR 0007).
+      const { publisher, account, storage } = c.var;
       const handle = account?.handle ?? publisher.handle;
       if (handle === null) {
         throw handleNotChosen();

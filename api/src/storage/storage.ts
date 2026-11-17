@@ -1,4 +1,16 @@
-import { and, count, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { containsPattern, LIKE_ESCAPE } from "./like-pattern";
@@ -40,6 +52,14 @@ export interface ProviderIdentity {
 export interface Account {
   id: string;
   handle: string | null;
+}
+
+/**
+ * A Durables account, with its handle and whether it is waiting to be deleted (ADR 0015).
+ */
+export interface AccountState extends Account {
+  /** When the publisher asked to delete the account. Null when it is not pending deletion. */
+  deletionRequestedAt: Date | null;
 }
 
 /** What the first publish records for a new account: who signed in, and the chosen handle. */
@@ -272,6 +292,167 @@ export class Storage {
         ),
       )
       .get();
+  }
+
+  /**
+   * The account a provider identity is linked to, with whether it is pending deletion, or
+   * undefined when it has none. A finally deleted account has no provider links, so it is never
+   * found here.
+   */
+  async findAccountState({
+    provider,
+    providerAccountId,
+  }: ProviderIdentity): Promise<AccountState | undefined> {
+    return this.#db
+      .select({
+        id: accounts.id,
+        handle: handles.handle,
+        deletionRequestedAt: accounts.deletionRequestedAt,
+      })
+      .from(providerAccounts)
+      .innerJoin(accounts, eq(accounts.id, providerAccounts.accountId))
+      .leftJoin(handles, eq(handles.accountId, accounts.id))
+      .where(
+        and(
+          eq(providerAccounts.provider, provider),
+          eq(providerAccounts.providerAccountId, providerAccountId),
+        ),
+      )
+      .get();
+  }
+
+  /**
+   * Marks an account pending deletion with the current time, and removes every listing under its
+   * handle that is listed at that moment, with account deletion as the source (ADR 0015). Both
+   * happen in one database batch. Nothing published is deleted. Returns the time deletion was
+   * asked for, or undefined when there is no such account or it is already pending, in which
+   * case nothing is written.
+   */
+  async requestAccountDeletion(accountId: string): Promise<Date | undefined> {
+    const [, marked] = await this.#db.batch([
+      // The listings go first, while the account is still not pending, so a second request
+      // finds it pending and removes nothing.
+      this.#db
+        .update(listings)
+        .set({ removedBy: "account-deletion" })
+        .where(
+          and(
+            isNull(listings.removedBy),
+            inArray(listings.handle, this.#accountHandle(accountId)),
+            exists(
+              this.#db
+                .select({ id: accounts.id })
+                .from(accounts)
+                .where(
+                  and(
+                    eq(accounts.id, accountId),
+                    isNull(accounts.deletionRequestedAt),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      this.#db
+        .update(accounts)
+        .set({ deletionRequestedAt: sql`(unixepoch())` })
+        .where(
+          and(eq(accounts.id, accountId), isNull(accounts.deletionRequestedAt)),
+        )
+        .returning({ deletionRequestedAt: accounts.deletionRequestedAt }),
+    ]);
+    return marked[0]?.deletionRequestedAt ?? undefined;
+  }
+
+  /**
+   * Restores an account that is pending deletion: clears the pending mark and returns to search
+   * only the listings account deletion removed. Listings removed by anyone else stay removed
+   * (ADR 0015). Both happen in one database batch. Returns false, writing nothing, when the
+   * account is not pending or has been finally deleted.
+   */
+  async restoreAccount(accountId: string): Promise<boolean> {
+    const restorable = exists(
+      this.#db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.id, accountId),
+            isNotNull(accounts.deletionRequestedAt),
+            exists(
+              this.#db
+                .select({ accountId: providerAccounts.accountId })
+                .from(providerAccounts)
+                .where(eq(providerAccounts.accountId, accountId)),
+            ),
+          ),
+        ),
+    );
+    const [, restored] = await this.#db.batch([
+      this.#db
+        .update(listings)
+        .set({ removedBy: null })
+        .where(
+          and(
+            eq(listings.removedBy, "account-deletion"),
+            inArray(listings.handle, this.#accountHandle(accountId)),
+            restorable,
+          ),
+        ),
+      this.#db
+        .update(accounts)
+        .set({ deletionRequestedAt: null })
+        .where(and(eq(accounts.id, accountId), restorable))
+        .returning({ id: accounts.id }),
+    ]);
+    return restored.length === 1;
+  }
+
+  /**
+   * Makes a pending account's deletion final (ADR 0015): retires its handle and deletes its
+   * provider links, in one database batch. The account, handle, listing and version rows stay,
+   * so published addresses keep resolving, and the handle is never freed. Start as a new user and
+   * the daily final-deletion job both call this. Returns true when it deleted provider links, and
+   * false, changing nothing, when the account is not pending or is already final.
+   */
+  async finalizeAccountDeletion(accountId: string): Promise<boolean> {
+    const pending = exists(
+      this.#db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.id, accountId),
+            isNotNull(accounts.deletionRequestedAt),
+          ),
+        ),
+    );
+    const [, deleted] = await this.#db.batch([
+      this.#db
+        .insert(retiredHandles)
+        .select(
+          this.#db
+            .select({
+              handle: handles.handle,
+              retiredAt: sql<Date>`unixepoch()`.as("retired_at"),
+            })
+            .from(handles)
+            .where(and(eq(handles.accountId, accountId), pending)),
+        )
+        .onConflictDoNothing(),
+      this.#db
+        .delete(providerAccounts)
+        .where(and(eq(providerAccounts.accountId, accountId), pending))
+        .returning({ provider: providerAccounts.provider }),
+    ]);
+    return deleted.length > 0;
+  }
+
+  /** The handle of an account, as a subquery. */
+  #accountHandle(accountId: string) {
+    return this.#db
+      .select({ handle: handles.handle })
+      .from(handles)
+      .where(eq(handles.accountId, accountId));
   }
 
   /**
