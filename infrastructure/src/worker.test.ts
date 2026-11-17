@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker as CloudflareWorker } from "../.gen/providers/cloudflare/worker";
 import { WorkerVersion } from "../.gen/providers/cloudflare/worker-version";
+import { WorkersCronTrigger } from "../.gen/providers/cloudflare/workers-cron-trigger";
 import { WorkersDeployment } from "../.gen/providers/cloudflare/workers-deployment";
 import { Storage } from "./storage";
 import { Worker } from "./worker";
@@ -125,4 +126,46 @@ test("uploads the bundle's text modules beside index.js", () => {
       }),
     ]),
   );
+});
+
+test("declares one daily trigger, read from wrangler.toml, for the final-deletion job (ADR 0015)", () => {
+  const synthesized = synthWorker();
+  const stack = JSON.parse(synthesized) as {
+    resource: {
+      cloudflare_workers_cron_trigger?: Record<
+        string,
+        {
+          account_id: string;
+          script_name: string;
+          schedules: { cron: string }[];
+          depends_on: string[];
+        }
+      >;
+    };
+  };
+  const triggers = Object.values(
+    stack.resource.cloudflare_workers_cron_trigger ?? {},
+  );
+
+  expect(triggers).toHaveLength(1);
+  const [trigger] = triggers;
+  if (!trigger) throw new Error("no cron trigger synthesized");
+  expect(trigger.account_id).toBe("account-id");
+  expect(trigger.script_name).toMatch(/^\$\{cloudflare_worker\.[^.]+\.name\}$/);
+  expect(trigger.schedules).toEqual(wrangler.crons.map((cron) => ({ cron })));
+  expect(trigger.depends_on).toEqual([
+    expect.stringMatching(/^cloudflare_workers_deployment\./),
+  ]);
+
+  // Daily: one fixed minute and hour, on every day of every month.
+  expect(trigger.schedules).toHaveLength(1);
+  const fields = trigger.schedules[0]?.cron.split(" ");
+  expect(fields).toEqual([
+    expect.stringMatching(/^\d+$/),
+    expect.stringMatching(/^\d+$/),
+    "*",
+    "*",
+    "*",
+  ]);
+  expect(synthesized).toHaveResource(WorkersCronTrigger);
 });

@@ -62,6 +62,20 @@ export const seedProviderLink = async (
   await drizzle(database).insert(providerAccounts).values(link);
 };
 
+/**
+ * Marks an account pending deletion as if it had been asked for at the given time, so a test can
+ * place a deletion anywhere in its 30 days. Null clears the mark, as a restore does.
+ */
+export const seedDeletionRequest = async (
+  database: D1Database,
+  account: { accountId: string; deletionRequestedAt: Date | null },
+): Promise<void> => {
+  await drizzle(database)
+    .update(accounts)
+    .set({ deletionRequestedAt: account.deletionRequestedAt })
+    .where(eq(accounts.id, account.accountId));
+};
+
 /** Records a handle as retired. */
 export const seedRetiredHandle = async (
   database: D1Database,

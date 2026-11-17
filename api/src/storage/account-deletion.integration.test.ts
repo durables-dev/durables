@@ -6,6 +6,7 @@ import { accounts, listings, providerAccounts, retiredHandles } from "./schema";
 import {
   readAllRows,
   seedAccount,
+  seedDeletionRequest,
   seedListing,
   seedProviderLink,
   seedRemoval,
@@ -346,5 +347,60 @@ describe("finalizeAccountDeletion", () => {
           ),
         ),
     ).toHaveLength(1);
+  });
+});
+
+describe("listAccountsDueForFinalDeletion", () => {
+  const cutoff = new Date("2030-05-02T03:00:00Z");
+  const pendingSince = async (deletionRequestedAt: Date) => {
+    const { account } = await accountWithListings();
+    await storage().requestAccountDeletion(account.accountId);
+    await seedDeletionRequest(env.DB, {
+      accountId: account.accountId,
+      deletionRequestedAt,
+    });
+    return account;
+  };
+
+  test("lists an account whose deletion was asked for at or before the time", async () => {
+    const atCutoff = await pendingSince(cutoff);
+    const earlier = await pendingSince(new Date("2030-04-01T00:00:00Z"));
+
+    const due = await storage().listAccountsDueForFinalDeletion(cutoff);
+
+    expect(due).toEqual(
+      expect.arrayContaining([atCutoff.accountId, earlier.accountId]),
+    );
+  });
+
+  test("leaves out an account asked for after the time", async () => {
+    const later = await pendingSince(new Date(cutoff.getTime() + 1000));
+
+    expect(
+      await storage().listAccountsDueForFinalDeletion(cutoff),
+    ).not.toContain(later.accountId);
+  });
+
+  test("leaves out accounts that are not pending, restored, or already final", async () => {
+    const { account: neverDeleted } = await accountWithListings();
+    const restored = await pendingSince(new Date("2030-04-01T00:00:00Z"));
+    await storage().restoreAccount(restored.accountId);
+    const final = await pendingSince(new Date("2030-04-01T00:00:00Z"));
+    await storage().finalizeAccountDeletion(final.accountId);
+
+    const due = await storage().listAccountsDueForFinalDeletion(cutoff);
+
+    expect(due).not.toContain(neverDeleted.accountId);
+    expect(due).not.toContain(restored.accountId);
+    expect(due).not.toContain(final.accountId);
+  });
+
+  test("writes nothing", async () => {
+    await pendingSince(new Date("2030-04-01T00:00:00Z"));
+    const rowsBefore = await readAllRows(env.DB);
+
+    await storage().listAccountsDueForFinalDeletion(cutoff);
+
+    expect(await readAllRows(env.DB)).toEqual(rowsBefore);
   });
 });

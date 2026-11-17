@@ -3,6 +3,7 @@ import type { ApplyGlobalResponse } from "hono/client";
 import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { account } from "./accounts/account";
+import { scheduled } from "./accounts/final-deletion";
 import { activities } from "./activities/activities";
 import type { AppEnv } from "./app-env";
 import { auth } from "./auth/auth-middleware";
@@ -71,4 +72,6 @@ export type AppType = ApplyGlobalResponse<
   }
 >;
 
-export default app;
+// The Worker: the app answers requests, and the scheduled handler runs the daily
+// final-deletion job. The app keeps its own type, so AppType is unchanged.
+export default Object.assign(app, { scheduled });

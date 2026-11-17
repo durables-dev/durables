@@ -7,6 +7,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lte,
   or,
   sql,
   type SQL,
@@ -450,6 +451,34 @@ export class Storage {
         .returning({ id: accounts.id }),
     ]);
     return restored.length === 1;
+  }
+
+  /**
+   * The IDs of the accounts the daily final-deletion job must finalize (ADR 0015): pending
+   * deletion, asked for at or before the given time, and still holding provider links. An
+   * account whose deletion is already final has no provider links, so it is never listed again.
+   * A restored account is not pending, so it is never listed.
+   */
+  async listAccountsDueForFinalDeletion(
+    requestedAtOrBefore: Date,
+  ): Promise<string[]> {
+    const rows = await this.#db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(
+        and(
+          isNotNull(accounts.deletionRequestedAt),
+          lte(accounts.deletionRequestedAt, requestedAtOrBefore),
+          exists(
+            this.#db
+              .select({ accountId: providerAccounts.accountId })
+              .from(providerAccounts)
+              .where(eq(providerAccounts.accountId, accounts.id)),
+          ),
+        ),
+      )
+      .orderBy(accounts.deletionRequestedAt, accounts.id);
+    return rows.map(({ id }) => id);
   }
 
   /**

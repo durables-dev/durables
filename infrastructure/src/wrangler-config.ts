@@ -19,6 +19,8 @@ export interface WranglerConfig {
   /** The paths the Worker's code answers before the site's assets: the API and the sitemap. */
   readonly runWorkerFirst: readonly string[];
   readonly rateLimits: readonly RateLimitBinding[];
+  /** The Worker's Cron Triggers, from [triggers] crons: the daily final-deletion job (ADR 0015). */
+  readonly crons: readonly string[];
 }
 
 export function readWranglerConfig(path: string): WranglerConfig {
@@ -37,6 +39,7 @@ export function readWranglerConfig(path: string): WranglerConfig {
     assetsBinding: required(toml, /\[assets\][^[]*?binding\s*=\s*"([^"]+)"/),
     runWorkerFirst: list(toml, /^run_worker_first\s*=\s*\[([^\]]*)\]/m),
     rateLimits: rateLimits(toml),
+    crons: list(toml, /^\[triggers\][^[]*?^crons\s*=\s*\[([^\]]*)\]/m),
   };
 }
 
