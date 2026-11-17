@@ -49,6 +49,8 @@ type LogoState = "loading" | "loaded" | "failed";
 
 // The name shows alone while the logo loads. The logo and the package then appear together,
 // so the row moves once. A logo that fails leaves the name and package, with no image at all.
+// The package is in the row from the start, hidden while the logo loads, so the row's text
+// never changes and no element ever holds the name alone.
 function LogoNameAndPackage({
   sdk,
   profile,
@@ -73,11 +75,10 @@ function LogoNameAndPackage({
         }}
       />
       <span>
-        {logo === "loading" ? (
-          sdk
-        ) : (
-          <NameAndPackage sdk={sdk} profile={profile} />
-        )}
+        {sdk}
+        <span hidden={logo === "loading"}>
+          , <span className={styles["package"]}>{profile.package}</span>
+        </span>
       </span>
     </span>
   );

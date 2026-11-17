@@ -496,6 +496,11 @@ function rowImages(screen: Rendered): HTMLImageElement[] {
   return [...sdkValue(screen).querySelectorAll("img")];
 }
 
+/** The SDK row's text as it shows, leaving out anything hidden. */
+function shownText(screen: Rendered): string {
+  return sdkValue(screen).innerText;
+}
+
 /** The SDK row's logo, once it shows. */
 async function shownLogo(screen: Rendered): Promise<HTMLImageElement> {
   await expect.poll(() => rowImages(screen).length).toBe(1);
@@ -551,7 +556,7 @@ function watchRow(screen: Rendered): string[] {
     const brokenImage = [...value.querySelectorAll("img")].some(
       (image) => image.checkVisibility() && image.naturalWidth === 0,
     );
-    const hasPackage = value.textContent.includes(",");
+    const hasPackage = value.innerText.includes(",");
     const state = [
       brokenImage ? "broken" : null,
       logo ? "logo" : null,
@@ -687,9 +692,7 @@ test("a logo that fails to load leaves the name and package, with no image, plac
   const screen = await renderSidebar();
   const seen = watchRow(screen);
 
-  await expect
-    .poll(() => sdkValue(screen).textContent)
-    .toBe("Python, temporalio");
+  await expect.poll(() => shownText(screen)).toBe("Python, temporalio");
   expect(rowImages(screen)).toEqual([]);
   // The name starts the row, where it starts with no logo.
   expect(firstInRow(screen)).toBe(nameText(screen, "Python"));
@@ -704,14 +707,19 @@ test("the logo and package appear together once the logo has loaded", async () =
   // The catalog has arrived and the logo is loading: the name alone.
   await expect.poll(() => rowImages(screen).length).toBe(1);
   const seen = watchRow(screen);
-  expect(sdkValue(screen).textContent).toBe("Python");
+  expect(shownText(screen)).toBe("Python");
   await expect.element(rowImages(screen)[0] ?? null).not.toBeVisible();
+
+  // Flow tests find the SDK tag by its exact text, so nothing in the row holds the name alone.
+  expect(
+    [sdkValue(screen), ...sdkValue(screen).querySelectorAll("*")].filter(
+      (element) => element.textContent === "Python",
+    ),
+  ).toEqual([]);
 
   answer();
   await shownLogo(screen);
-  await expect
-    .poll(() => sdkValue(screen).textContent)
-    .toBe("Python, temporalio");
+  await expect.poll(() => shownText(screen)).toBe("Python, temporalio");
   expect(seen).toEqual(["name", "logo+name+package"]);
 });
 
@@ -722,12 +730,10 @@ test("the package appears once the logo has failed, and the name never moves for
 
   await expect.poll(() => rowImages(screen).length).toBe(1);
   const seen = watchRow(screen);
-  expect(sdkValue(screen).textContent).toBe("Python");
+  expect(shownText(screen)).toBe("Python");
 
   answer();
-  await expect
-    .poll(() => sdkValue(screen).textContent)
-    .toBe("Python, temporalio");
+  await expect.poll(() => shownText(screen)).toBe("Python, temporalio");
   expect(rowImages(screen)).toEqual([]);
   expect(seen).toEqual(["name", "name+package"]);
 });
@@ -740,14 +746,12 @@ test("while the catalog loads, the SDK row shows the name alone", async () => {
   await expect
     .element(screen.getByRole("region", { name: "About" }))
     .toBeVisible();
-  expect(sdkValue(screen).textContent).toBe("Python");
+  expect(shownText(screen)).toBe("Python");
   expect(rowImages(screen)).toEqual([]);
 
   answer();
   await shownLogo(screen);
-  await expect
-    .poll(() => sdkValue(screen).textContent)
-    .toBe("Python, temporalio");
+  await expect.poll(() => shownText(screen)).toBe("Python, temporalio");
 });
 
 test("when the catalog cannot be read, the SDK row shows the name alone, with no logo", async () => {
@@ -756,7 +760,7 @@ test("when the catalog cannot be read, the SDK row shows the name alone, with no
   const screen = await renderSidebar();
   await failed;
 
-  expect(sdkValue(screen).textContent).toBe("Python");
+  expect(shownText(screen)).toBe("Python");
   expect(rowImages(screen)).toEqual([]);
 });
 
@@ -771,7 +775,7 @@ test("a profile with no logo URL, such as Java's, shows the name and package wit
   const screen = await renderSidebar({ sdk: "Java" });
 
   await expect
-    .poll(() => sdkValue(screen).textContent)
+    .poll(() => shownText(screen))
     .toBe("Java, io.temporal:temporal-sdk");
   expect(rowImages(screen)).toEqual([]);
   // Nothing sits before the name: it starts the row, as it always has.
