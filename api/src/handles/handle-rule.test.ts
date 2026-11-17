@@ -90,7 +90,9 @@ describe("reserved words", () => {
         "contribute",
         "durables",
         "privacy",
+        "profile",
         "search",
+        "sign-in",
         "security",
         "temporal",
         "terms",
@@ -102,6 +104,16 @@ describe("reserved words", () => {
     expect(checkHandleRule(word)).toBe("taken");
     expect(messagesFor(word)).toEqual([`${word} is taken.`]);
   });
+
+  test.each(["profile", "sign-in"])(
+    "include %s, a top-level page added for signing in to manage",
+    (word) => {
+      expect(reservedHandles.has(word)).toBe(true);
+      expect(handleSchema.safeParse(word).success).toBe(false);
+      expect(checkHandleRule(word)).toBe("taken");
+      expect(messagesFor(word)).toEqual([handleTakenMessage(word)]);
+    },
+  );
 
   test("include assets, the path the site build is served from", () => {
     expect(reservedHandles.has("assets")).toBe(true);
