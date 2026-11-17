@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { ApplyGlobalResponse } from "hono/client";
 import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
+import { account } from "./accounts/account";
 import { activities } from "./activities/activities";
 import type { AppEnv } from "./app-env";
 import { auth } from "./auth/auth-middleware";
@@ -11,6 +12,7 @@ import { notFound, onError } from "./http/error-handlers";
 import type { ProblemDetails } from "./http/problem";
 import { rateLimits } from "./http/rate-limits";
 import { sameOrigin } from "./http/same-origin";
+import { profile } from "./profile/profile";
 import { sdks } from "./sdks/sdks";
 import { session } from "./session/session";
 import { signIn } from "./session/sign-in";
@@ -46,10 +48,12 @@ export const createProductionApp = () =>
     .get("/api/health", (c) => c.json({ ok: true }))
     .route("/api/session", session)
     .route("/api/session/providers", signIn)
+    .route("/api/account", account)
     .route("/api/handles", handles)
     .route("/api/checks", checks)
     .route("/api/activities", activities)
     .route("/api/sdks", sdks)
+    .route("/api/profile", profile)
     // Outside /api because crawlers look for it at the root. It is a route on the Worker,
     // so run_worker_first lists it beside /api/*.
     .route("/sitemap.xml", sitemap);

@@ -3,6 +3,7 @@ import type { AppEnv } from "../app-env";
 import { isSignInProvider } from "../auth/oauth-providers";
 import { ProblemError } from "../http/problem";
 import type { Provider } from "../storage/storage";
+import { beginSignIn } from "./begin-sign-in";
 import { sameSitePath, startingPageParam } from "./starting-page";
 
 // Sign-in with a provider (ADR 0007), mounted at /api/session/providers. Both routes are
@@ -20,6 +21,13 @@ export const defaultLandingPath = "/";
 
 /** Where a finished sign-in lands when the provider account has no account: Profile & Handle. */
 export const noAccountPath = "/contribute/profile";
+
+/**
+ * Where a finished sign-in lands when the provider account's Durables account is pending
+ * deletion: the Restore prompt, which offers Restore or Start as a new user (ADR 0015). It sits
+ * under the Sign in page, so it needs no reserved handle of its own.
+ */
+export const restorePath = "/sign-in/restore";
 
 /**
  * Where a sign-in that did not finish lands: the Sign in page, with the indicator it reads to
@@ -79,9 +87,11 @@ export const signIn = new Hono<AppEnv>()
     if (identity === undefined) {
       return c.redirect(signInFailedLocation(startingPage), 302);
     }
-    await c.var.auth.start(identity);
-    const account = await c.var.storage.findAccountByProviderIdentity(identity);
-    if (account === undefined) {
+    const outcome = await beginSignIn(c.var.auth, c.var.storage, identity);
+    if (outcome === "pending-deletion") {
+      return c.redirect(restorePath, 302);
+    }
+    if (outcome === "no-account") {
       return c.redirect(noAccountPath, 302);
     }
     return c.redirect(startingPage ?? defaultLandingPath, 302);

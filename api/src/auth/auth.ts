@@ -89,11 +89,35 @@ const startingPageSchema = z.object({
   page: z.string().min(1),
 });
 
+/**
+ * The cookie that holds a finished sign-in whose account is pending deletion, until the visitor
+ * chooses Restore or Start as a new user (ADR 0015). It is not a session: nothing but those two
+ * choices reads it. Hono adds the __Host- prefix, so the browser sees __Host-pending-sign-in.
+ */
+export const pendingSignInCookieName = "pending-sign-in";
+
+/** How long a held sign-in waits for the visitor's choice before they must sign in again. */
+export const pendingSignInLifetimeSeconds = 60 * 60;
+
 /** The provider identity a sign-in starts a session with. */
 export type SessionIdentity = Omit<
   Session,
   "suggestedHandle" | "handle" | "expiresAt"
 >;
+
+/** What the pending sign-in cookie carries: the provider identity, and when the hold ends. */
+const pendingSignInSchema = sessionSchema
+  .pick({
+    provider: true,
+    providerAccountId: true,
+    name: true,
+    email: true,
+    avatarUrl: true,
+    username: true,
+  })
+  .extend({ expiresAt: z.number().int() });
+
+type PendingSignIn = z.infer<typeof pendingSignInSchema>;
 
 /** The parts of a session a handler may change. */
 export type SessionChanges = Pick<Session, "handle">;
@@ -199,8 +223,74 @@ export class Auth {
       handle: null,
       expiresAt: nowInSeconds() + sessionLifetimeSeconds,
     };
+    // A new session replaces a sign-in still waiting for the Restore choice.
+    this.#releasePendingSignIn();
     await this.#issue(session);
     return session;
+  }
+
+  /**
+   * Holds a finished sign-in whose account is pending deletion, instead of starting a session
+   * (ADR 0015). Any current session ends. Only Restore and Start as a new user read what is held,
+   * through pendingSignIn, and each starts a session with it.
+   */
+  async holdPendingSignIn(identity: SessionIdentity): Promise<void> {
+    this.end();
+    const held: PendingSignIn = {
+      ...identity,
+      expiresAt: nowInSeconds() + pendingSignInLifetimeSeconds,
+    };
+    await setSignedCookie(
+      this.#context,
+      pendingSignInCookieName,
+      JSON.stringify(held),
+      this.#key(),
+      { ...cookieOptions, maxAge: pendingSignInLifetimeSeconds },
+    );
+  }
+
+  /**
+   * The provider identity of the held sign-in, or undefined when none is held. A cookie that is
+   * missing, tampered with, signed with another key, malformed or expired counts as none.
+   */
+  async pendingSignIn(): Promise<SessionIdentity | undefined> {
+    if (
+      getCookie(
+        this.#context,
+        pendingSignInCookieName,
+        cookieOptions.prefix,
+      ) === undefined
+    ) {
+      return undefined;
+    }
+    const value = await getSignedCookie(
+      this.#context,
+      this.#key(),
+      pendingSignInCookieName,
+      cookieOptions.prefix,
+    );
+    if (!value) {
+      return undefined;
+    }
+    const parsed = pendingSignInSchema.safeParse(parseJson(value));
+    if (!parsed.success) {
+      return undefined;
+    }
+    const { expiresAt, ...identity } = parsed.data;
+    return expiresAt <= nowInSeconds() ? undefined : identity;
+  }
+
+  /** Clears a held sign-in, when there is one. */
+  #releasePendingSignIn(): void {
+    if (
+      getCookie(
+        this.#context,
+        pendingSignInCookieName,
+        cookieOptions.prefix,
+      ) !== undefined
+    ) {
+      deleteCookie(this.#context, pendingSignInCookieName, cookieOptions);
+    }
   }
 
   /** Changes the current session and reissues it with the same expiry. 401 with no session. */

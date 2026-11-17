@@ -5,6 +5,7 @@ import { cache } from "hono/cache";
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../app-env";
 import {
+  accountPendingDeletion,
   type PublisherVariables,
   requirePublisher,
 } from "../auth/require-publisher";
@@ -25,6 +26,7 @@ import { generateSnippets } from "../snippets/snippets";
 import type { RemovalSource } from "../storage/storage";
 import { encodeBrowseCursor } from "./browse-cursor";
 import { BROWSE_BATCH_SIZE, browseQuery, browseSort } from "./browse-request";
+import { deprecationBody } from "./deprecation-request";
 import { descriptionBody } from "./description-request";
 import {
   addressTaken,
@@ -52,13 +54,13 @@ import {
   type VersionResponse,
 } from "./responses";
 
-// Publishing an activity, reading it back, saving a version's description, and taking the
-// activity out of search and returning it (ADR 0005, 0006, 0008, 0015). The version and the
-// listing are read at separate endpoints so each carries its own cache rule: the version's
-// fields never change and are cached for good, and the listing read answers the state that can
-// change, such as each version's description and the listing's removal, and is cached briefly.
-// Publishing runs the checks again and never accepts detection results from the client.
-// Nothing here logs the code, and no error carries it.
+// Publishing an activity, reading it back, saving a version's description, deprecating a version
+// or undoing it, and taking the activity out of search and returning it (ADR 0005, 0006, 0008,
+// 0015). The version and the listing are read at separate endpoints so each carries its own
+// cache rule: the version's fields never change and are cached for good, and the listing read
+// answers the state that can change, such as each version's description and deprecation and the
+// listing's removal, and is cached briefly. Publishing runs the checks again and never accepts
+// detection results from the client. Nothing here logs the code, and no error carries it.
 
 /** Answers 413 Problem Details, the same refusal as oversized code, when the body is too large. */
 const publishBodyLimit = () =>
@@ -103,10 +105,19 @@ const notThePublishersRemoval = (removedBy: RemovalSource) =>
         : "Durables took this activity out of search. Only Durables can return it.",
   });
 
+/** The replacement a deprecation names is refused, beside its field, so web can show it there. */
+const unacceptableReplacement = (message: string) =>
+  new ProblemError({
+    status: 422,
+    detail: message,
+    errors: [{ field: "replacement", message }],
+  });
+
 /**
- * Answers 403 when the signed-in publisher's account handle is not the address's handle, then
- * 404 when the account has no listing at that name. A session with no account owns nothing.
- * It runs before the body is validated, so ownership is answered first.
+ * Answers 403 when the signed-in publisher's account handle is not the address's handle, or the
+ * account is pending deletion (ADR 0015), then 404 when the account has no listing at that name.
+ * A session with no account owns nothing. It runs after requirePublisher and before the body is
+ * validated, so ownership is answered first.
  */
 const requireListingOwner = () =>
   createMiddleware<AppEnv & PublisherVariables>(async (c, next) => {
@@ -115,13 +126,15 @@ const requireListingOwner = () =>
     if (handle === undefined || name === undefined) {
       throw new Error("The listing owner check is mounted without an address.");
     }
-    const { publisher, storage } = c.var;
-    const account = await storage.findAccountByProviderIdentity(publisher);
+    const { account, storage } = c.var;
     if (account?.handle !== handle) {
       throw new ProblemError({
         status: 403,
         detail: "Only the listing's publisher can change it.",
       });
+    }
+    if (account.deletionRequestedAt !== null) {
+      throw accountPendingDeletion();
     }
     const listing = await storage.findListingVersions({ handle, name });
     if (listing === undefined) {
@@ -179,10 +192,9 @@ export const activities = new Hono<AppEnv>()
     zValidator("json", publishBody, problemOnInvalid),
     async (c) => {
       const body = c.req.valid("json");
-      const { publisher, storage } = c.var;
-      // An account's handle is permanent. Until the account exists, the session carries the
-      // chosen handle (ADR 0007).
-      const account = await storage.findAccountByProviderIdentity(publisher);
+      // requirePublisher has refused an account pending deletion (ADR 0015). An account's handle
+      // is permanent. Until the account exists, the session carries the chosen handle (ADR 0007).
+      const { publisher, account, storage } = c.var;
       const handle = account?.handle ?? publisher.handle;
       if (handle === null) {
         throw handleNotChosen();
@@ -338,5 +350,75 @@ export const activities = new Hono<AppEnv>()
       }
       c.header("Cache-Control", noStoreCacheControl);
       return c.json<ListingResponse>(listingResponse(listing), 200);
+    },
+  )
+  // Deprecating a version records its reason and replacement apart from the version, which
+  // never changes (ADR 0015). Deprecating it again replaces both. The version read and the
+  // version document are never touched, and the listing read is never stored through the Cache
+  // API, so there is nothing to clear. Checks run in order: signed in (401), owner (403),
+  // listing exists (404), the body (400), the version is the listing's (404), then the
+  // replacement is another of the listing's versions (422).
+  .put(
+    "/:handle/:name/versions/:version/deprecation",
+    requirePublisher(),
+    requireListingOwner(),
+    zValidator("json", deprecationBody, problemOnInvalid),
+    async (c) => {
+      const address = c.req.param();
+      const { reason, replacement } = c.req.valid("json");
+      const { storage } = c.var;
+      const listing = await storage.findListingVersions(address);
+      if (listing === undefined) {
+        throw noSuchListing(address.handle, address.name);
+      }
+      const published = listing.versions.map(({ version }) => version);
+      if (!published.includes(address.version)) {
+        throw noSuchVersion(formatAddress(address));
+      }
+      if (replacement === address.version) {
+        throw unacceptableReplacement(
+          "A version can't be its own replacement. Choose another version.",
+        );
+      }
+      if (replacement !== null && !published.includes(replacement)) {
+        throw unacceptableReplacement(
+          `${address.handle}/${address.name} has no version ${replacement}. Choose one of its versions.`,
+        );
+      }
+      await storage.deprecateVersion({ ...address, reason, replacement });
+      const deprecated = await storage.findListingVersions(address);
+      if (deprecated === undefined) {
+        throw noSuchListing(address.handle, address.name);
+      }
+      c.header("Cache-Control", noStoreCacheControl);
+      return c.json<ListingResponse>(listingResponse(deprecated), 200);
+    },
+  )
+  // Undoing a deprecation deletes its record (ADR 0015). A version that is not deprecated is
+  // left as it is. Checks run in order: signed in (401), owner (403), listing exists (404), then
+  // the version is the listing's (404).
+  .delete(
+    "/:handle/:name/versions/:version/deprecation",
+    requirePublisher(),
+    requireListingOwner(),
+    async (c) => {
+      const address = c.req.param();
+      const { storage } = c.var;
+      const listing = await storage.findListingVersions(address);
+      if (listing === undefined) {
+        throw noSuchListing(address.handle, address.name);
+      }
+      if (
+        !listing.versions.some(({ version }) => version === address.version)
+      ) {
+        throw noSuchVersion(formatAddress(address));
+      }
+      await storage.undeprecateVersion(address);
+      const undone = await storage.findListingVersions(address);
+      if (undone === undefined) {
+        throw noSuchListing(address.handle, address.name);
+      }
+      c.header("Cache-Control", noStoreCacheControl);
+      return c.json<ListingResponse>(listingResponse(undone), 200);
     },
   );

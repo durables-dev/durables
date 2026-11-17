@@ -75,6 +75,24 @@ export const listingDescriptionSchema = z
     error: listingDescriptionTooLongMessage,
   });
 
+/** The longest reason a version's deprecation may give. */
+export const deprecationReasonMaxLength = 160;
+
+export const deprecationReasonEmptyMessage = "Enter a reason.";
+
+export const deprecationReasonTooLongMessage = `Use at most ${deprecationReasonMaxLength} characters.`;
+
+/**
+ * Why a version is deprecated: 1 to 160 characters once leading and trailing whitespace is
+ * trimmed. The parsed value is the trimmed reason, so whitespace alone counts as empty. The
+ * Deprecate dialog and the offer to deprecate the base version when publishing both use it.
+ */
+export const deprecationReasonSchema = z
+  .string()
+  .trim()
+  .min(1, { error: deprecationReasonEmptyMessage, abort: true })
+  .max(deprecationReasonMaxLength, { error: deprecationReasonTooLongMessage });
+
 /** The listing details from the Details step. A failure's path names the field. */
 export const listingDetailsSchema = z.object({
   title: listingTitleSchema,
