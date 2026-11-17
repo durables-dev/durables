@@ -1,15 +1,23 @@
 import { env } from "cloudflare:workers";
 import { SQLiteSyncDialect, getTableConfig } from "drizzle-orm/sqlite-core";
 import { beforeEach, describe, expect, test } from "vitest";
-import { migration, runMigration, storedListing } from "./migration-testing";
+import {
+  insertEarlyListing,
+  insertEarlyVersion,
+  migration,
+  readTables,
+  rebuildDatabaseBefore,
+  runMigration,
+  runMigrationsAfter,
+} from "./migration-testing";
 import { storedSdks, versions } from "./schema";
-import { readAllRows, seedVersion } from "./seed";
 import { Storage } from "./storage";
 
 // Migration 0003 rebuilds the versions table to widen its versions_sdk check. The setup file
-// has already applied it to an empty table, so each test puts back the table exactly as
-// migration 0001 created it, writes rows the old way, and runs the migration's own statements
-// again. Storage is isolated per test, so dropping the table here touches no other test.
+// has already applied it to an empty table, so each test puts the database back as it was just
+// before migration 0003, with the versions table exactly as migration 0001 created it, writes
+// rows the old way, and runs the migration's own statements again. Storage is isolated per
+// test, so dropping tables here touches no other test.
 
 const storage = () => new Storage(env.DB, env.DOCUMENTS);
 
@@ -17,21 +25,6 @@ const widen = "0003_widen-versions-sdk";
 
 /** Runs migration 0003, as Wrangler runs a migration file. */
 const migrate = () => runMigration(widen);
-
-/** Replaces the versions table with the one migration 0001 created, with its narrow check. */
-const restoreVersionsTableFrom0001 = async (): Promise<void> => {
-  const createVersions = migration("0001_listings-and-versions").queries.find(
-    (query) => query.includes("CREATE TABLE `versions`"),
-  );
-  if (createVersions === undefined) {
-    throw new Error("Migration 0001 no longer creates the versions table.");
-  }
-  await env.DB.batch([
-    env.DB.prepare("PRAGMA defer_foreign_keys = true"),
-    env.DB.prepare("DROP TABLE `versions`"),
-    env.DB.prepare(createVersions),
-  ]);
-};
 
 /** Writes a version row directly, with any SDK text, under the given listing. */
 const insertVersion = (
@@ -72,11 +65,11 @@ const versionsTableSql = async () =>
 
 describe("migration 0003, widen the versions table to every SDK", () => {
   beforeEach(async () => {
-    await restoreVersionsTableFrom0001();
+    await rebuildDatabaseBefore(widen);
   });
 
   test("starts from a table that refuses Go, as before the migration", async () => {
-    const listing = await storedListing();
+    const listing = await insertEarlyListing();
 
     await expect(insertVersion(listing, "2.0.0", "Go")).rejects.toThrow(
       /CHECK constraint failed: versions_sdk/,
@@ -84,28 +77,36 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test("keeps every existing row and its listing reference unchanged", async () => {
-    const python = await storedListing({
+    const python = await insertEarlyListing({
       integrations: ["Amazon S3", "Postgres"],
     });
-    const typescript = await storedListing({
+    const typescript = await insertEarlyListing({
       sdk: "TypeScript",
       integrations: ["Slack"],
     });
-    await storedListing({ sdk: ".NET" });
-    await seedVersion(env.DB, {
-      handle: python.handle,
-      name: python.name,
+    await insertEarlyListing({ sdk: ".NET" });
+    await insertEarlyVersion(python, {
       version: "1.1.0",
       title: "Upload report, retried",
       sdk: "Python",
       integrations: [],
       publishedAt: new Date("2026-10-01T12:00:00Z"),
     });
-    const before = await readAllRows(env.DB);
+    const tables = [
+      "accounts",
+      "provider_accounts",
+      "handles",
+      "retired_handles",
+      "listings",
+      "versions",
+    ];
+    const before = await readTables(...tables);
 
     await migrate();
 
-    expect(await readAllRows(env.DB)).toEqual(before);
+    expect(await readTables(...tables)).toEqual(before);
+    // Storage reads the schema of today, so the later migrations run before it reads.
+    await runMigrationsAfter(widen);
     expect(await storage().findListing(python)).toMatchObject({
       sdk: "Python",
       integrations: ["Amazon S3", "Postgres"],
@@ -118,8 +119,8 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test("leaves every version joined to its listing", async () => {
-    await storedListing();
-    await storedListing({ sdk: ".NET" });
+    await insertEarlyListing();
+    await insertEarlyListing({ sdk: ".NET" });
 
     await migrate();
 
@@ -133,7 +134,7 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test.each(storedSdks)("accepts a version written in %s", async (sdk) => {
-    const listing = await storedListing();
+    const listing = await insertEarlyListing();
     await migrate();
 
     await insertVersion(listing, "2.0.0", sdk);
@@ -149,7 +150,7 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   test.each(["Kotlin", "go", "", "Python "])(
     "rejects a version written in an SDK outside the list: %j",
     async (sdk) => {
-      const listing = await storedListing();
+      const listing = await insertEarlyListing();
       await migrate();
 
       await expect(insertVersion(listing, "2.0.0", sdk)).rejects.toThrow(
@@ -171,8 +172,8 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test("runs with foreign keys enforced, dropping the old table without a reference failure", async () => {
-    await storedListing();
-    await storedListing({ sdk: "TypeScript" });
+    await insertEarlyListing();
+    await insertEarlyListing({ sdk: "TypeScript" });
     const enforced = await env.DB.prepare("pragma foreign_keys").first<{
       foreign_keys: number;
     }>();
@@ -186,7 +187,7 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test("still refuses a version whose listing does not exist", async () => {
-    const listing = await storedListing();
+    const listing = await insertEarlyListing();
     await migrate();
 
     await expect(
@@ -207,7 +208,7 @@ describe("migration 0003, widen the versions table to every SDK", () => {
   });
 
   test("still fills in the published date when a version is written without one", async () => {
-    const listing = await storedListing();
+    const listing = await insertEarlyListing();
     await migrate();
     const now = Math.floor(Date.now() / 1000);
 

@@ -365,11 +365,13 @@ export class Storage {
   ) {
     return [
       // No constraint covers retired handles. The account row is skipped when the handle is
-      // retired, and the provider link's foreign key then fails the whole batch.
+      // retired, and the provider link's foreign key then fails the whole batch. The select
+      // gives a value for every column of accounts, in order. A new account is not pending
+      // deletion.
       this.#db
         .insert(accounts)
         .select(
-          sql`select ${id}, unixepoch() where not exists (select 1 from ${retiredHandles} where ${retiredHandles.handle} = ${handle})`,
+          sql`select ${id}, unixepoch(), null where not exists (select 1 from ${retiredHandles} where ${retiredHandles.handle} = ${handle})`,
         ),
       this.#db
         .insert(providerAccounts)
