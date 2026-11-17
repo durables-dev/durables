@@ -1,6 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Hono } from "hono";
+import { generateSignedCookie } from "hono/cookie";
 import type { AppEnv } from "../app-env";
 import { Auth } from "../auth/auth";
 import { identityScopes } from "../auth/oauth-providers";
@@ -8,7 +9,8 @@ import { onError } from "../http/error-handlers";
 import app from "../index";
 import { readAllRows, seedAccount } from "../storage/seed";
 import {
-  signedInPath,
+  noAccountPath,
+  defaultLandingPath,
   signIn as signInRoutes,
   signInFailedPath,
 } from "./sign-in";
@@ -206,9 +208,16 @@ const cookieNamed = (response: Response, name: string): string | undefined =>
     .map((header) => header.split(";")[0] ?? "")
     .find((pair) => pair.startsWith(`${name}=`));
 
-/** Starts sign-in and returns the state the provider is sent and the cookie that holds it. */
-const start = async (provider: Provider) => {
-  const response = await get(`/api/session/providers/${provider}`);
+/**
+ * Starts sign-in, from a starting page when one is given, and returns the state the provider
+ * is sent, the cookie that holds it, and the cookie that keeps the starting page.
+ */
+const start = async (provider: Provider, startingPage?: string) => {
+  const response = await get(
+    startingPage === undefined
+      ? `/api/session/providers/${provider}`
+      : `/api/session/providers/${provider}?returnTo=${encodeURIComponent(startingPage)}`,
+  );
   expect(response.status).toBe(302);
   const location = new URL(response.headers.get("Location") ?? "");
   const stateCookie = cookieNamed(response, "state") ?? "";
@@ -217,19 +226,27 @@ const start = async (provider: Provider) => {
     location,
     state: location.searchParams.get("state") ?? "",
     stateCookie,
+    startingPageCookie: cookieNamed(response, "__Host-sign-in-return"),
   };
 };
+
+/** The Cookie header a browser sends back with the callback. */
+const cookieHeader = (...cookies: (string | undefined)[]): string =>
+  cookies.filter((cookie) => cookie !== undefined).join("; ");
 
 const callback = (provider: string, query: string, cookie?: string) =>
   get(`/api/session/providers/${provider}/callback?${query}`, cookie);
 
-/** Runs a whole sign-in and returns the callback's response. */
-const signIn = async (provider: Provider) => {
-  const { state, stateCookie } = await start(provider);
+/** Runs a whole sign-in, from a starting page when one is given, and returns the callback's response. */
+const signIn = async (provider: Provider, startingPage?: string) => {
+  const { state, stateCookie, startingPageCookie } = await start(
+    provider,
+    startingPage,
+  );
   return callback(
     provider,
     `code=${code}&state=${encodeURIComponent(state)}`,
-    stateCookie,
+    cookieHeader(stateCookie, startingPageCookie),
   );
 };
 
@@ -252,9 +269,16 @@ const sessionPayload = (response: Response): Record<string, unknown> => {
   >;
 };
 
-const expectFailureRedirect = (response: Response) => {
+/** The failure redirect for a sign-in started from /acme/charge-card, which keeps that page. */
+const failedFromChargeCard =
+  "/sign-in?sign-in=failed&returnTo=%2Facme%2Fcharge-card";
+
+const expectFailureRedirect = (
+  response: Response,
+  location: string = signInFailedPath,
+) => {
   expect(response.status).toBe(302);
-  expect(response.headers.get("Location")).toBe(signInFailedPath);
+  expect(response.headers.get("Location")).toBe(location);
   expect(cookieNamed(response, "__Host-session")).toBeUndefined();
 };
 
@@ -377,14 +401,14 @@ describe("GET /api/session/providers/:provider", () => {
 
 describe("GET /api/session/providers/:provider/callback", () => {
   test.each(providers)(
-    "establishes a session for %s and redirects to the Contribute flow",
+    "establishes a session for %s and sends someone with no account into Contribute at Profile & Handle",
     async (provider) => {
       fakeProvider(provider);
 
       const response = await signIn(provider);
 
       expect(response.status).toBe(302);
-      expect(response.headers.get("Location")).toBe(signedInPath);
+      expect(response.headers.get("Location")).toBe(noAccountPath);
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       expect(await readSession(response)).toEqual({
         user: {
@@ -415,14 +439,14 @@ describe("GET /api/session/providers/:provider/callback", () => {
   );
 
   test.each(providers)(
-    "shows account-exists for a %s account already linked to a Durables account",
+    "shows account-exists, and lands on the home page, for a %s account already linked to a Durables account",
     async (provider) => {
       const { accountId } = fakeProvider(provider);
       await seedAccount(env.DB, { provider, providerAccountId: accountId });
 
       const response = await signIn(provider);
 
-      expect(response.headers.get("Location")).toBe(signedInPath);
+      expect(response.headers.get("Location")).toBe(defaultLandingPath);
       expect(await readSession(response)).toMatchObject({
         user: { provider, accountExists: true },
       });
@@ -584,7 +608,7 @@ describe("GET /api/session/providers/:provider/callback", () => {
 
     const response = await signIn("github");
 
-    expect(response.headers.get("Location")).toBe(signedInPath);
+    expect(response.headers.get("Location")).toBe(noAccountPath);
     expect(await readSession(response)).toMatchObject({
       user: { name: "Ada Lovelace", provider: "github" },
     });
@@ -619,6 +643,281 @@ describe("GET /api/session/providers/:provider/callback", () => {
       expect(JSON.stringify(await readSession(response))).not.toMatch(
         /password/iu,
       );
+    },
+  );
+});
+
+describe("where a finished sign-in lands", () => {
+  const startingPageCookiePrefix = "__Host-sign-in-return=";
+
+  /** The Set-Cookie header for the starting page cookie, if the response sets one. */
+  const startingPageSetCookie = (response: Response): string | undefined =>
+    setCookies(response).find((header) =>
+      header.startsWith(startingPageCookiePrefix),
+    );
+
+  /** A provider account already linked to a Durables account. */
+  const existingAccount = async (provider: Provider) => {
+    const { accountId } = fakeProvider(provider);
+    await seedAccount(env.DB, { provider, providerAccountId: accountId });
+  };
+
+  test("lands an existing account on the home page by default", () => {
+    expect(defaultLandingPath).toBe("/");
+  });
+
+  test("sends someone with no account into Contribute at Profile & Handle", () => {
+    expect(noAccountPath).toBe("/contribute/profile");
+  });
+
+  test("sends a sign-in that did not finish to the Sign in page with the failure indicator", () => {
+    expect(signInFailedPath).toBe("/sign-in?sign-in=failed");
+  });
+
+  test.each(providers)(
+    "returns an existing %s account to the page sign-in started from",
+    async (provider) => {
+      await existingAccount(provider);
+
+      const response = await signIn(provider, "/acme/charge-card");
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe("/acme/charge-card");
+      expect(await readSession(response)).toMatchObject({
+        user: { provider, accountExists: true },
+      });
+    },
+  );
+
+  test("keeps the starting page on the failure redirect when the provider can't be used", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = await app.request(
+      "/api/session/providers/github?returnTo=%2Fsearch%3Fq%3Dstripe",
+      {},
+      { ...env, GITHUB_CLIENT_SECRET: undefined },
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe(
+      "/sign-in?sign-in=failed&returnTo=%2Fsearch%3Fq%3Dstripe",
+    );
+  });
+
+  test("leaves a refused starting page off the failure redirect", async () => {
+    const { state, stateCookie, startingPageCookie } = await start(
+      "github",
+      "https://evil.example/x",
+    );
+
+    const response = await callback(
+      "github",
+      `error=access_denied&state=${encodeURIComponent(state)}`,
+      cookieHeader(stateCookie, startingPageCookie),
+    );
+
+    expect(response.headers.get("Location")).toBe(signInFailedPath);
+  });
+
+  test("keeps the starting page's version and query", async () => {
+    await existingAccount("github");
+
+    const versioned = await signIn("github", "/acme/charge-card@2.0.0");
+    await existingAccount("github");
+    const searched = await signIn("github", "/search?q=stripe&sdk=go");
+
+    expect(versioned.headers.get("Location")).toBe("/acme/charge-card@2.0.0");
+    expect(searched.headers.get("Location")).toBe("/search?q=stripe&sdk=go");
+  });
+
+  test.each(providers)(
+    "keeps the %s starting page in a signed, HttpOnly cookie bound to the state",
+    async (provider) => {
+      const { state, startingPageCookie, response } = await start(
+        provider,
+        "/acme/charge-card",
+      );
+
+      const header = startingPageSetCookie(response) ?? "";
+      expect(header).toContain("HttpOnly");
+      expect(header).toContain("Secure");
+      expect(header).toContain("SameSite=Lax");
+      expect(header).toContain("Path=/");
+      expect(header).toContain("Max-Age=600");
+      const value = decodeURIComponent(
+        startingPageCookie?.slice(startingPageCookiePrefix.length) ?? "",
+      );
+      expect(JSON.parse(value.slice(0, value.lastIndexOf(".")))).toEqual({
+        state,
+        page: "/acme/charge-card",
+      });
+    },
+  );
+
+  test.each(providers)(
+    "clears the starting page cookie after the %s callback",
+    async (provider) => {
+      await existingAccount(provider);
+
+      const response = await signIn(provider, "/acme/charge-card");
+
+      const cleared = startingPageSetCookie(response);
+      expect(cleared).toMatch(/^__Host-sign-in-return=;/);
+      expect(cleared).toContain("Max-Age=0");
+    },
+  );
+
+  test.each([
+    ["an absolute URL", "https://evil.example/x"],
+    ["a protocol-relative URL", "//evil.example"],
+    ["a protocol-relative URL with a path", "//evil.example/acme/charge-card"],
+    ["a backslash that browsers read as a slash", "/\\evil.example"],
+    ["a relative path", "evil.example"],
+  ])("ignores %s as the starting page", async (_case, startingPage) => {
+    await existingAccount("github");
+
+    const started = await start("github", startingPage);
+    const response = await signIn("github", startingPage);
+
+    expect(started.startingPageCookie).toBeUndefined();
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
+  });
+
+  test("lands on the home page when no starting page is given", async () => {
+    await existingAccount("google");
+
+    const { startingPageCookie } = await start("google");
+    const response = await signIn("google");
+
+    expect(startingPageCookie).toBeUndefined();
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
+  });
+
+  test("falls back to the home page when the starting page cookie is lost", async () => {
+    await existingAccount("github");
+    const { state, stateCookie } = await start("github", "/acme/charge-card");
+
+    const response = await callback(
+      "github",
+      `code=${code}&state=${encodeURIComponent(state)}`,
+      stateCookie,
+    );
+
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
+  });
+
+  test("falls back to the home page when the starting page cookie is tampered with", async () => {
+    await existingAccount("github");
+    const { state, stateCookie, startingPageCookie } = await start(
+      "github",
+      "/acme/charge-card",
+    );
+    const tampered = (startingPageCookie ?? "").replace(
+      encodeURIComponent("/acme/charge-card"),
+      encodeURIComponent("/acme/refund-card"),
+    );
+    expect(tampered).not.toBe(startingPageCookie);
+
+    const response = await callback(
+      "github",
+      `code=${code}&state=${encodeURIComponent(state)}`,
+      cookieHeader(stateCookie, tampered),
+    );
+
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
+  });
+
+  test("falls back to the home page when the starting page belongs to another sign-in", async () => {
+    await existingAccount("github");
+    const earlier = await start("github", "/acme/charge-card");
+    const { state, stateCookie } = await start("github");
+
+    const response = await callback(
+      "github",
+      `code=${code}&state=${encodeURIComponent(state)}`,
+      cookieHeader(stateCookie, earlier.startingPageCookie),
+    );
+
+    expect(earlier.startingPageCookie).toBeDefined();
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
+  });
+
+  test("checks the kept starting page again at the callback", async () => {
+    await existingAccount("github");
+    const { state, stateCookie } = await start("github");
+    // A cookie signed with the real key, so only the callback's own check can refuse it.
+    const signed = await generateSignedCookie(
+      "sign-in-return",
+      JSON.stringify({ state, page: "//evil.example" }),
+      env.SESSION_SIGNING_KEY,
+      { prefix: "host" },
+    );
+
+    const response = await callback(
+      "github",
+      `code=${code}&state=${encodeURIComponent(state)}`,
+      cookieHeader(stateCookie, signed.split(";")[0]),
+    );
+
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
+  });
+
+  test.each(providers)(
+    "sends someone with no %s account into Contribute at Profile & Handle, whatever the starting page",
+    async (provider) => {
+      fakeProvider(provider);
+
+      const response = await signIn(provider, "/acme/charge-card");
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe(noAccountPath);
+      expect(await readSession(response)).toMatchObject({
+        user: { provider, accountExists: false },
+      });
+    },
+  );
+
+  test.each(providers)(
+    "sends a cancelled %s sign-in to the Sign in page, keeping the starting page there, and clears the cookie",
+    async (provider) => {
+      fakeProvider(provider);
+      const { state, stateCookie, startingPageCookie } = await start(
+        provider,
+        "/acme/charge-card",
+      );
+
+      const response = await callback(
+        provider,
+        `error=access_denied&state=${encodeURIComponent(state)}`,
+        cookieHeader(stateCookie, startingPageCookie),
+      );
+
+      expectFailureRedirect(response, failedFromChargeCard);
+      expect(startingPageSetCookie(response)).toContain("Max-Age=0");
+    },
+  );
+
+  test.each(providers)(
+    "sends a %s sign-in whose exchange fails to the Sign in page, keeping the starting page",
+    async (provider) => {
+      vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      fakeProvider(provider, {
+        token: () =>
+          Promise.resolve(
+            Response.json(
+              {
+                error: "invalid_grant",
+                error_description: "The code passed is incorrect or expired.",
+              },
+              { status: 400 },
+            ),
+          ),
+      });
+
+      const response = await signIn(provider, "/acme/charge-card");
+
+      expectFailureRedirect(response, failedFromChargeCard);
     },
   );
 });
@@ -735,7 +1034,7 @@ describe("GitLab sign-in, hand-written beside the package", () => {
 
     const response = await signIn("gitlab");
 
-    expect(response.headers.get("Location")).toBe(signedInPath);
+    expect(response.headers.get("Location")).toBe(noAccountPath);
     expect(sessionPayload(response)).toMatchObject({
       provider: "gitlab",
       name: "Ada Lovelace",

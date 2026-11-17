@@ -18,3 +18,12 @@ test("each provider starts at its own API start route", () => {
     "/api/session/providers/microsoft",
   ]);
 });
+
+test("carries the page a finished sign-in returns to, encoded", () => {
+  expect(signInStartPath("github", "/contribute")).toBe(
+    "/api/session/providers/github?returnTo=%2Fcontribute",
+  );
+  expect(signInStartPath("google", "/search?q=stripe")).toBe(
+    "/api/session/providers/google?returnTo=%2Fsearch%3Fq%3Dstripe",
+  );
+});
