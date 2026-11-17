@@ -76,7 +76,7 @@ export const seedRetiredHandle = async (
  */
 export const seedListing = async (
   database: D1Database,
-  listing: { handle: string; name: string; description: string },
+  listing: { handle: string; name: string },
 ): Promise<void> => {
   await drizzle(database).insert(listings).values(listing);
 };
@@ -84,7 +84,7 @@ export const seedListing = async (
 /**
  * Adds a version under an existing listing. Publishing creates only a listing's first
  * version; later versions are a later increment, so tests write them here. The published date
- * defaults to now.
+ * defaults to now, and the description to empty.
  */
 export const seedVersion = async (
   database: D1Database,
@@ -96,24 +96,36 @@ export const seedVersion = async (
     sdk: Sdk;
     integrations: string[];
     publishedAt?: Date;
+    description?: string;
+    whatChanged?: string | null;
+    basedOn?: string | null;
   },
 ): Promise<void> => {
   await drizzle(database).insert(versions).values(version);
 };
 
 /**
- * Changes a listing's current description directly, so a test that reads the listing need not
+ * Changes a version's current description directly, so a test that reads the listing need not
  * sign in and save it.
  */
 export const seedDescription = async (
   database: D1Database,
-  listing: { handle: string; name: string; description: string },
+  version: {
+    handle: string;
+    name: string;
+    version: string;
+    description: string;
+  },
 ): Promise<void> => {
   await drizzle(database)
-    .update(listings)
-    .set({ description: listing.description })
+    .update(versions)
+    .set({ description: version.description })
     .where(
-      and(eq(listings.handle, listing.handle), eq(listings.name, listing.name)),
+      and(
+        eq(versions.handle, version.handle),
+        eq(versions.name, version.name),
+        eq(versions.version, version.version),
+      ),
     );
 };
 

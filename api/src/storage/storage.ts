@@ -8,6 +8,7 @@ import {
   listings,
   providerAccounts,
   retiredHandles,
+  versionDeprecations,
   versions,
   type Provider,
   type Sdk,
@@ -60,7 +61,7 @@ export type CreateAccountResult =
 /** What publishing records for a new listing and its first version. */
 export interface NewListing extends Address {
   title: string;
-  /** The one-line description. It belongs to the listing and can change later. */
+  /** The version's one-line description. It belongs to the version and can change later. */
   description: string;
   sdk: Sdk;
   /** The integrations implied by the code's imports. Empty when there are none. */
@@ -86,10 +87,39 @@ export interface LatestAddress extends Address {
   publishedAt: Date;
 }
 
-/** A listing's current one-line description, which can change after publishing (ADR 0006). */
-export interface ListingDescription {
+/** A version's deprecation: why, and the version of the same listing to use instead, if any. */
+export interface Deprecation {
+  reason: string;
+  /** Null when there is no replacement. */
+  replacement: string | null;
+}
+
+/**
+ * One version of a listing as the listing read shows it: its fixed fields from publishing and
+ * its state that can change afterwards (ADR 0006, ADR 0015).
+ */
+export interface ListingVersion {
+  version: string;
+  publishedAt: Date;
+  /** The What changed note. Null for a version published before notes existed. */
+  whatChanged: string | null;
+  /** The version it was based on. Null for a first version. */
+  basedOn: string | null;
+  /** Null when the version is not deprecated. */
+  deprecation: Deprecation | null;
+  /** The version's current one-line description. */
+  description: string;
+}
+
+/** A listing and every one of its versions, from the highest version number down. */
+export interface ListingVersions {
   handle: string;
   name: string;
+  versions: ListingVersion[];
+}
+
+/** A version's new current description, at the version's address. */
+export interface VersionDescription extends Address {
   description: string;
 }
 
@@ -122,8 +152,9 @@ export interface BrowseFilter {
 }
 
 /**
- * A browse result: a listing and its relevance score. Each word in the title scores 3 and each
- * word in the description scores 1. The score is 0 when there are no words.
+ * A browse result: a listing and its relevance score, at its highest version. Each word in that
+ * version's title scores 3 and each word in that version's description scores 1. The score is 0
+ * when there are no words.
  */
 export interface BrowseListing extends Listing {
   score: number;
@@ -380,20 +411,31 @@ export class Storage {
     ] as const;
   }
 
-  /** The inserts that create a listing and its first version. */
+  /** The inserts that create a listing and its first version, which holds the description. */
   #listingInserts(listing: NewListing) {
     const { handle, name, version, title, description, sdk } = listing;
     const integrations = [...listing.integrations];
     return [
-      this.#db.insert(listings).values({ handle, name, description }),
+      this.#db.insert(listings).values({ handle, name }),
       this.#db
         .insert(versions)
-        .values({ handle, name, version, title, sdk, integrations })
+        .values({
+          handle,
+          name,
+          version,
+          title,
+          sdk,
+          integrations,
+          description,
+        })
         .returning({ publishedAt: versions.publishedAt }),
     ] as const;
   }
 
-  /** The listing at an address, with its version's fields, or undefined when there is none. */
+  /**
+   * The listing at an address, with that version's fields and current description, or
+   * undefined when there is none.
+   */
   async findListing({
     handle,
     name,
@@ -405,7 +447,7 @@ export class Storage {
         name: versions.name,
         version: versions.version,
         title: versions.title,
-        description: listings.description,
+        description: versions.description,
         sdk: versions.sdk,
         integrations: versions.integrations,
         publishedAt: versions.publishedAt,
@@ -454,7 +496,7 @@ export class Storage {
     const score =
       words.length === 0
         ? sql<number>`0`
-        : sql<number>`(select coalesce(sum(${like(versions.title, word)} * 3 + ${like(listings.description, word)}), 0) from ${eachWord})`;
+        : sql<number>`(select coalesce(sum(${like(versions.title, word)} * 3 + ${like(versions.description, word)}), 0) from ${eachWord})`;
 
     const ranked = this.#db.$with("ranked").as(
       this.#db
@@ -463,7 +505,7 @@ export class Storage {
           name: versions.name,
           version: versions.version,
           title: versions.title,
-          description: listings.description,
+          description: versions.description,
           sdk: versions.sdk,
           integrations: versions.integrations,
           publishedAt: versions.publishedAt,
@@ -596,7 +638,7 @@ export class Storage {
   }
 
   /**
-   * The version at an address, without the listing's description, or undefined when there
+   * The version at an address, with only its fields that never change, or undefined when there
    * is none. Addresses match exactly, so a wrong-case address finds nothing.
    */
   async findVersion({
@@ -626,45 +668,83 @@ export class Storage {
   }
 
   /**
-   * The current description of the listing at a handle and name, or undefined when there is
-   * none. Handles and names match exactly, so a wrong-case one finds nothing.
+   * The listing at a handle and name with every one of its versions, from the highest version
+   * number down, or undefined when there is no listing. Each version carries its current
+   * description and its deprecation. Handles and names match exactly, so a wrong-case one
+   * finds nothing.
    */
-  async findListingDescription({
+  async findListingVersions({
     handle,
     name,
-  }: Omit<Address, "version">): Promise<ListingDescription | undefined> {
-    return this.#db
-      .select({
-        handle: listings.handle,
-        name: listings.name,
-        description: listings.description,
-      })
-      .from(listings)
-      .where(and(eq(listings.handle, handle), eq(listings.name, name)))
-      .get();
+  }: Omit<Address, "version">): Promise<ListingVersions | undefined> {
+    const [[listing], rows] = await this.#db.batch([
+      this.#db
+        .select({ handle: listings.handle, name: listings.name })
+        .from(listings)
+        .where(and(eq(listings.handle, handle), eq(listings.name, name))),
+      this.#db
+        .select({
+          version: versions.version,
+          publishedAt: versions.publishedAt,
+          whatChanged: versions.whatChanged,
+          basedOn: versions.basedOn,
+          description: versions.description,
+          deprecationReason: versionDeprecations.reason,
+          replacement: versionDeprecations.replacement,
+        })
+        .from(versions)
+        .leftJoin(
+          versionDeprecations,
+          and(
+            eq(versionDeprecations.handle, versions.handle),
+            eq(versionDeprecations.name, versions.name),
+            eq(versionDeprecations.version, versions.version),
+          ),
+        )
+        .where(and(eq(versions.handle, handle), eq(versions.name, name)))
+        .orderBy(highestVersionFirst()),
+    ]);
+    if (listing === undefined) {
+      return undefined;
+    }
+    return {
+      ...listing,
+      versions: rows.map(
+        ({ deprecationReason, replacement, ...version }): ListingVersion => ({
+          ...version,
+          deprecation:
+            deprecationReason === null
+              ? null
+              : { reason: deprecationReason, replacement },
+        }),
+      ),
+    };
   }
 
   /**
-   * Changes the current description of the listing at a handle and name, and returns the
-   * listing as stored, or undefined when no listing is there. Only the description column
-   * changes. Version rows and version documents are never touched (ADR 0006). Handles and
-   * names match exactly.
+   * Changes the current description of the version at an address, and returns true, or false
+   * when no version is there. Only that version's description column changes. Other versions,
+   * the version's published fields and its version document are never touched (ADR 0006,
+   * ADR 0015). Addresses match exactly.
    */
-  async updateListingDescription({
+  async updateVersionDescription({
     handle,
     name,
+    version,
     description,
-  }: ListingDescription): Promise<ListingDescription | undefined> {
-    return this.#db
-      .update(listings)
+  }: VersionDescription): Promise<boolean> {
+    const updated = await this.#db
+      .update(versions)
       .set({ description })
-      .where(and(eq(listings.handle, handle), eq(listings.name, name)))
-      .returning({
-        handle: listings.handle,
-        name: listings.name,
-        description: listings.description,
-      })
-      .get();
+      .where(
+        and(
+          eq(versions.handle, handle),
+          eq(versions.name, name),
+          eq(versions.version, version),
+        ),
+      )
+      .returning({ version: versions.version });
+    return updated.length === 1;
   }
 
   /**
