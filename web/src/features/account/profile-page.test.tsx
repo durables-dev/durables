@@ -1,7 +1,7 @@
 import { routes } from "@/app/router";
 import type { SessionUser } from "@/lib/session";
 import "@/styles/global.css";
-import { delay, http, HttpResponse } from "msw";
+import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, test } from "vitest";
 import { render } from "vitest-browser-react";
@@ -121,6 +121,13 @@ function serverError() {
   return HttpResponse.json(
     { type: "about:blank", title: "Internal Server Error", status: 500 },
     { status: 500, headers: { "Content-Type": "application/problem+json" } },
+  );
+}
+
+function unauthorized() {
+  return HttpResponse.json(
+    { type: "about:blank", title: "Unauthorized", status: 401 },
+    { status: 401, headers: { "Content-Type": "application/problem+json" } },
   );
 }
 
@@ -587,11 +594,17 @@ describe("when a read fails", () => {
 describe("after signing out", () => {
   test("opening the profile again in the same tab never shows the last owner's details", async () => {
     serveOwner();
+    // Signing out ends the session on the server too: from then on the session read answers
+    // signed out and the profile reads answer 401.
     worker.use(
-      http.delete(
-        "/api/session",
-        () => new HttpResponse(null, { status: 204 }),
-      ),
+      http.delete("/api/session", () => {
+        worker.use(
+          http.get("/api/session", () => HttpResponse.json({ user: null })),
+          http.get("/api/profile", () => unauthorized()),
+          http.get("/api/profile/activities", () => unauthorized()),
+        );
+        return new HttpResponse(null, { status: 204 });
+      }),
     );
     const { screen, router } = await openProfile();
     await expect.element(heading(screen)).toBeVisible();
@@ -603,19 +616,22 @@ describe("after signing out", () => {
     await screen.getByRole("menuitem", { name: "Sign out" }).click();
     await expect.poll(() => router.state.location.pathname).toBe("/");
 
-    // The profile read now hangs, so only a cached profile could show the details.
-    worker.use(
-      http.get("/api/profile", async () => {
-        await delay("infinite");
-        return HttpResponse.json(owner);
-      }),
-    );
+    // Watch every change to the page from here on, so a details flash of any length is seen.
+    let shownEmail = false;
+    const watcher = new MutationObserver(() => {
+      if (document.body.textContent.includes("david@example.com")) {
+        shownEmail = true;
+      }
+    });
+    watcher.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
     await router.navigate("/profile");
 
-    await expect
-      .element(screen.getByText("Loading your profile…"))
-      .toBeVisible();
-    expect(screen.getByText("david@example.com").elements()).toHaveLength(0);
-    expect(heading(screen).elements()).toHaveLength(0);
+    await expect.poll(() => router.state.location.pathname).toBe("/sign-in");
+    watcher.disconnect();
+    expect(shownEmail).toBe(false);
   });
 });
