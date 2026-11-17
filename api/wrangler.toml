@@ -6,6 +6,12 @@ name = "durables"
 main = "src/dev.ts"
 compatibility_date = "2026-10-01"
 
+# The daily final-deletion job (docs/adr/0015), at 03:00 UTC. infrastructure/ reads this list
+# at synth, so this is the only place the schedule is set. To run it locally, start `npm run dev`
+# and POST {"cron":"0 3 * * *"} to /cdn-cgi/local/explorer/api/local/scheduled?worker=durables.
+[triggers]
+crons = ["0 3 * * *"]
+
 # The website's build, served by this Worker. API routes run first.
 [assets]
 directory = "../web/dist"

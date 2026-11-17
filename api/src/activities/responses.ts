@@ -7,6 +7,7 @@ import type {
   Listing,
   ListingVersion,
   ListingVersions,
+  RemovalSource,
   Sdk,
   Version,
   VersionDocument,
@@ -14,7 +15,8 @@ import type {
 
 // What the activities resource answers with. A version response holds only fields that can
 // never change, because it is cached for good (ADR 0006). Each version's description and
-// deprecation can change, so they are answered by the listing response alone (ADR 0015).
+// deprecation can change, and so can the listing's removal from search, so they are answered by
+// the listing response alone (ADR 0015).
 
 /** A published version, as `GET /api/activities/:handle/:name/versions/:version` answers it. */
 export interface VersionResponse extends Address {
@@ -57,10 +59,18 @@ export interface ListingVersionResponse {
   description: string;
 }
 
+/**
+ * Who a listing's removal from search is shown as. A removal when the publisher's account was
+ * deleted is shown as the publisher's own (D27).
+ */
+export type ShownRemoval = Exclude<RemovalSource, "account-deletion">;
+
 /** A listing, as `GET /api/activities/:handle/:name` answers it. */
 export interface ListingResponse {
   handle: string;
   name: string;
+  /** Who took the listing out of search. Null while it is listed. */
+  removedBy: ShownRemoval | null;
   /** Every version, newest first, so the first is the latest. */
   versions: ListingVersionResponse[];
 }
@@ -167,14 +177,22 @@ const listingVersionResponse = ({
   description,
 });
 
+/** Who a removal is shown as. Account deletion is shown as the publisher (D27). */
+export const shownRemoval = (
+  removedBy: RemovalSource | null,
+): ShownRemoval | null =>
+  removedBy === "account-deletion" ? "publisher" : removedBy;
+
 /** The listing response, from the listing and its versions, newest first. */
 export const listingResponse = ({
   handle,
   name,
+  removedBy,
   versions,
 }: ListingVersions): ListingResponse => ({
   handle,
   name,
+  removedBy: shownRemoval(removedBy),
   versions: versions.map(listingVersionResponse),
 });
 

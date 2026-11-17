@@ -259,6 +259,7 @@ describe("reading a published activity", () => {
     expect(await response.json<ListingResponse>()).toEqual({
       handle: address.handle,
       name: address.name,
+      removedBy: null,
       versions: [
         {
           version: "1.0.0",
@@ -312,6 +313,7 @@ describe("reading a published activity", () => {
     expect(await response.json<ListingResponse>()).toEqual({
       handle: address.handle,
       name: address.name,
+      removedBy: null,
       versions: [
         {
           version: "2.0.0",

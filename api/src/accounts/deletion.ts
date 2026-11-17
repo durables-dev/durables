@@ -13,3 +13,10 @@ export const finalDeletionAt = (deletionRequestedAt: Date): Date =>
     deletionRequestedAt.getTime() +
       deletionGracePeriodDays * millisecondsPerDay,
   );
+
+/**
+ * The latest time a deletion could have been asked for and be final at this time: 30 days
+ * earlier. Every deletion asked for at or before it is due.
+ */
+export const latestDueDeletionRequest = (now: Date): Date =>
+  new Date(now.getTime() - deletionGracePeriodDays * millisecondsPerDay);

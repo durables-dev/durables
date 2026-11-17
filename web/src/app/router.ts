@@ -50,6 +50,11 @@ export const routes: RouteObject[] = [
         handle: restoreHandle,
       },
       {
+        // The signed-in owner's profile. Only its owner can see it.
+        path: "/profile",
+        lazy: () => import("@/features/account/profile-route"),
+      },
+      {
         // The results page. The words and filters are in the address's search params.
         path: "/search",
         lazy: () => import("@/features/search/search-route"),
