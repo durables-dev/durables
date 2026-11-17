@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { ApplyGlobalResponse } from "hono/client";
 import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
+import { account } from "./accounts/account";
 import { activities } from "./activities/activities";
 import type { AppEnv } from "./app-env";
 import { auth } from "./auth/auth-middleware";
@@ -47,6 +48,7 @@ export const createProductionApp = () =>
     .get("/api/health", (c) => c.json({ ok: true }))
     .route("/api/session", session)
     .route("/api/session/providers", signIn)
+    .route("/api/account", account)
     .route("/api/handles", handles)
     .route("/api/checks", checks)
     .route("/api/activities", activities)

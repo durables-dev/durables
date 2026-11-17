@@ -8,9 +8,11 @@ import { identityScopes } from "../auth/oauth-providers";
 import { onError } from "../http/error-handlers";
 import app from "../index";
 import { readAllRows, seedAccount } from "../storage/seed";
+import { Storage } from "../storage/storage";
 import {
   noAccountPath,
   defaultLandingPath,
+  restorePath,
   signIn as signInRoutes,
   signInFailedPath,
 } from "./sign-in";
@@ -452,6 +454,94 @@ describe("GET /api/session/providers/:provider/callback", () => {
       });
     },
   );
+
+  test.each(providers)(
+    "holds the sign-in for the Restore choice, with no session, when the %s account is pending deletion",
+    async (provider) => {
+      const { accountId } = fakeProvider(provider);
+      const account = await seedAccount(env.DB, {
+        provider,
+        providerAccountId: accountId,
+      });
+      await new Storage(env.DB, env.DOCUMENTS).requestAccountDeletion(
+        account.accountId,
+      );
+
+      const response = await signIn(provider, "/acme/charge-card");
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe(restorePath);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      // No session is issued: the only session header clears any the browser had.
+      expect(
+        setCookies(response).filter((header) =>
+          header.startsWith("__Host-session="),
+        ),
+      ).toEqual([expect.stringMatching(/^__Host-session=;.*Max-Age=0/u)]);
+      const held = cookieNamed(response, "__Host-pending-sign-in");
+      expect(held).toBeDefined();
+      const session = await get("/api/session", held);
+      expect(await session.json()).toEqual({
+        user: null,
+        restore: {
+          handle: account.handle,
+          finalAt: expect.any(String) as string,
+        },
+      });
+    },
+  );
+
+  test("sends a provider account whose deletion is final into Contribute as someone new", async () => {
+    const { accountId } = fakeProvider("github");
+    const account = await seedAccount(env.DB, {
+      provider: "github",
+      providerAccountId: accountId,
+    });
+    const storage = new Storage(env.DB, env.DOCUMENTS);
+    await storage.requestAccountDeletion(account.accountId);
+    await storage.finalizeAccountDeletion(account.accountId);
+
+    const response = await signIn("github", "/acme/charge-card");
+
+    expect(response.headers.get("Location")).toBe(noAccountPath);
+    expect(cookieNamed(response, "__Host-pending-sign-in")).toBeUndefined();
+    expect(await readSession(response)).toMatchObject({
+      user: { handle: null, accountExists: false },
+    });
+  });
+
+  test("releases a held sign-in when a sign-in with an account finishes", async () => {
+    const { accountId } = fakeProvider("github");
+    await seedAccount(env.DB, {
+      provider: "github",
+      providerAccountId: accountId,
+    });
+    const { state, stateCookie } = await start("github");
+    const held = await generateSignedCookie(
+      "pending-sign-in",
+      JSON.stringify({
+        provider: "github",
+        providerAccountId: "someone-else",
+        name: "Someone Else",
+        expiresAt: Math.floor(Date.now() / 1000) + 600,
+      }),
+      env.SESSION_SIGNING_KEY,
+      { prefix: "host", path: "/", secure: true },
+    );
+
+    const response = await callback(
+      "github",
+      `code=${code}&state=${encodeURIComponent(state)}`,
+      cookieHeader(stateCookie, held.split(";")[0]),
+    );
+
+    expect(response.headers.get("Location")).toBe(defaultLandingPath);
+    expect(
+      setCookies(response).find((header) =>
+        header.startsWith("__Host-pending-sign-in=;"),
+      ),
+    ).toContain("Max-Age=0");
+  });
 
   test.each(providers)(
     "redirects with the failure indicator when the %s state does not match",
