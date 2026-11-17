@@ -1,4 +1,4 @@
-import { and, count, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { containsPattern, LIKE_ESCAPE } from "./like-pattern";
@@ -116,6 +116,33 @@ export interface ListingVersions {
   handle: string;
   name: string;
   versions: ListingVersion[];
+}
+
+/**
+ * An account as its owner's profile shows it: its handle, when it was created, and how many of
+ * its listings are in search.
+ */
+export interface AccountProfile {
+  handle: string;
+  /** When the account was created, at its first publish. */
+  joinedAt: Date;
+  /** The account's listings that are in search. Removed listings are not counted. */
+  listedCount: number;
+}
+
+/**
+ * One of an account's listings as its owner's activities list shows it, at its highest version
+ * number. Removed listings are included.
+ */
+export interface OwnedListing extends Address {
+  title: string;
+  sdk: Sdk;
+  /** How many versions the listing has. */
+  versionCount: number;
+  /** When the listing's highest version was published. */
+  publishedAt: Date;
+  /** True when the listing is out of search, whoever removed it. */
+  removed: boolean;
 }
 
 /** A version's new current description, at the version's address. */
@@ -604,6 +631,92 @@ export class Storage {
         .where(matches),
     ]);
     return { listings: rows, count: total?.count ?? 0 };
+  }
+
+  /**
+   * The profile of the account a provider identity is linked to, or undefined when it has
+   * none. The listed count leaves out every removed listing, whoever removed it.
+   */
+  async findAccountProfile(
+    identity: ProviderIdentity,
+  ): Promise<AccountProfile | undefined> {
+    const listed = this.#db
+      .select({ count: count() })
+      .from(listings)
+      .where(
+        and(eq(listings.handle, handles.handle), isNull(listings.removedBy)),
+      );
+    return this.#db
+      .select({
+        handle: handles.handle,
+        joinedAt: accounts.createdAt,
+        listedCount: sql<number>`(${listed})`.mapWith(Number),
+      })
+      .from(providerAccounts)
+      .innerJoin(accounts, eq(accounts.id, providerAccounts.accountId))
+      .innerJoin(handles, eq(handles.accountId, accounts.id))
+      .where(
+        and(
+          eq(providerAccounts.provider, identity.provider),
+          eq(providerAccounts.providerAccountId, identity.providerAccountId),
+        ),
+      )
+      .get();
+  }
+
+  /**
+   * Every listing under a handle, removed ones included, each at its highest version number
+   * with its version count. Newest published first, then by name. Handles match exactly, so
+   * no other handle's listings are ever included.
+   */
+  async listOwnedListings(handle: string): Promise<OwnedListing[]> {
+    const ranked = this.#db.$with("ranked").as(
+      this.#db
+        .select({
+          handle: versions.handle,
+          name: versions.name,
+          version: versions.version,
+          title: versions.title,
+          sdk: versions.sdk,
+          publishedAt: versions.publishedAt,
+          removedBy: listings.removedBy,
+          versionCount:
+            sql<number>`count(*) over (partition by ${versions.handle}, ${versions.name})`.as(
+              "version_count",
+            ),
+          rank: sql<number>`row_number() over (partition by ${versions.handle}, ${versions.name} order by ${highestVersionFirst()})`.as(
+            "rank",
+          ),
+        })
+        .from(versions)
+        .innerJoin(
+          listings,
+          and(
+            eq(listings.handle, versions.handle),
+            eq(listings.name, versions.name),
+          ),
+        )
+        .where(eq(versions.handle, handle)),
+    );
+    const rows = await this.#db
+      .with(ranked)
+      .select({
+        handle: ranked.handle,
+        name: ranked.name,
+        version: ranked.version,
+        title: ranked.title,
+        sdk: ranked.sdk,
+        publishedAt: ranked.publishedAt,
+        removedBy: ranked.removedBy,
+        versionCount: ranked.versionCount,
+      })
+      .from(ranked)
+      .where(eq(ranked.rank, 1))
+      .orderBy(desc(ranked.publishedAt), ranked.name);
+    return rows.map(({ removedBy, ...listing }): OwnedListing => ({
+      ...listing,
+      removed: removedBy !== null,
+    }));
   }
 
   /**
