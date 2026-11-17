@@ -24,7 +24,7 @@ export function OwnedActivityRow({ activity }: OwnedActivityRowProps) {
     <div className={styles["row"]}>
       <ActivityTile title={activity.title} handle={activity.handle} />
       <div className={styles["identity"]}>
-        <p className={styles["title-line"]}>
+        <p className={styles["titleLine"]}>
           <Link to={listingPath(activity)} className={styles["title"]}>
             {activity.title}
           </Link>
