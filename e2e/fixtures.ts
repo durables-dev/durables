@@ -427,7 +427,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
       // The document is written before the row, as publishing does, so the row never points at
       // a missing document.
       await executeSql(
-        `INSERT INTO versions (handle, name, version, title, sdk, integrations) SELECT handle, name, ${sqlValue(version)}, title, sdk, integrations FROM versions WHERE handle = ${sqlValue(handle)} AND name = ${sqlValue(name)} AND version = ${sqlValue(first)};`,
+        `INSERT INTO versions (handle, name, version, title, sdk, integrations, description) SELECT handle, name, ${sqlValue(version)}, title, sdk, integrations, description FROM versions WHERE handle = ${sqlValue(handle)} AND name = ${sqlValue(name)} AND version = ${sqlValue(first)};`,
       );
       return later;
     });

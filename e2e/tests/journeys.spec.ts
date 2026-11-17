@@ -488,7 +488,7 @@ test(
 );
 
 test(
-  "a publisher updates their listing's description from the publisher bar and sees it on the page, after a reload, on an older version's page and on their search result card",
+  "a publisher updates their listing's description from the publisher bar and sees it on the page, after a reload and on their search result card, while an older version's page keeps its own",
   { tag: "@journey" },
   async ({
     page,
@@ -608,15 +608,15 @@ test(
       await expect(main.getByText(before, { exact: true })).toHaveCount(0);
     });
 
-    await test.step("open the older version's page and see the new description", async () => {
+    await test.step("open the older version's page and still see its own description", async () => {
       await page.goto(`/${older}`);
 
       await expect(
         main.getByRole("heading", { level: 1, name: title }),
       ).toBeVisible();
       await expect(main.getByText(older, { exact: true })).toBeVisible();
-      await expect(main.getByText(after, { exact: true })).toBeVisible();
-      await expect(main.getByText(before, { exact: true })).toHaveCount(0);
+      await expect(main.getByText(before, { exact: true })).toBeVisible();
+      await expect(main.getByText(after, { exact: true })).toHaveCount(0);
       await expectAccessible();
     });
   },

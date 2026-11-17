@@ -51,12 +51,12 @@ import {
   type VersionResponse,
 } from "./responses";
 
-// Publishing an activity, reading it back, and saving its listing's description (ADR 0005,
-// 0006, 0008). The version and the listing are read at separate endpoints so each carries its
-// own cache rule: the version's fields never change and are cached for good, and the listing's
-// description can change and is cached briefly. Publishing runs the checks again and never
-// accepts detection results from the client. Nothing here logs the code, and no error
-// carries it.
+// Publishing an activity, reading it back, and saving a version's description (ADR 0005, 0006,
+// 0008, 0015). The version and the listing are read at separate endpoints so each carries its
+// own cache rule: the version's fields never change and are cached for good, and the listing
+// read answers every version's state that can change, such as its description, and is cached
+// briefly. Publishing runs the checks again and never accepts detection results from the
+// client. Nothing here logs the code, and no error carries it.
 
 /** Answers 413 Problem Details, the same refusal as oversized code, when the body is too large. */
 const publishBodyLimit = () =>
@@ -111,7 +111,7 @@ const requireListingOwner = () =>
         detail: "Only the listing's publisher can change it.",
       });
     }
-    const listing = await storage.findListingDescription({ handle, name });
+    const listing = await storage.findListingVersions({ handle, name });
     if (listing === undefined) {
       throw noSuchListing(handle, name);
     }
@@ -246,22 +246,22 @@ export const activities = new Hono<AppEnv>()
       return c.json<VersionResponse>(versionResponse(version, document), 200);
     },
   )
+  // Every version, newest first, with its current description and deprecation. Never stored
+  // through the Cache API and never part of the version read (ADR 0006, ADR 0015).
   .get("/:handle/:name", async (c) => {
     const { handle, name } = c.req.param();
-    const listing = await c.var.storage.findListingDescription({
-      handle,
-      name,
-    });
+    const listing = await c.var.storage.findListingVersions({ handle, name });
     if (listing === undefined) {
       throw noSuchListing(handle, name);
     }
     c.header("Cache-Control", listingCacheControl);
     return c.json<ListingResponse>(listingResponse(listing), 200);
   })
-  // Saving the description changes the listing row only. The version documents are never
-  // rewritten, because version responses are cached for good (ADR 0006). The listing read is
-  // never stored through the Cache API, so there is nothing to clear. Checks run in order:
-  // signed in (401), owner (403), listing exists (404), then the description (400).
+  // Saving a description changes the named version's description only (ADR 0015). Other
+  // versions are untouched, and version documents are never rewritten, because version
+  // responses are cached for good (ADR 0006). The listing read is never stored through the
+  // Cache API, so there is nothing to clear. Checks run in order: signed in (401), owner (403),
+  // listing exists (404), the body (400), then the version is the listing's (404).
   .patch(
     "/:handle/:name",
     requirePublisher(),
@@ -269,12 +269,15 @@ export const activities = new Hono<AppEnv>()
     zValidator("json", descriptionBody, problemOnInvalid),
     async (c) => {
       const { handle, name } = c.req.param();
-      const { description } = c.req.valid("json");
-      const listing = await c.var.storage.updateListingDescription({
-        handle,
-        name,
-        description,
-      });
+      const { version, description } = c.req.valid("json");
+      const address = { handle, name, version };
+      const { storage } = c.var;
+      if (
+        !(await storage.updateVersionDescription({ ...address, description }))
+      ) {
+        throw noSuchVersion(formatAddress(address));
+      }
+      const listing = await storage.findListingVersions({ handle, name });
       if (listing === undefined) {
         throw noSuchListing(handle, name);
       }

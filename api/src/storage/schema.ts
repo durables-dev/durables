@@ -109,7 +109,7 @@ export type RemovalSource = (typeof removalSources)[number];
 /**
  * A listing: one handle and name, under which versions are published. It holds the listing's
  * fields that can change after publishing (ADR 0006, ADR 0015). Search reads it with its
- * versions (ADR 0005).
+ * versions (ADR 0005). The description belongs to each version, not the listing (ADR 0015).
  */
 export const listings = sqliteTable(
   "listings",
@@ -118,11 +118,6 @@ export const listings = sqliteTable(
       .notNull()
       .references(() => handles.handle),
     name: text("name").notNull(),
-    /**
-     * The listing's one-line description. Each version now has its own (ADR 0015), so this
-     * column is no longer the description anyone sees and is removed once nothing reads it.
-     */
-    description: text("description").notNull(),
     /** Who took the listing out of search. Null while it is listed. */
     removedBy: text("removed_by", { enum: removalSources }),
   },

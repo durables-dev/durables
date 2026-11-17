@@ -14,7 +14,7 @@ import {
   serveCatalog,
 } from "../../../test/serve-sdk-catalog";
 import { testCatalog } from "../../../test/sdk-catalog";
-import { python } from "./test-versions";
+import { chargeCardListing, python } from "./test-versions";
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
 const listingPath = "/api/activities/:handle/:name";
@@ -77,11 +77,7 @@ function publishChargeCard() {
     ),
     http.get(listingPath, ({ params }) =>
       params["handle"] === "ddieruf" && params["name"] === "charge-card"
-        ? HttpResponse.json({
-            handle: "ddieruf",
-            name: "charge-card",
-            description: chargeCardDescription,
-          })
+        ? HttpResponse.json(chargeCardListing(chargeCardDescription))
         : notFound("No activity is listed at that address."),
     ),
   );
@@ -462,11 +458,7 @@ test("the sidebar links the version's integrations and its publisher into search
       }),
     ),
     http.get(listingPath, () =>
-      HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description: chargeCardDescription,
-      }),
+      HttpResponse.json(chargeCardListing(chargeCardDescription)),
     ),
   );
 
@@ -505,13 +497,7 @@ test("the published time is the version's own timestamp", async () => {
 test("a listing with no description shows no description line", async () => {
   publishChargeCard();
   worker.use(
-    http.get(listingPath, () =>
-      HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description: "",
-      }),
-    ),
+    http.get(listingPath, () => HttpResponse.json(chargeCardListing(""))),
   );
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");

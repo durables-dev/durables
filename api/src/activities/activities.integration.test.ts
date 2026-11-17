@@ -1,7 +1,12 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { generateSnippets } from "../snippets/snippets";
-import { seedAccount, seedDescription } from "../storage/seed";
+import {
+  seedAccount,
+  seedDeprecation,
+  seedDescription,
+  seedVersion,
+} from "../storage/seed";
 import {
   Storage,
   type Address,
@@ -244,7 +249,7 @@ describe("reading a published activity", () => {
     },
   );
 
-  test("answers the listing's description", async () => {
+  test("answers the listing with its one version as a one-item list", async () => {
     const address = await newAddress();
     await publish(address);
 
@@ -254,7 +259,88 @@ describe("reading a published activity", () => {
     expect(await response.json<ListingResponse>()).toEqual({
       handle: address.handle,
       name: address.name,
-      description,
+      versions: [
+        {
+          version: "1.0.0",
+          publishedAt: await storedPublishedAt(address),
+          whatChanged: null,
+          basedOn: null,
+          deprecation: null,
+          description,
+        },
+      ],
+    });
+  });
+
+  test("answers three versions newest first, each with its own description, note, base and deprecation", async () => {
+    const address = await newAddress();
+    await publish(address);
+    const later = (
+      version: string,
+      fields: Partial<Parameters<typeof seedVersion>[1]>,
+    ) =>
+      seedVersion(env.DB, {
+        ...address,
+        version,
+        title: "Charge card",
+        sdk: "Python",
+        integrations: ["Stripe"],
+        ...fields,
+      });
+    await later("1.1.0", {
+      description: "Charges a card and records the receipt.",
+      whatChanged: "Records the receipt.",
+      basedOn: "1.0.0",
+      publishedAt: new Date("2026-11-02T08:30:00Z"),
+    });
+    await later("2.0.0", {
+      description: "Charges a card or a saved wallet.",
+      whatChanged: "Takes a saved wallet as well as a card.",
+      basedOn: "1.1.0",
+      publishedAt: new Date("2026-11-12T16:00:00Z"),
+    });
+    await seedDeprecation(env.DB, {
+      ...address,
+      version: "1.0.0",
+      reason: "Double-charges on retry.",
+      replacement: "2.0.0",
+    });
+
+    const response = await get(listingPath(address));
+
+    expect(response.status).toBe(200);
+    expect(await response.json<ListingResponse>()).toEqual({
+      handle: address.handle,
+      name: address.name,
+      versions: [
+        {
+          version: "2.0.0",
+          publishedAt: "2026-11-12T16:00:00.000Z",
+          whatChanged: "Takes a saved wallet as well as a card.",
+          basedOn: "1.1.0",
+          deprecation: null,
+          description: "Charges a card or a saved wallet.",
+        },
+        {
+          version: "1.1.0",
+          publishedAt: "2026-11-02T08:30:00.000Z",
+          whatChanged: "Records the receipt.",
+          basedOn: "1.0.0",
+          deprecation: null,
+          description: "Charges a card and records the receipt.",
+        },
+        {
+          version: "1.0.0",
+          publishedAt: await storedPublishedAt(address),
+          whatChanged: null,
+          basedOn: null,
+          deprecation: {
+            reason: "Double-charges on retry.",
+            replacement: "2.0.0",
+          },
+          description,
+        },
+      ],
     });
   });
 
@@ -265,6 +351,22 @@ describe("reading a published activity", () => {
     const body = await (await get(versionPath(address))).json<object>();
 
     expect(body).not.toHaveProperty("description");
+  });
+
+  test("never puts a deprecation or the versions list in the version response", async () => {
+    const address = await newAddress();
+    await publish(address);
+    await seedDeprecation(env.DB, {
+      ...address,
+      reason: "Double-charges on retry.",
+    });
+
+    const body = await (await get(versionPath(address))).json<object>();
+
+    expect(body).not.toHaveProperty("deprecation");
+    expect(body).not.toHaveProperty("versions");
+    expect(body).not.toHaveProperty("whatChanged");
+    expect(body).not.toHaveProperty("basedOn");
   });
 });
 
@@ -290,7 +392,7 @@ describe("cache rules", () => {
     expect(response.headers.get("Cache-Control")).toBe(longCache);
   });
 
-  test("the description carries the short-cache header", async () => {
+  test("the listing and its versions list carry the short-cache header", async () => {
     const address = await newAddress();
     await publish(address);
 
@@ -397,7 +499,7 @@ describe("a wrong-case address", () => {
   });
 });
 
-describe("a description changed after publishing", () => {
+describe("a version's description changed after publishing", () => {
   test("the listing answers the new description and the version is unchanged", async () => {
     const address = await newAddress();
     await publish(address);
@@ -411,9 +513,9 @@ describe("a description changed after publishing", () => {
     });
 
     const listing = await get(listingPath(address));
-    expect(await listing.json<ListingResponse>()).toMatchObject({
-      description: "Charges a card and records the receipt.",
-    });
+    expect(
+      (await listing.json<ListingResponse>()).versions[0]?.description,
+    ).toBe("Charges a card and records the receipt.");
     const version = await get(versionPath(address));
     expect(version.status).toBe(200);
     expect(await version.json<VersionResponse>()).toEqual(before);

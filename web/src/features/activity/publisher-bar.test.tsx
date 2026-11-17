@@ -8,7 +8,7 @@ import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
-import { python } from "./test-versions";
+import { chargeCardListing, python } from "./test-versions";
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
 const listingPath = "/api/activities/:handle/:name";
@@ -58,11 +58,7 @@ function publishChargeCard() {
       }),
     ),
     http.get(listingPath, () =>
-      HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description,
-      }),
+      HttpResponse.json(chargeCardListing(description, ["1.0.0", "0.9.0"])),
     ),
   );
 }
