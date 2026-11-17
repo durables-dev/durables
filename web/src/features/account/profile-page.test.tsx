@@ -1,7 +1,7 @@
 import { routes } from "@/app/router";
 import type { SessionUser } from "@/lib/session";
 import "@/styles/global.css";
-import { http, HttpResponse } from "msw";
+import { delay, http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, test } from "vitest";
 import { render } from "vitest-browser-react";
@@ -581,5 +581,41 @@ describe("when a read fails", () => {
 
     await screen.getByRole("button", { name: "Try again" }).click();
     await expect.element(heading(screen)).toBeVisible();
+  });
+});
+
+describe("after signing out", () => {
+  test("opening the profile again in the same tab never shows the last owner's details", async () => {
+    serveOwner();
+    worker.use(
+      http.delete(
+        "/api/session",
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    );
+    const { screen, router } = await openProfile();
+    await expect.element(heading(screen)).toBeVisible();
+
+    await screen
+      .getByRole("banner")
+      .getByRole("button", { name: "Account menu" })
+      .click();
+    await screen.getByRole("menuitem", { name: "Sign out" }).click();
+    await expect.poll(() => router.state.location.pathname).toBe("/");
+
+    // The profile read now hangs, so only a cached profile could show the details.
+    worker.use(
+      http.get("/api/profile", async () => {
+        await delay("infinite");
+        return HttpResponse.json(owner);
+      }),
+    );
+    await router.navigate("/profile");
+
+    await expect
+      .element(screen.getByText("Loading your profile…"))
+      .toBeVisible();
+    expect(screen.getByText("david@example.com").elements()).toHaveLength(0);
+    expect(heading(screen).elements()).toHaveLength(0);
   });
 });
