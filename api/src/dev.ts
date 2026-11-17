@@ -1,3 +1,4 @@
+import { scheduled } from "./accounts/final-deletion";
 import { createProductionApp } from "./index";
 import { fakeSignIn } from "./session/fake-sign-in";
 
@@ -9,4 +10,5 @@ const app = createProductionApp().route(
   fakeSignIn,
 );
 
-export default app;
+// The same scheduled handler as production, so the daily job can be run locally (wrangler.toml).
+export default Object.assign(app, { scheduled });

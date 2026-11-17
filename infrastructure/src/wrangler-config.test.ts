@@ -16,4 +16,5 @@ test("reads the values the Worker must share with api", () => {
     { name: "PUBLISH_LIMIT", namespaceId: "1001", limit: 10, period: 60 },
     { name: "PREVIEW_LIMIT", namespaceId: "1002", limit: 60, period: 60 },
   ]);
+  expect(config.crons).toEqual(["0 3 * * *"]);
 });
