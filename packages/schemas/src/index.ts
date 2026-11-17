@@ -16,6 +16,10 @@ export {
   type HandleRuleResult,
 } from "./handle";
 export {
+  deprecationReasonEmptyMessage,
+  deprecationReasonMaxLength,
+  deprecationReasonSchema,
+  deprecationReasonTooLongMessage,
   integrationSchema,
   integrations,
   listingDescriptionEmptyMessage,

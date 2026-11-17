@@ -170,6 +170,9 @@ export interface VersionDescription extends Address {
   description: string;
 }
 
+/** A version's deprecation, at the version's address. */
+export interface VersionDeprecation extends Address, Deprecation {}
+
 /**
  * Where a browse batch ends: the last card's relevance score, published date, handle and name.
  * The score is 0 when there are no words.
@@ -1039,6 +1042,48 @@ export class Storage {
       )
       .returning({ version: versions.version });
     return updated.length === 1;
+  }
+
+  /**
+   * Records the deprecation of the version at an address, or replaces its reason and
+   * replacement when it is already deprecated. The version row and its version document are
+   * never touched (ADR 0006, ADR 0015). The caller checks that the version and the replacement
+   * are versions of the listing, and that the replacement is not the version itself.
+   */
+  async deprecateVersion({
+    handle,
+    name,
+    version,
+    reason,
+    replacement,
+  }: VersionDeprecation): Promise<void> {
+    await this.#db
+      .insert(versionDeprecations)
+      .values({ handle, name, version, reason, replacement })
+      .onConflictDoUpdate({
+        target: [
+          versionDeprecations.handle,
+          versionDeprecations.name,
+          versionDeprecations.version,
+        ],
+        set: { reason, replacement },
+      });
+  }
+
+  /**
+   * Deletes the deprecation of the version at an address. A version that is not deprecated is
+   * left as it is. Addresses match exactly.
+   */
+  async undeprecateVersion({ handle, name, version }: Address): Promise<void> {
+    await this.#db
+      .delete(versionDeprecations)
+      .where(
+        and(
+          eq(versionDeprecations.handle, handle),
+          eq(versionDeprecations.name, name),
+          eq(versionDeprecations.version, version),
+        ),
+      );
   }
 
   /**

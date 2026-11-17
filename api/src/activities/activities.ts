@@ -25,6 +25,7 @@ import { registeredSdks } from "../sdks/registry";
 import { generateSnippets } from "../snippets/snippets";
 import { encodeBrowseCursor } from "./browse-cursor";
 import { BROWSE_BATCH_SIZE, browseQuery, browseSort } from "./browse-request";
+import { deprecationBody } from "./deprecation-request";
 import { descriptionBody } from "./description-request";
 import {
   addressTaken,
@@ -52,11 +53,11 @@ import {
   type VersionResponse,
 } from "./responses";
 
-// Publishing an activity, reading it back, and saving a version's description (ADR 0005, 0006,
-// 0008, 0015). The version and the listing are read at separate endpoints so each carries its
-// own cache rule: the version's fields never change and are cached for good, and the listing
-// read answers every version's state that can change, such as its description, and is cached
-// briefly. Publishing runs the checks again and never accepts detection results from the
+// Publishing an activity, reading it back, saving a version's description, and deprecating a
+// version or undoing it (ADR 0005, 0006, 0008, 0015). The version and the listing are read at
+// separate endpoints so each carries its own cache rule: the version's fields never change and
+// are cached for good, and the listing read answers every version's state that can change,
+// such as its description and deprecation, and is cached briefly. Publishing runs the checks again and never accepts detection results from the
 // client. Nothing here logs the code, and no error carries it.
 
 /** Answers 413 Problem Details, the same refusal as oversized code, when the body is too large. */
@@ -90,6 +91,14 @@ const noSuchListing = (handle: string, name: string) =>
   new ProblemError({
     status: 404,
     detail: `No activity is listed at ${handle}/${name}.`,
+  });
+
+/** The replacement a deprecation names is refused, beside its field, so web can show it there. */
+const unacceptableReplacement = (message: string) =>
+  new ProblemError({
+    status: 422,
+    detail: message,
+    errors: [{ field: "replacement", message }],
   });
 
 /**
@@ -286,5 +295,75 @@ export const activities = new Hono<AppEnv>()
       }
       c.header("Cache-Control", noStoreCacheControl);
       return c.json<ListingResponse>(listingResponse(listing), 200);
+    },
+  )
+  // Deprecating a version records its reason and replacement apart from the version, which
+  // never changes (ADR 0015). Deprecating it again replaces both. The version read and the
+  // version document are never touched, and the listing read is never stored through the Cache
+  // API, so there is nothing to clear. Checks run in order: signed in (401), owner (403),
+  // listing exists (404), the body (400), the version is the listing's (404), then the
+  // replacement is another of the listing's versions (422).
+  .put(
+    "/:handle/:name/versions/:version/deprecation",
+    requirePublisher(),
+    requireListingOwner(),
+    zValidator("json", deprecationBody, problemOnInvalid),
+    async (c) => {
+      const address = c.req.param();
+      const { reason, replacement } = c.req.valid("json");
+      const { storage } = c.var;
+      const listing = await storage.findListingVersions(address);
+      if (listing === undefined) {
+        throw noSuchListing(address.handle, address.name);
+      }
+      const published = listing.versions.map(({ version }) => version);
+      if (!published.includes(address.version)) {
+        throw noSuchVersion(formatAddress(address));
+      }
+      if (replacement === address.version) {
+        throw unacceptableReplacement(
+          "A version can't be its own replacement. Choose another version.",
+        );
+      }
+      if (replacement !== null && !published.includes(replacement)) {
+        throw unacceptableReplacement(
+          `${address.handle}/${address.name} has no version ${replacement}. Choose one of its versions.`,
+        );
+      }
+      await storage.deprecateVersion({ ...address, reason, replacement });
+      const deprecated = await storage.findListingVersions(address);
+      if (deprecated === undefined) {
+        throw noSuchListing(address.handle, address.name);
+      }
+      c.header("Cache-Control", noStoreCacheControl);
+      return c.json<ListingResponse>(listingResponse(deprecated), 200);
+    },
+  )
+  // Undoing a deprecation deletes its record (ADR 0015). A version that is not deprecated is
+  // left as it is. Checks run in order: signed in (401), owner (403), listing exists (404), then
+  // the version is the listing's (404).
+  .delete(
+    "/:handle/:name/versions/:version/deprecation",
+    requirePublisher(),
+    requireListingOwner(),
+    async (c) => {
+      const address = c.req.param();
+      const { storage } = c.var;
+      const listing = await storage.findListingVersions(address);
+      if (listing === undefined) {
+        throw noSuchListing(address.handle, address.name);
+      }
+      if (
+        !listing.versions.some(({ version }) => version === address.version)
+      ) {
+        throw noSuchVersion(formatAddress(address));
+      }
+      await storage.undeprecateVersion(address);
+      const undone = await storage.findListingVersions(address);
+      if (undone === undefined) {
+        throw noSuchListing(address.handle, address.name);
+      }
+      c.header("Cache-Control", noStoreCacheControl);
+      return c.json<ListingResponse>(listingResponse(undone), 200);
     },
   );
