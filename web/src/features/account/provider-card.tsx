@@ -16,7 +16,7 @@ export function ProviderCard({ provider, details }: ProviderCardProps) {
 
   return (
     <section aria-labelledby={headingId} className={styles["card"]}>
-      <div className={styles["title-row"]}>
+      <div className={styles["titleRow"]}>
         <h2 id={headingId} className={styles["heading"]}>
           From {providerName(provider)}
         </h2>

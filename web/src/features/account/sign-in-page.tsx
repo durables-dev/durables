@@ -25,7 +25,7 @@ export function SignInPage({ failed, returnTo }: SignInPageProps) {
       <PageTitle page="Sign in" />
       <h1 className={styles["heading"]}>Sign in</h1>
       {session.isPending ? null : user ? (
-        <div className={styles["signed-in"]}>
+        <div className={styles["signedIn"]}>
           <p className={styles["lede"]}>You&apos;re already signed in.</p>
           <Link to={returnTo ?? "/"} className={styles["onward"]}>
             {returnTo === undefined ? "Go to Durables" : "Go back"}
