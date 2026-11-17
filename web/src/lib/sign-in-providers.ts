@@ -1,5 +1,5 @@
-import { api } from "@/lib/api-client";
-import type { SessionUser } from "@/lib/session";
+import { api } from "./api-client";
+import type { SessionUser } from "./session";
 
 export type SignInProvider = SessionUser["provider"];
 

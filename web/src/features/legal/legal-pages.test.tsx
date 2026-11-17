@@ -123,10 +123,11 @@ describe.each(legalPages)("$path", ({ path, heading, title }) => {
     await expect
       .element(screen.getByRole("heading", { level: 1, name: heading }))
       .toBeVisible();
-    expect(screen.getByRole("link", { name: /sign in/i }).elements()).toEqual(
-      [],
-    );
-    expect(screen.getByRole("button", { name: /sign in/i }).elements()).toEqual(
+    // The page itself asks nobody to sign in. The header's own Sign in link, shown on every
+    // page to a signed-out visitor (DUR-104), is not the page asking.
+    const body = screen.getByRole("main");
+    expect(body.getByRole("link", { name: /sign in/i }).elements()).toEqual([]);
+    expect(body.getByRole("button", { name: /sign in/i }).elements()).toEqual(
       [],
     );
   });

@@ -62,9 +62,10 @@ test.describe("as an anonymous visitor", () => {
       const footer = page
         .getByRole("contentinfo")
         .getByRole("navigation", { name: "Footer" });
-      const signIn = page
+      const main = page.getByRole("main");
+      const signIn = main
         .getByRole("link", { name: /sign in/i })
-        .or(page.getByRole("button", { name: /sign in/i }));
+        .or(main.getByRole("button", { name: /sign in/i }));
 
       await test.step("start on the home page", async () => {
         await page.goto("/");
