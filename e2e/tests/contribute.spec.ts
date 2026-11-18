@@ -112,10 +112,11 @@ test.describe("as an anonymous visitor", () => {
             `/api/session/providers/${name.toLowerCase()}/callback?error=access_denied`,
           );
 
-          // A failed sign-in lands on the Sign in page (DUR-102). That page and its failure
-          // message come with DUR-104, which adds their checks here; until then only the
-          // address and the signed-out header are checked.
+          // A failed sign-in lands on the Sign in page with its failure message (API map D5).
           await expect(page).toHaveURL("/sign-in?sign-in=failed");
+          await expect(page.getByRole("alert")).toHaveText(
+            "Sign-in didn't finish. Try again, or choose another provider.",
+          );
           await expect(
             page
               .getByRole("banner")

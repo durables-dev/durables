@@ -1143,3 +1143,207 @@ test(
     });
   },
 );
+
+// Signing in from the header and the profile (API map D1 to D6, D9). A provider's consent
+// screen is another origin, which these tests never reach, so the sign-in in the middle is the
+// local fake provider's. It starts the session but lands nowhere, so the page the provider's
+// callback would land on is not exercised here. The Sign in page, opened again signed in,
+// offers the way back to the starting page it carries.
+
+/** The Sign in page's address when it was opened from `from`. */
+function signInPageFrom(from: string): string {
+  return `/sign-in?${new URLSearchParams({ returnTo: from }).toString()}`;
+}
+
+/** The API route a provider button starts sign-in with, carrying the starting page. */
+function startPath(provider: string, from: string): string {
+  return `/api/session/providers/${provider}?${new URLSearchParams({ returnTo: from }).toString()}`;
+}
+
+test.describe("signing in from the header", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test(
+    "a returning publisher signs in from the header on an activity page and is carried back to it",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      publishListing,
+      seedAccount,
+      signIn,
+      uniqueWord,
+    }) => {
+      const title = `Post slack message ${uniqueWord()}`;
+      const listing = await publishListing({
+        code: sample("python"),
+        title,
+        name: "post-slack-message",
+        description:
+          "Posts a message to a Slack channel and returns its reference.",
+      });
+      const account = await seedAccount();
+      const from = `/${listing.address}`;
+      const header = page.getByRole("banner");
+      const signInLink = header.getByRole("link", {
+        name: "Sign in",
+        exact: true,
+      });
+
+      await test.step("the signed-out activity page offers Sign in left of Contribute", async () => {
+        await page.goto(from);
+
+        await expect(
+          page.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(header.getByRole("link")).toHaveText([
+          "Durables",
+          "Sign in",
+          "Contribute",
+        ]);
+        await expectAccessible();
+      });
+
+      await test.step("Sign in opens the Sign in page, which starts every provider from the activity page", async () => {
+        await signInLink.click();
+
+        await expect(page).toHaveURL(signInPageFrom(from));
+        await expect(
+          page.getByRole("heading", { level: 1, name: "Sign in" }),
+        ).toBeVisible();
+        await expect(signInLink).toHaveCount(0);
+        for (const [id, name] of [
+          ["github", "GitHub"],
+          ["gitlab", "GitLab"],
+          ["google", "Google"],
+          ["microsoft", "Microsoft"],
+        ] as const) {
+          await expect(
+            page.getByRole("link", { name: `Continue with ${name}` }),
+          ).toHaveAttribute("href", startPath(id, from));
+        }
+        await expectAccessible();
+      });
+
+      await test.step("signed in, the Sign in page carries the publisher back to the activity page", async () => {
+        await signIn({
+          name: publisherName,
+          provider: account.provider,
+          providerAccountId: account.providerAccountId,
+        });
+        await page.reload();
+
+        await expect(page.getByText("You're already signed in.")).toBeVisible();
+        await page.getByRole("link", { name: "Go back" }).click();
+
+        await expect(page).toHaveURL(from);
+        await expect(
+          page.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(accountMenu(page)).toHaveText(publisherInitials);
+        await expect(signInLink).toHaveCount(0);
+        await expectAccessible();
+      });
+    },
+  );
+
+  test(
+    "a signed-out publisher opens their profile, signs in, is carried back to it, sees only their own details and activities, and signs out to the home page",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      publishListing,
+      publishOwnListing,
+      signIn,
+      uniqueWord,
+    }) => {
+      const python = sample("python");
+      const theirTitle = `Post slack message ${uniqueWord()}`;
+      const other = await publishListing({
+        code: python,
+        title: theirTitle,
+        name: "post-slack-message",
+        description:
+          "Posts a message to a Slack channel and returns its reference.",
+      });
+      const myTitle = `Post slack message ${uniqueWord()}`;
+      const listing = await publishOwnListing({
+        code: python,
+        title: myTitle,
+        name: "post-slack-message",
+        description:
+          "Posts a message to a Slack channel and returns its reference.",
+      });
+      // Publishing signed the page in. The journey starts signed out.
+      await page.context().clearCookies();
+      const main = page.getByRole("main");
+
+      await test.step("opening the profile signed out goes to Sign in, with the profile to return to", async () => {
+        await page.goto("/profile");
+
+        await expect(page).toHaveURL(signInPageFrom("/profile"));
+        await expect(
+          page.getByRole("heading", { level: 1, name: "Sign in" }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("link", { name: "Continue with GitHub" }),
+        ).toHaveAttribute("href", startPath("github", "/profile"));
+        await expect(main.getByText(listing.handle)).toHaveCount(0);
+        await expectAccessible();
+      });
+
+      await test.step("signed in, the Sign in page carries the owner back to the profile", async () => {
+        await signIn(listing.identity);
+        await page.reload();
+        await page.getByRole("link", { name: "Go back" }).click();
+
+        await expect(page).toHaveURL("/profile");
+        await expect(
+          main.getByRole("heading", { level: 1, name: listing.handle }),
+        ).toBeVisible();
+      });
+
+      await test.step("the profile shows the owner's handle, provider and activities, and nobody else's", async () => {
+        await expect(main.getByText("Signed in with GitHub")).toBeVisible();
+        await expect(
+          main.getByRole("region", { name: "Handle" }),
+        ).toContainText(listing.handle);
+        await expect(
+          main.getByRole("region", { name: "From GitHub" }),
+        ).toContainText(listing.identity.providerAccountId);
+        const items = main
+          .getByRole("region", { name: "Your activities" })
+          .getByRole("listitem");
+        await expect(items).toHaveCount(1);
+        await expect(
+          items.getByRole("link", { name: myTitle }),
+        ).toHaveAttribute("href", `/${listing.address}`);
+        await expect(main.getByText(theirTitle)).toHaveCount(0);
+        await expect(main.getByText(other.handle)).toHaveCount(0);
+        await expectAccessible();
+      });
+
+      await test.step("signing out on the profile goes to the home page, signed out", async () => {
+        await accountMenu(page).click();
+        await page.getByRole("menuitem", { name: "Sign out" }).click();
+
+        await expect(page).toHaveURL("/");
+        await expect(
+          page.getByRole("heading", {
+            level: 1,
+            name: "Temporal activities, ready to use.",
+          }),
+        ).toBeVisible();
+        await expect(accountMenu(page)).toHaveCount(0);
+        await expect(
+          page.getByRole("banner").getByRole("link", {
+            name: "Sign in",
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expectAccessible();
+      });
+    },
+  );
+});
