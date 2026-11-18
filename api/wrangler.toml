@@ -6,6 +6,13 @@ name = "durables"
 main = "src/dev.ts"
 compatibility_date = "2026-10-01"
 
+# The SDK logos (src/sdks/logos/) are bundled as text modules, like the snippet templates.
+# fallthrough keeps Wrangler's default Text rules, so .txt, .html and .sql still bundle as text.
+[[rules]]
+type = "Text"
+globs = ["**/*.svg"]
+fallthrough = true
+
 # The website's build, served by this Worker. API routes run first.
 [assets]
 directory = "../web/dist"

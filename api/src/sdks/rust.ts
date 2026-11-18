@@ -5,6 +5,7 @@ import {
   rustRecognition,
 } from "../checks/rust-detector";
 import { rustSnippets } from "../snippets/rust-snippets";
+import logo from "./logos/rust.svg";
 import type { SdkEntry } from "./sdk-entry";
 
 /**
@@ -33,5 +34,8 @@ export const rust: SdkEntry<"Rust"> = {
       async:
         "This is an async activity. Your worker needs no special setup to run it.",
     },
+    logo,
+    // The Rust logo is black only, so it sits on a light tile to stay visible in dark mode.
+    lightTile: true,
   },
 };

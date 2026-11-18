@@ -13,14 +13,15 @@ export default defineConfig({
     passWithNoTests: true,
     projects: [
       {
-        // The snippet templates are plain text files (src/snippets/templates/). Wrangler bundles
-        // .txt imports as text; here each one is imported as Vite's raw text instead.
+        // The snippet templates (src/snippets/templates/) and the SDK logos (src/sdks/logos/)
+        // are text modules. Wrangler bundles .txt and .svg imports as text (wrangler.toml);
+        // here each one is imported as Vite's raw text instead.
         plugins: [
           {
-            name: "text-templates",
+            name: "text-modules",
             enforce: "pre",
             resolveId(source, importer) {
-              return source.endsWith(".txt")
+              return source.endsWith(".txt") || source.endsWith(".svg")
                 ? this.resolve(`${source}?raw`, importer, { skipSelf: true })
                 : undefined;
             },
