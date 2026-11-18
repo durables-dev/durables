@@ -1348,3 +1348,361 @@ test.describe("signing in from the header", () => {
     },
   );
 });
+
+// Deleting an account and getting it back (API map D7, D8, D18 to D21, D27). The local fake
+// provider finishes a sign-in without a redirect, so these tests open the page a provider's
+// callback would land on themselves.
+
+/** Where a provider's callback sends a sign-in whose account is pending deletion (api: session/sign-in.ts). */
+const restorePromptPath = "/sign-in/restore";
+
+/** Where Start as a new user continues: Contribute at Profile & Handle (api: session/sign-in.ts). */
+const newUserPath = "/contribute/profile";
+
+const finalDayFormat = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+/** The day a deletion asked for at `requested` becomes final, as the Restore prompt shows it. */
+function finalDay(requested: Date): string {
+  return finalDayFormat.format(
+    new Date(requested.getTime() + 30 * 24 * 60 * 60 * 1000),
+  );
+}
+
+/** Matches the prompt's final-date sentence for a deletion asked for between two times. */
+function finalDaySentence(from: Date, to: Date): RegExp {
+  const days = [...new Set([finalDay(from), finalDay(to)])];
+  return new RegExp(`The deletion becomes final on (${days.join("|")})\\.`);
+}
+
+test.describe("deleting and restoring an account", () => {
+  test(
+    "a publisher deletes their account, their activities leave search but keep their pages, and signing in again restores only what was listed",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      publishOwnListing,
+      publishThroughApi,
+      removeFromSearch,
+      signIn,
+      uniqueWord,
+    }) => {
+      const word = uniqueWord();
+      const python = sample("python");
+      const description =
+        "Posts a message to a Slack channel and returns its reference.";
+      const first = await publishOwnListing({
+        code: python,
+        title: `Post slack message ${word}`,
+        name: "post-slack-message",
+        description,
+      });
+      const more = [];
+      for (const [title, name] of [
+        [`Send slack alert ${word}`, "send-slack-alert"],
+        [`Archive slack note ${word}`, "archive-slack-note"],
+      ] as const) {
+        const published = await publishThroughApi({
+          code: python,
+          title,
+          name,
+          description,
+        });
+        more.push({
+          ...published,
+          title,
+          address: `${published.handle}/${published.name}@${published.version}`,
+        });
+      }
+      const [second, earlierRemoved] = more;
+      if (second === undefined || earlierRemoved === undefined) {
+        throw new Error("Not everything was published.");
+      }
+      // The publisher took this one out of search before deleting the account.
+      await removeFromSearch(earlierRemoved);
+      const listed = [
+        { title: `Post slack message ${word}`, address: first.address },
+        second,
+      ];
+      const handle = first.handle;
+
+      const main = page.getByRole("main");
+      const header = page.getByRole("banner");
+      const cards = main.getByRole("article");
+      const card = (title: string) =>
+        main.getByRole("article", { name: title, exact: true });
+      const removedNotice = main
+        .getByRole("status")
+        .filter({ hasText: "Removed by the publisher." });
+      const activities = main
+        .getByRole("region", { name: "Your activities" })
+        .getByRole("listitem");
+      const activity = (title: string) =>
+        activities.filter({ has: page.getByRole("link", { name: title }) });
+      let requestedFrom = new Date();
+      let requestedTo = new Date();
+
+      await test.step("search finds the two listed activities and not the one removed earlier", async () => {
+        await page.goto(`/search?q=${word}`);
+
+        await expect(cards).toHaveCount(2);
+        for (const { title } of listed) {
+          await expect(card(title)).toBeVisible();
+        }
+        await expect(card(earlierRemoved.title)).toHaveCount(0);
+      });
+
+      await test.step("the profile's Delete account opens the dialog, which counts the listed activities", async () => {
+        await page.goto("/profile");
+        await expect(
+          main.getByRole("heading", { level: 1, name: handle }),
+        ).toBeVisible();
+
+        const section = main.getByRole("region", {
+          name: "Delete your account",
+        });
+        await expect(section).toContainText(
+          "Your activities leave search. You can restore your account by signing in within 30 days.",
+        );
+        await section.getByRole("button", { name: "Delete account" }).click();
+
+        const dialog = page.getByRole("dialog", {
+          name: "Delete your account?",
+        });
+        await expect(dialog).toBeVisible();
+        await expect(dialog.getByRole("listitem")).toHaveText([
+          "Your 2 listed activities leave search.",
+          "Their pages and addresses keep working, marked removed.",
+          "You can restore everything by signing in with the same account within 30 days.",
+          `After 30 days your sign-in details are deleted and the handle ${handle} is retired for good.`,
+        ]);
+        await expect(
+          dialog.getByRole("button", { name: "Delete account" }),
+        ).toBeDisabled();
+        await expectAccessible();
+      });
+
+      await test.step("typing the handle and pressing Delete account shows the deleted screen, signed out", async () => {
+        const dialog = page.getByRole("dialog", {
+          name: "Delete your account?",
+        });
+        await dialog.getByLabel("Type your handle to confirm").fill(handle);
+        const confirm = dialog.getByRole("button", { name: "Delete account" });
+        await expect(confirm).toBeEnabled();
+
+        requestedFrom = new Date();
+        await confirm.click();
+
+        await expect(
+          main.getByRole("heading", {
+            level: 1,
+            name: "Your account has been deleted",
+          }),
+        ).toBeVisible();
+        requestedTo = new Date();
+        await expect(main).toContainText(
+          "Your activities are out of search. Sign in with the same account within 30 days to restore it.",
+        );
+        await expect(dialog).toHaveCount(0);
+        await expect(accountMenu(page)).toHaveCount(0);
+        await expect(
+          header.getByRole("link", { name: "Sign in", exact: true }),
+        ).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("Go to Durables goes home, and search no longer finds any of the activities", async () => {
+        await main.getByRole("link", { name: "Go to Durables" }).click();
+        await expect(page).toHaveURL("/");
+
+        await page.goto(`/search?q=${word}`);
+
+        await expect(
+          main.getByRole("heading", { name: "No activities match" }),
+        ).toBeVisible();
+        await expect(cards).toHaveCount(0);
+        await expectAccessible();
+      });
+
+      await test.step("each activity's page still opens at its address, marked removed by the publisher", async () => {
+        for (const { title, address } of [...listed, earlierRemoved]) {
+          await page.goto(`/${address}`);
+
+          await expect(page).toHaveURL(`/${address}`);
+          await expect(
+            main.getByRole("heading", { level: 1, name: title }),
+          ).toBeVisible();
+          await expect(removedNotice).toContainText(
+            "This activity no longer appears in search. Its page and every version's address still work",
+          );
+        }
+        await expectAccessible();
+      });
+
+      await test.step("signing in again with the same provider account shows the Restore prompt", async () => {
+        await signIn(first.identity);
+        await page.goto(restorePromptPath);
+
+        await expect(
+          main.getByRole("heading", {
+            level: 1,
+            name: "Restore your account?",
+          }),
+        ).toBeVisible();
+        await expect(main).toContainText(
+          `Your account ${handle} is waiting to be deleted.`,
+        );
+        await expect(main).toContainText(
+          finalDaySentence(requestedFrom, requestedTo),
+        );
+        await expect(main.getByRole("button")).toHaveText([
+          "Restore",
+          "Start as a new user",
+        ]);
+        // The prompt doesn't list the activities that come back.
+        for (const { title } of [...listed, earlierRemoved]) {
+          await expect(main.getByText(title)).toHaveCount(0);
+        }
+        await expectAccessible();
+      });
+
+      await test.step("Restore lands on the profile with the restored message", async () => {
+        await main.getByRole("button", { name: "Restore" }).click();
+
+        await expect(page).toHaveURL("/profile");
+        await expect(
+          page
+            .getByRole("status")
+            .filter({ hasText: "Your account is restored." }),
+        ).toBeVisible();
+        await expect(
+          main.getByRole("heading", { level: 1, name: handle }),
+        ).toBeVisible();
+        await expect(accountMenu(page)).toHaveText(publisherInitials);
+        await expectAccessible();
+      });
+
+      await test.step("the profile shows the listed activities back and the earlier one still removed", async () => {
+        await expect(activities).toHaveCount(3);
+        for (const { title } of listed) {
+          await expect(activity(title)).toContainText("Listed");
+          await expect(activity(title)).not.toContainText(
+            "Removed from search",
+          );
+        }
+        await expect(activity(earlierRemoved.title)).toContainText(
+          "Removed from search",
+        );
+      });
+
+      await test.step("search finds the listed activities again, and not the one removed earlier", async () => {
+        await page.goto(`/search?q=${word}`);
+
+        await expect(cards).toHaveCount(2);
+        for (const { title } of listed) {
+          await expect(card(title)).toBeVisible();
+        }
+        await expect(card(earlierRemoved.title)).toHaveCount(0);
+        await expectAccessible();
+      });
+
+      await test.step("the listed activities' pages lose the removed notice, and the earlier one keeps it", async () => {
+        for (const { title, address } of listed) {
+          await page.goto(`/${address}`);
+
+          await expect(
+            main.getByRole("heading", { level: 1, name: title }),
+          ).toBeVisible();
+          await expect(removedNotice).toHaveCount(0);
+        }
+
+        await page.goto(`/${earlierRemoved.address}`);
+
+        await expect(
+          main.getByRole("heading", { level: 1, name: earlierRemoved.title }),
+        ).toBeVisible();
+        await expect(removedNotice).toBeVisible();
+        await expectAccessible();
+      });
+    },
+  );
+
+  test(
+    "a former publisher signs in again, starts as a new user, and chooses a new handle in Contribute because the old one is refused",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      deleteOwnAccount,
+      publishOwnListing,
+      signIn,
+      uniqueHandle,
+      uniqueWord,
+    }) => {
+      const listing = await publishOwnListing({
+        code: sample("python"),
+        title: `Post slack message ${uniqueWord()}`,
+        name: "post-slack-message",
+        description:
+          "Posts a message to a Slack channel and returns its reference.",
+      });
+      await deleteOwnAccount(listing.handle);
+      const main = page.getByRole("main");
+      const field = page.getByLabel("Handle", { exact: true });
+      const continueButton = page.getByRole("button", { name: "Continue" });
+
+      await test.step("signed in again, any page leads to the Restore prompt", async () => {
+        await signIn(listing.identity);
+        await page.goto("/");
+
+        await expect(page).toHaveURL(restorePromptPath);
+        await expect(
+          main.getByRole("heading", {
+            level: 1,
+            name: "Restore your account?",
+          }),
+        ).toBeVisible();
+        await expect(main).toContainText(
+          `Your account ${listing.handle} is waiting to be deleted.`,
+        );
+        await expectAccessible();
+      });
+
+      await test.step("Start as a new user continues into Contribute at Profile & Handle", async () => {
+        await main.getByRole("button", { name: "Start as a new user" }).click();
+
+        await expect(page).toHaveURL(newUserPath);
+        await expect(
+          page.getByRole("heading", { level: 2, name: "Choose your handle" }),
+        ).toBeVisible();
+        await expect(accountMenu(page)).toHaveText(publisherInitials);
+        await expectAccessible();
+      });
+
+      await test.step("the old handle is refused as taken", async () => {
+        await field.fill(listing.handle);
+
+        await expect(
+          page.getByText(`${listing.handle} is taken.`),
+        ).toBeVisible();
+        await expect(continueButton).toBeDisabled();
+        await expectAccessible();
+      });
+
+      await test.step("a new handle is accepted and continues to the Code step", async () => {
+        const fresh = uniqueHandle("again");
+        await field.fill(fresh);
+        await expect(page.getByText(`${fresh} is available.`)).toBeVisible();
+
+        await continueButton.click();
+
+        await expectOnCodeStep(page);
+        await expectAccessible();
+      });
+    },
+  );
+});
