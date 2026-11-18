@@ -37,3 +37,9 @@ export function listingQuery({ handle, name }: ListingAddress) {
       ),
   });
 }
+
+/** What the listing read answers: removal from search, and each version's changeable state. */
+export type ListingResponse = InferResponseType<
+  (typeof api.api.activities)[":handle"][":name"]["$get"],
+  200
+>;

@@ -31,3 +31,21 @@ test("puts exactly one description in the head, the page's own", async () => {
 
   await expect.poll(descriptions).toEqual(["The terms."]);
 });
+
+const robots = () =>
+  [...document.head.querySelectorAll('meta[name="robots"]')].map((meta) =>
+    meta.getAttribute("content"),
+  );
+
+test("tells search engines not to index a page marked noIndex", async () => {
+  await render(<PageTitle page="Charge card" noIndex />);
+
+  await expect.poll(robots).toEqual(["noindex"]);
+});
+
+test("leaves a page indexable unless it is marked noIndex", async () => {
+  await render(<PageTitle page="Charge card" />);
+
+  await expect.poll(() => document.title).toBe("Charge card · Durables");
+  expect(robots()).toEqual([]);
+});

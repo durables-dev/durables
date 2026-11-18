@@ -1,7 +1,5 @@
-import { contributeEntryState } from "@/lib/contribute-origin";
 import { listingDescriptionSchema } from "@durables/schemas";
 import { startTransition, useActionState, useId, useState } from "react";
-import { Link, useLocation } from "react-router";
 import { charactersLeft, descriptionMessage } from "./description-field";
 import type { ListingAddress } from "./listing-address";
 import {
@@ -9,14 +7,9 @@ import {
   saveRefusal,
   type SaveRefusal,
 } from "./save-refusal";
+import { SignInEnded } from "./sign-in-ended";
 import styles from "./update-form.module.css";
 import { useSaveDescription } from "./use-save-description";
-
-/**
- * The contribute flow's sign-in view, for a publisher the page still shows as signed in
- * (contribute: sign-in-view, signInAgainPath).
- */
-const signInAgainPath = "/contribute/profile?sign-in=again";
 
 export interface UpdateFormProps {
   address: ListingAddress;
@@ -47,7 +40,6 @@ export function UpdateForm({
   onCancel,
   onSaved,
 }: UpdateFormProps) {
-  const location = useLocation();
   const save = useSaveDescription(address);
   const fieldId = useId();
   const [typed, setTyped] = useState(description);
@@ -125,17 +117,7 @@ export function UpdateForm({
         </p>
       ) : null}
       {outcome.kind === "signInEnded" && !isSaving ? (
-        <p role="alert" className={styles["failed"]}>
-          Your sign-in has ended.{" "}
-          <Link
-            to={signInAgainPath}
-            state={contributeEntryState(location)}
-            className={styles["link"]}
-          >
-            Sign in again
-          </Link>
-          , then save.
-        </p>
+        <SignInEnded then="save" />
       ) : null}
       <div className={styles["actions"]}>
         <button type="button" className={styles["cancel"]} onClick={onCancel}>

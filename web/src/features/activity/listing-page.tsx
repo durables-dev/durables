@@ -10,6 +10,7 @@ import { isListingPublisher } from "./is-listing-publisher";
 import { listingSearchDescription } from "./listing-search-description";
 import type { ListingAddress } from "./listing-address";
 import { ListingLayout } from "./listing-layout";
+import { DeprecatedNotice, RemovedNotice } from "./listing-notices";
 import styles from "./listing-page.module.css";
 import { listingQuery, versionQuery } from "./listing-queries";
 import { ListingSidebar } from "./listing-sidebar";
@@ -73,10 +74,14 @@ export function ListingPage({ address }: ListingPageProps) {
     );
   }
 
-  // Each version has its own description (ADR 0015); the page shows the viewed one's.
-  const description =
-    listing.data.versions.find((entry) => entry.version === address.version)
-      ?.description ?? "";
+  // Each version has its own description and deprecation (ADR 0015); the page shows the
+  // viewed one's. Removal from search is the listing's, so it shows on every version.
+  const viewed = listing.data.versions.find(
+    (entry) => entry.version === address.version,
+  );
+  const description = viewed?.description ?? "";
+  const deprecation = viewed?.deprecation ?? null;
+  const removedBy = listing.data.removedBy;
 
   return (
     <>
@@ -87,6 +92,7 @@ export function ListingPage({ address }: ListingPageProps) {
           sdk: version.data.sdk,
           handle: version.data.handle,
         })}
+        noIndex={removedBy !== null}
       />
       <ListingLayout
         top={
@@ -99,9 +105,25 @@ export function ListingPage({ address }: ListingPageProps) {
             publishedAt={version.data.publishedAt}
           />
         }
+        notices={
+          <>
+            {deprecation === null ? null : (
+              <DeprecatedNotice
+                address={address}
+                reason={deprecation.reason}
+                replacement={deprecation.replacement}
+              />
+            )}
+            {removedBy === "publisher" ? <RemovedNotice /> : null}
+          </>
+        }
         publisherBar={
           isListingPublisher(user, listing.data.handle) ? (
-            <PublisherBar address={address} description={description} />
+            <PublisherBar
+              address={address}
+              description={description}
+              listing={listing.data}
+            />
           ) : null
         }
         implement={
