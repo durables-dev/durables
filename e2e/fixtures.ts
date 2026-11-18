@@ -121,6 +121,17 @@ interface Fixtures {
    */
   publishOwnListing: (details: PublishDetails) => Promise<OwnListing>;
   /**
+   * Takes a listing out of search through the API as the page's signed-in publisher, the way
+   * the publisher bar's Remove does. The publisher must own the listing.
+   */
+  removeFromSearch: (listing: PublishedListing) => Promise<void>;
+  /**
+   * Deletes the page's signed-in publisher's account through the API, the way the profile's
+   * Delete account dialog does, confirming with the handle. The session ends and the account
+   * waits 30 days to be deleted for good.
+   */
+  deleteOwnAccount: (handle: string) => Promise<void>;
+  /**
    * Adds another version under a published listing, the way a later publish will. Publishing
    * creates only a listing's first version, so the version's row is written to local D1 and its
    * document is a copy of the first version's in local R2, pointing at its own address. It
@@ -164,6 +175,7 @@ export function sample(name: string): string {
 const fakeSignInPath = "/api/session/providers/fake";
 const chosenHandlePath = "/api/session/handle";
 const publishPath = "/api/activities";
+const accountPath = "/api/account";
 
 // The API accepts writes only from its own pages, which the browser marks this way.
 const sameOrigin = { "Sec-Fetch-Site": "same-origin" };
@@ -401,6 +413,26 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         address: `${response.handle}/${response.name}@${response.version}`,
         identity,
       };
+    });
+  },
+
+  removeFromSearch: async ({ page }, use) => {
+    await use(async ({ handle, name }) => {
+      const response = await page.request.put(
+        `${publishPath}/${encodeURIComponent(handle)}/${encodeURIComponent(name)}/removal`,
+        { headers: sameOrigin },
+      );
+      expect(response.status(), await response.text()).toBe(200);
+    });
+  },
+
+  deleteOwnAccount: async ({ page }, use) => {
+    await use(async (handle) => {
+      const response = await page.request.delete(accountPath, {
+        data: { handle },
+        headers: sameOrigin,
+      });
+      expect(response.status(), await response.text()).toBe(204);
     });
   },
 
