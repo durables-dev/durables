@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { parseResponse } from "hono/client";
 import { browseResultsKey } from "./browse-results-key";
 import type { ListingAddress } from "./listing-address";
-import { listingQuery, type ListingResponse } from "./listing-queries";
+import { listingQuery, type ListingResponse } from "@/lib/listing-queries";
 
 // The publisher bar's changes to a listing: deprecating the viewed version or undoing it, and
 // taking the activity out of search or returning it. Each answers with the listing, which

@@ -22,8 +22,8 @@ import { YourActivities } from "./your-activities";
 
 /**
  * The roots of the cached reads a deleted account leaves out of date. Browse results and
- * listings still show its activities in search (search: browse-query, activity:
- * listing-queries). Features never import from each other, so the keys are named here.
+ * listings still show its activities in search (search: browse-query, lib: listing-queries).
+ * Features never import from each other, so the keys are named here.
  */
 const browseResultsKey = ["activities"] as const;
 const listingsKey = ["listings"] as const;

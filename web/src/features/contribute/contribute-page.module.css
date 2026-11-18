@@ -44,3 +44,40 @@
     align-items: stretch;
   }
 }
+
+.based {
+  margin: 4px 0 0;
+  color: var(--fg-muted);
+  font-size: var(--text-small);
+  line-height: 1.5;
+}
+
+.base {
+  font-family: var(--font-mono);
+}
+
+/* Why the new-version flow can't open: signed out, not the publisher, or no such version. */
+.message {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.link {
+  color: var(--link);
+  font-weight: 600;
+}
+
+.retry {
+  align-self: flex-start;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}

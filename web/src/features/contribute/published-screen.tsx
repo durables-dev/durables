@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { profilePath } from "@/lib/account-paths";
 import { listingPath } from "@/lib/listing-path";
 import { publishedAddress, type PublishedListing } from "./published-listing";
 import styles from "./published-screen.module.css";
@@ -9,10 +10,10 @@ export interface PublishedScreenProps {
   listing: PublishedListing;
 }
 
-// The Published screen: a check mark, the heading, the live address and a link to the listing.
-// It says the account now exists only when this publish created it. The step list and the
-// Back and Continue bar are gone. "Go to your profile" and the backup sign-in note are left
-// out of the MVP.
+// The Published screen: a check mark, the heading, the live address, then View the listing and
+// Go to your profile. For a first version it says the account now exists only when this
+// publish created it. For a new version it says the version is now the latest. The step list
+// and the Back and Continue bar are gone. The backup sign-in tip is left out of this epic.
 export function PublishedScreen({ listing }: PublishedScreenProps) {
   const heading = useFocusOnAppear<HTMLHeadingElement>();
 
@@ -29,7 +30,13 @@ export function PublishedScreen({ listing }: PublishedScreenProps) {
       <p className={styles["live"]}>
         <span className={styles["address"]}>{publishedAddress(listing)}</span>{" "}
         is live.
-        {listing.accountCreated ? (
+        {listing.basedOn !== undefined ? (
+          <>
+            {" "}
+            It's now the latest version. Earlier versions stay available at
+            their own addresses.
+          </>
+        ) : listing.accountCreated ? (
           <>
             {" "}
             Your Durables account,{" "}
@@ -41,6 +48,9 @@ export function PublishedScreen({ listing }: PublishedScreenProps) {
       <div className={styles["actions"]}>
         <Link to={listingPath(listing)} className={styles["view"]}>
           View the listing
+        </Link>
+        <Link to={profilePath} className={styles["profile"]}>
+          Go to your profile
         </Link>
       </div>
     </section>
