@@ -4,7 +4,9 @@ import { queryOptions } from "@tanstack/react-query";
 import { parseResponse, type InferResponseType } from "hono/client";
 
 // The profile page is two owner-only reads: the profile and the owner's activities. Both
-// answer 401 when signed out, which is never tried again (lib/query-retry.ts).
+// answer 401 when signed out, which is never tried again (lib/query-retry.ts). Neither is kept
+// once the page closes (gcTime 0), so the owner's details, email included, never show on a
+// later visit before they are read again, such as after signing out in the same tab.
 
 /** What the profile read answers: the owner's profile, or no account yet. */
 export type ProfileResponse = InferResponseType<
@@ -33,10 +35,12 @@ export function isSignedOut(error: unknown): boolean {
 export const profileQuery = queryOptions({
   queryKey: ["profile"],
   queryFn: () => parseResponse(api.api.profile.$get()),
+  gcTime: 0,
 });
 
 /** Every one of the owner's activities, removed ones included. */
 export const ownedActivitiesQuery = queryOptions({
   queryKey: ["profile", "activities"],
   queryFn: () => parseResponse(api.api.profile.activities.$get()),
+  gcTime: 0,
 });

@@ -1,9 +1,14 @@
 import { PageMessage } from "@/components/page-message";
 import { PageTitle } from "@/components/page-title";
 import { profilePath, signInPagePath } from "@/lib/account-paths";
+import { sessionQuery, signedOut } from "@/lib/session";
 import { useSessionUser } from "@/lib/use-session-user";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { flushSync } from "react-dom";
 import { Navigate } from "react-router";
+import { AccountDeleted } from "./account-deleted";
+import { DeleteAccountSection } from "./delete-account-section";
 import { HandleCard } from "./handle-card";
 import {
   isSignedOut,
@@ -15,11 +20,48 @@ import { ProfileTop } from "./profile-top";
 import { ProviderCard } from "./provider-card";
 import { YourActivities } from "./your-activities";
 
+/**
+ * The roots of the cached reads a deleted account leaves out of date. Browse results and
+ * listings still show its activities in search (search: browse-query, activity:
+ * listing-queries). Features never import from each other, so the keys are named here.
+ */
+const browseResultsKey = ["activities"] as const;
+const listingsKey = ["listings"] as const;
+
+// The profile, or the Account deleted screen once its owner has deleted the account.
+export function ProfilePage() {
+  const queryClient = useQueryClient();
+  const [deleted, setDeleted] = useState(false);
+
+  if (deleted) return <AccountDeleted />;
+  return (
+    <OwnerProfilePage
+      onDeleted={() => {
+        // The deleted screen replaces the profile first, so nothing on the page is still
+        // reading the profile when its cache goes. Then the header shows signed out, and the
+        // owner's details, email included, are gone from the cache.
+        flushSync(() => {
+          setDeleted(true);
+        });
+        queryClient.setQueryData(sessionQuery.queryKey, signedOut);
+        queryClient.removeQueries({ queryKey: profileQuery.queryKey });
+        queryClient.removeQueries({ queryKey: browseResultsKey });
+        queryClient.removeQueries({ queryKey: listingsKey });
+      }}
+    />
+  );
+}
+
+interface OwnerProfilePageProps {
+  /** Runs once the owner has deleted their account. */
+  onDeleted: () => void;
+}
+
 // The profile, which only its owner can see. A signed-out visitor goes to the Sign in page,
 // which brings them back here. A signed-in person with no account yet goes to Contribute.
 // The page shows once both reads have answered. If either fails, the page says so and shows
 // nothing else.
-export function ProfilePage() {
+function OwnerProfilePage({ onDeleted }: OwnerProfilePageProps) {
   const profile = useQuery(profileQuery);
   const activities = useQuery(ownedActivitiesQuery);
   const initials = useSessionUser()?.initials;
@@ -80,6 +122,11 @@ export function ProfilePage() {
         />
       </div>
       <YourActivities activities={activities.data.activities} />
+      <DeleteAccountSection
+        handle={owner.handle}
+        listedCount={owner.listedCount}
+        onDeleted={onDeleted}
+      />
     </div>
   );
 }

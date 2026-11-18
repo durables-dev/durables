@@ -352,7 +352,12 @@ describe("the owner's details", () => {
       .getByRole("heading", { level: 2 })
       .elements()
       .map((element) => element.textContent);
-    expect(sections).toEqual(["Handle", "From GitHub", "Your activities"]);
+    expect(sections).toEqual([
+      "Handle",
+      "From GitHub",
+      "Your activities",
+      "Delete your account",
+    ]);
     expect(document.body.textContent).not.toMatch(/backup|organizations/i);
   });
 });
@@ -592,6 +597,41 @@ describe("when a read fails", () => {
 });
 
 describe("after signing out", () => {
+  test("signing out on the profile goes home and reads the profile no more", async () => {
+    serveOwner();
+    const reads: string[] = [];
+    worker.use(
+      http.delete("/api/session", () => {
+        worker.use(
+          http.get("/api/session", () => HttpResponse.json({ user: null })),
+          http.get("/api/profile", ({ request }) => {
+            reads.push(new URL(request.url).pathname);
+            return unauthorized();
+          }),
+          http.get("/api/profile/activities", ({ request }) => {
+            reads.push(new URL(request.url).pathname);
+            return unauthorized();
+          }),
+        );
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { screen, router } = await openProfile();
+    await expect.element(heading(screen)).toBeVisible();
+
+    await screen
+      .getByRole("banner")
+      .getByRole("button", { name: "Account menu" })
+      .click();
+    await screen.getByRole("menuitem", { name: "Sign out" }).click();
+    await expect.poll(() => router.state.location.pathname).toBe("/");
+
+    // A read sent after signing out would answer 401 and send the visitor to Sign in.
+    await new Promise((settle) => setTimeout(settle, 500));
+    expect(router.state.location.pathname).toBe("/");
+    expect(reads).toEqual([]);
+  });
+
   test("opening the profile again in the same tab never shows the last owner's details", async () => {
     serveOwner();
     // Signing out ends the session on the server too: from then on the session read answers
@@ -616,6 +656,10 @@ describe("after signing out", () => {
     await screen.getByRole("menuitem", { name: "Sign out" }).click();
     await expect.poll(() => router.state.location.pathname).toBe("/");
 
+    // The closed profile's reads are dropped just after it unmounts. Nobody opens it again
+    // within half a second of signing out.
+    await new Promise((settle) => setTimeout(settle, 500));
+
     // Watch every change to the page from here on, so a details flash of any length is seen.
     let shownEmail = false;
     const watcher = new MutationObserver(() => {
@@ -633,5 +677,305 @@ describe("after signing out", () => {
     await expect.poll(() => router.state.location.pathname).toBe("/sign-in");
     watcher.disconnect();
     expect(shownEmail).toBe(false);
+  });
+});
+
+describe("Delete your account", () => {
+  function deleteSection(screen: Screen) {
+    return screen.getByRole("region", { name: "Delete your account" });
+  }
+
+  function deleteDialog(screen: Screen) {
+    return screen.getByRole("dialog", { name: "Delete your account?" });
+  }
+
+  function confirmField(screen: Screen) {
+    return deleteDialog(screen).getByLabelText("Type your handle to confirm");
+  }
+
+  function confirmButton(screen: Screen) {
+    return deleteDialog(screen).getByRole("button", { name: "Delete account" });
+  }
+
+  async function openDeleteDialog(screen: Screen) {
+    await deleteSection(screen)
+      .getByRole("button", { name: "Delete account" })
+      .click();
+    await expect.element(deleteDialog(screen)).toBeVisible();
+  }
+
+  /**
+   * Answers the delete with `answer`, and records each request body. A 204 ends the session
+   * on the server: from then on the session reads signed out and the profile reads answer 401.
+   * Profile reads after the delete are counted.
+   */
+  function serveDelete(answer: () => Response) {
+    const bodies: unknown[] = [];
+    const after = { profileReads: 0 };
+    worker.use(
+      http.delete("/api/account", async ({ request }) => {
+        bodies.push(await request.json());
+        const response = answer();
+        if (response.status === 204) {
+          worker.use(
+            http.get("/api/session", () => HttpResponse.json({ user: null })),
+            http.get("/api/profile", () => {
+              after.profileReads += 1;
+              return unauthorized();
+            }),
+            http.get("/api/profile/activities", () => {
+              after.profileReads += 1;
+              return unauthorized();
+            }),
+          );
+        }
+        return response;
+      }),
+    );
+    return { bodies, after };
+  }
+
+  const deletedAnswer = () => new HttpResponse(null, { status: 204 });
+
+  test("the profile shows the Delete section with its text and button", async () => {
+    serveOwner();
+    const { screen } = await openProfile();
+
+    const section = deleteSection(screen);
+    await expect.element(section).toBeVisible();
+    await expect
+      .element(section.getByRole("heading", { level: 2 }))
+      .toHaveTextContent("Delete your account");
+    await expect
+      .element(
+        section.getByText(
+          "Your activities leave search. You can restore your account by signing in within 30 days. After that your provider details are deleted and your handle is retired for good.",
+        ),
+      )
+      .toBeVisible();
+    await expect
+      .element(section.getByRole("button", { name: "Delete account" }))
+      .toBeVisible();
+    await expect.element(deleteDialog(screen)).not.toBeInTheDocument();
+  });
+
+  test("the section and its button are the dark red, never Ember", async () => {
+    serveOwner();
+    const { screen } = await openProfile();
+    await expect.element(deleteSection(screen)).toBeVisible();
+
+    const danger = computedColour("var(--danger)");
+    const ember = computedColour("var(--color-ember)");
+    const section = getComputedStyle(deleteSection(screen).element());
+    const button = getComputedStyle(
+      deleteSection(screen)
+        .getByRole("button", { name: "Delete account" })
+        .element(),
+    );
+    expect(section.borderColor).toBe(danger);
+    expect(button.color).toBe(danger);
+    expect(button.borderColor).toBe(danger);
+    expect(danger).not.toBe(ember);
+
+    await openDeleteDialog(screen);
+    const confirm = getComputedStyle(confirmButton(screen).element());
+    expect(confirm.backgroundColor).toBe(
+      computedColour("var(--danger-strong)"),
+    );
+    expect(confirm.backgroundColor).not.toBe(ember);
+  });
+
+  test("the dialog lists what deleting does, with the listed count and the handle", async () => {
+    serveOwner({ profile: { ...owner, listedCount: 5 } });
+    const { screen } = await openProfile();
+    await openDeleteDialog(screen);
+
+    const bullets = deleteDialog(screen)
+      .getByRole("listitem")
+      .elements()
+      .map((item) => item.textContent);
+    expect(bullets).toEqual([
+      "Your 5 listed activities leave search.",
+      "Their pages and addresses keep working, marked removed.",
+      "You can restore everything by signing in with the same account within 30 days.",
+      "After 30 days your sign-in details are deleted and the handle ddieruf is retired for good.",
+    ]);
+    expect(deleteDialog(screen).element().textContent).not.toContain(
+      "can't be undone",
+    );
+  });
+
+  test("with nothing listed, the first bullet reads a count of 0", async () => {
+    serveOwner({ profile: { ...owner, listedCount: 0 } });
+    const { screen } = await openProfile();
+    await openDeleteDialog(screen);
+
+    await expect
+      .element(deleteDialog(screen).getByRole("listitem").first())
+      .toHaveTextContent("Your 0 listed activities leave search.");
+  });
+
+  test.each([
+    ["empty", ""],
+    ["a different case", "DDieruf"],
+    ["a trailing space", "ddieruf "],
+    ["a leading space", " ddieruf"],
+    ["part of the handle", "ddieru"],
+  ])("Delete account stays disabled when the field is %s", async (_, typed) => {
+    serveOwner();
+    const { screen } = await openProfile();
+    await openDeleteDialog(screen);
+
+    if (typed !== "") await confirmField(screen).fill(typed);
+
+    await expect.element(confirmField(screen)).toHaveValue(typed);
+    await expect.element(confirmButton(screen)).toBeDisabled();
+  });
+
+  test("Delete account is enabled once the field holds the handle exactly", async () => {
+    serveOwner();
+    const { screen } = await openProfile();
+    await openDeleteDialog(screen);
+
+    await confirmField(screen).fill("ddieruf");
+
+    await expect.element(confirmButton(screen)).toBeEnabled();
+  });
+
+  test("a delete that succeeds shows the deleted screen and a signed-out header", async () => {
+    serveOwner();
+    const { bodies, after } = serveDelete(deletedAnswer);
+    const { screen, router } = await openProfile();
+    await openDeleteDialog(screen);
+
+    await confirmField(screen).fill("ddieruf");
+    await confirmButton(screen).click();
+
+    const deletedHeading = screen.getByRole("heading", {
+      level: 1,
+      name: "Your account has been deleted",
+    });
+    await expect.element(deletedHeading).toBeVisible();
+    await expect.element(deletedHeading).toHaveFocus();
+    await expect
+      .element(
+        screen.getByText(
+          "Your activities are out of search. Sign in with the same account within 30 days to restore it.",
+        ),
+      )
+      .toBeVisible();
+    expect(bodies).toEqual([{ handle: "ddieruf" }]);
+    await expect.element(deleteDialog(screen)).not.toBeInTheDocument();
+    await expect.element(heading(screen)).not.toBeInTheDocument();
+
+    const banner = screen.getByRole("banner");
+    await expect
+      .element(banner.getByRole("link", { name: "Sign in" }))
+      .toBeVisible();
+    await expect
+      .element(banner.getByRole("button", { name: "Account menu" }))
+      .not.toBeInTheDocument();
+
+    expect(router.state.location.pathname).toBe("/profile");
+    expect(document.body.textContent).not.toContain("david@example.com");
+    expect(after.profileReads).toBe(0);
+  });
+
+  test("Go to Durables goes home", async () => {
+    serveOwner();
+    serveDelete(deletedAnswer);
+    const { screen, router } = await openProfile();
+    await openDeleteDialog(screen);
+    await confirmField(screen).fill("ddieruf");
+    await confirmButton(screen).click();
+
+    await screen.getByRole("link", { name: "Go to Durables" }).click();
+
+    await expect.poll(() => router.state.location.pathname).toBe("/");
+  });
+
+  test("after deleting, opening the profile again goes to the Sign in page without showing the old details", async () => {
+    serveOwner();
+    serveDelete(deletedAnswer);
+    const { screen, router } = await openProfile();
+    await openDeleteDialog(screen);
+    await confirmField(screen).fill("ddieruf");
+    await confirmButton(screen).click();
+    await expect
+      .element(
+        screen.getByRole("heading", { name: "Your account has been deleted" }),
+      )
+      .toBeVisible();
+
+    let shownEmail = false;
+    const watcher = new MutationObserver(() => {
+      if (document.body.textContent.includes("david@example.com")) {
+        shownEmail = true;
+      }
+    });
+    watcher.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    await screen.getByRole("link", { name: "Go to Durables" }).click();
+    await expect.poll(() => router.state.location.pathname).toBe("/");
+    await router.navigate("/profile");
+
+    await expect.poll(() => router.state.location.pathname).toBe("/sign-in");
+    watcher.disconnect();
+    expect(shownEmail).toBe(false);
+  });
+
+  test("a delete that fails keeps the dialog open with the field and says so", async () => {
+    serveOwner();
+    const { bodies } = serveDelete(() => serverError());
+    const { screen } = await openProfile();
+    await openDeleteDialog(screen);
+
+    await confirmField(screen).fill("ddieruf");
+    await confirmButton(screen).click();
+
+    await expect
+      .element(deleteDialog(screen).getByRole("alert"))
+      .toHaveTextContent("Deleting didn't finish. Try again.");
+    await expect.element(deleteDialog(screen)).toBeVisible();
+    await expect.element(confirmField(screen)).toHaveValue("ddieruf");
+    await expect.element(confirmButton(screen)).toBeEnabled();
+    await expect.element(heading(screen)).toBeInTheDocument();
+    expect(bodies).toHaveLength(1);
+  });
+
+  test("Cancel closes the dialog without deleting, and focus returns to Delete account", async () => {
+    serveOwner();
+    const { bodies } = serveDelete(deletedAnswer);
+    const { screen } = await openProfile();
+    await openDeleteDialog(screen);
+    await confirmField(screen).fill("ddieruf");
+
+    await deleteDialog(screen).getByRole("button", { name: "Cancel" }).click();
+
+    await expect.element(deleteDialog(screen)).not.toBeInTheDocument();
+    await expect
+      .element(
+        deleteSection(screen).getByRole("button", { name: "Delete account" }),
+      )
+      .toHaveFocus();
+    await expect.element(heading(screen)).toBeVisible();
+    expect(bodies).toEqual([]);
+  });
+
+  test("reopening the dialog starts with an empty field", async () => {
+    serveOwner();
+    const { screen } = await openProfile();
+    await openDeleteDialog(screen);
+    await confirmField(screen).fill("ddieruf");
+    await deleteDialog(screen).getByRole("button", { name: "Cancel" }).click();
+    await expect.element(deleteDialog(screen)).not.toBeInTheDocument();
+
+    await openDeleteDialog(screen);
+
+    await expect.element(confirmField(screen)).toHaveValue("");
+    await expect.element(confirmButton(screen)).toBeDisabled();
   });
 });

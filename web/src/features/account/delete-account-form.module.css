@@ -1,0 +1,75 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
+
+/* Failures are neutral text on the Gold notice, never Ember (DUR-2). */
+.failed {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: var(--notice);
+  color: var(--fg);
+  font-size: var(--text-label);
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cancel,
+.delete {
+  height: 40px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancel {
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+}
+
+/* The destructive button: the dark red, never Ember (D48). */
+.delete {
+  padding: 0 16px;
+  border: 0;
+  background: var(--danger-strong);
+  color: var(--on-danger);
+}
+
+.delete:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
