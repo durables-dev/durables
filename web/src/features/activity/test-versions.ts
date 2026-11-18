@@ -255,8 +255,8 @@ export const newSdkSamples = [
 ] as const;
 
 /**
- * ddieruf/charge-card's listing as the API answers it: each version, newest first, with the
- * same description.
+ * ddieruf/charge-card's listing as the API answers it: listed in search, and each version,
+ * newest first, with the same description and no deprecation.
  */
 export function chargeCardListing(
   description: string,
@@ -265,6 +265,7 @@ export function chargeCardListing(
   return {
     handle: "ddieruf",
     name: "charge-card",
+    removedBy: null,
     versions: versions.map((version) => ({
       version,
       publishedAt: new Date().toISOString(),

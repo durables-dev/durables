@@ -57,14 +57,15 @@
   /* The Gold tint behind a message that needs the reader's attention, such as a refused
      file. Never Ember. */
   --notice: rgb(255 183 0 / 14%);
+  /* Danger: destructive buttons, the deprecated notice and the Delete your account section. A dark red, never Ember (DUR-2).
+     --danger is red text and borders, --danger-tint the panel behind red text, and
+     --danger-strong the fill of a destructive button, with --on-danger on it. */
+  --danger: #ff6b7d;
+  --danger-tint: rgb(238 28 58 / 12%);
+  --danger-strong: #b3142c;
+  --on-danger: var(--color-cream);
   /* The dimmed page behind a dialog. Ink at 60% under both themes. */
   --scrim: rgb(11 8 6 / 60%);
-  /* The dark red of destructive controls and the Delete your account section (D48): text and
-     borders. Never Ember. A lighter shade on Ink, so it keeps AA contrast there. */
-  --danger: #ff6b7d;
-  /* A filled destructive button and its text. The dark red under both themes. */
-  --danger-fill: #b3142c;
-  --on-danger: var(--color-cream);
 
   /* The code panel. It is Ink under both themes, so no theme block changes these. */
   --code-background: var(--color-ink);
@@ -143,5 +144,6 @@
     --tile-lagoon-tint: rgb(15 116 113 / 12%);
     --notice: rgb(255 183 0 / 16%);
     --danger: #b3142c;
+    --danger-tint: rgb(238 28 58 / 6%);
   }
 }

@@ -65,7 +65,7 @@
 .delete {
   padding: 0 16px;
   border: 0;
-  background: var(--danger-fill);
+  background: var(--danger-strong);
   color: var(--on-danger);
 }
 

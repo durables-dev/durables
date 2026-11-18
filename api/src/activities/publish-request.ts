@@ -23,7 +23,10 @@ import { invalidListing } from "./publish-problems";
  */
 export const MAX_PUBLISH_BODY_BYTES = 6 * MAX_CODE_BYTES + 16 * 1024;
 
-/** The version every publish creates. New versions are a later increment. */
+/**
+ * The version a first publish creates. A later version is published at
+ * `POST /api/activities/:handle/:name/versions` with its own number.
+ */
 export const FIRST_VERSION = "1.0.0";
 
 const confirmationShape = Object.fromEntries(

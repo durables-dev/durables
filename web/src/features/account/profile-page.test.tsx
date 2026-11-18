@@ -656,6 +656,10 @@ describe("after signing out", () => {
     await screen.getByRole("menuitem", { name: "Sign out" }).click();
     await expect.poll(() => router.state.location.pathname).toBe("/");
 
+    // The closed profile's reads are dropped just after it unmounts. Nobody opens it again
+    // within half a second of signing out.
+    await new Promise((settle) => setTimeout(settle, 500));
+
     // Watch every change to the page from here on, so a details flash of any length is seen.
     let shownEmail = false;
     const watcher = new MutationObserver(() => {
@@ -775,7 +779,9 @@ describe("Delete your account", () => {
 
     await openDeleteDialog(screen);
     const confirm = getComputedStyle(confirmButton(screen).element());
-    expect(confirm.backgroundColor).toBe(computedColour("var(--danger-fill)"));
+    expect(confirm.backgroundColor).toBe(
+      computedColour("var(--danger-strong)"),
+    );
     expect(confirm.backgroundColor).not.toBe(ember);
   });
 

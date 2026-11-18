@@ -544,8 +544,14 @@ test(
           { exact: true },
         ),
       ).toBeVisible();
-      // The closed dialog inside the bar is hidden, so Update is the bar's only button.
-      await expect(bar.getByRole("button")).toHaveText(["Update"]);
+      // The closed dialogs inside the bar are hidden, so these are the bar's own buttons. The
+      // publisher is on 1.1.0, the latest.
+      await expect(bar.getByRole("button")).toHaveText([
+        "Update",
+        "Deprecate 1.1.0",
+        "Create new version",
+        "Remove",
+      ]);
       await expectAccessible();
     });
 

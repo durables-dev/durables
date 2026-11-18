@@ -119,21 +119,23 @@ async function expectNoBar(screen: Screen) {
 }
 
 describe("the publisher bar", () => {
-  test("shows to the publisher, with the bar text and one Update button", async () => {
+  test("shows to the publisher, with the bar text and its four buttons", async () => {
     const screen = await openOwnListing();
 
     await expect.element(bar(screen)).toBeVisible();
     await expect
       .element(bar(screen).getByText(barText, { exact: true }))
       .toBeVisible();
-    // Update is the bar's one button. The rest are inside the closed dialog.
+    // The bar's own buttons, in order. The rest are inside the closed dialogs.
     const barButtons = [...bar(screen).element().querySelectorAll("button")]
       .filter((button) => button.closest("dialog") === null)
       .map((button) => button.textContent);
-    expect(barButtons).toEqual(["Update"]);
-    for (const name of [/Deprecate/, /Create new version/, /Remove/]) {
-      expect(screen.getByRole("button", { name }).elements()).toHaveLength(0);
-    }
+    expect(barButtons).toEqual([
+      "Update",
+      "Deprecate 1.0.0",
+      "Create new version",
+      "Remove",
+    ]);
   });
 
   test("sits under the top of the page and above the section bar", async () => {

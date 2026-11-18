@@ -1,0 +1,91 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.reason,
+.replacement {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+}
+
+.reason {
+  padding: 10px 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.replacement {
+  height: 40px;
+  padding: 0 10px;
+}
+
+/* Errors are neutral text, never Ember (DUR-2). */
+.message {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.failed {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: var(--notice);
+  color: var(--fg);
+  font-size: var(--text-label);
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cancel,
+.deprecate {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancel {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+}
+
+/* The accent, as the design shows it. Deprecating can be undone from the bar. */
+.deprecate {
+  border: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.deprecate:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
