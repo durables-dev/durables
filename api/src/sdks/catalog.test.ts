@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FactValues } from "../checks/facts";
 import { generateSnippets } from "../snippets/snippets";
 import { storedSdks } from "../storage/schema";
-import { type SdkProfile, sdkCatalog } from "./catalog";
+import { type SdkProfile, sdkCatalog, sdkLogoPath } from "./catalog";
 import { registeredSdks, sdkRegistry } from "./registry";
 import { type Sdk, sdks } from "./sdk-list";
 
@@ -120,7 +120,9 @@ describe("the SDK catalog", () => {
     it("carries every display field from the registry entry, and nothing else", () => {
       const { display } = sdkRegistry[sdk];
 
-      expect(profile()).toEqual({
+      // toStrictEqual, so a field the catalog should not carry fails here even when it is
+      // undefined.
+      expect(profile()).toStrictEqual({
         name: sdk,
         package: display.package,
         highlightLanguage: display.highlightLanguage,
@@ -130,11 +132,17 @@ describe("the SDK catalog", () => {
           sync: display.workerRequirements.sync,
           async: display.workerRequirements.async,
         },
+        ...(display.logo === undefined ? {} : { logoUrl: sdkLogoPath(sdk) }),
+        ...(display.credit === undefined ? {} : { credit: display.credit }),
+        ...(display.lightTile === undefined
+          ? {}
+          : { lightTile: display.lightTile }),
       });
     });
 
     it("has a non-empty value for every field", () => {
-      const { name, runsAs, workerRequirements, ...plain } = profile();
+      const { name, runsAs, workerRequirements, lightTile, ...plain } =
+        profile();
 
       expect(name).toBe(sdk);
       for (const value of [
@@ -146,6 +154,18 @@ describe("the SDK catalog", () => {
       ]) {
         expect(value.trim()).not.toBe("");
       }
+      expect([undefined, true]).toContain(lightTile);
+    });
+
+    it("publishes its logo as the logo route's address, never as SVG markup", () => {
+      const { logoUrl } = profile();
+
+      if (sdkRegistry[sdk].display.logo === undefined) {
+        expect(logoUrl).toBeUndefined();
+      } else {
+        expect(logoUrl).toBe(`/api/sdks/${encodeURIComponent(sdk)}/logo.svg`);
+      }
+      expect(JSON.stringify(profile())).not.toMatch(/<svg|<\/svg>|<\?xml/i);
     });
 
     it("words sync and async differently, in Runs as and in Worker requirements", () => {
@@ -175,6 +195,62 @@ describe("the SDK catalog", () => {
 
       expect(runsAs.async).not.toMatch(threadPool);
       expect(workerRequirements.async).not.toMatch(threadPool);
+    });
+  });
+
+  describe("the logo fields", () => {
+    const catalog = () => sdkCatalog(registeredSdks);
+
+    it("gives every SDK but Java a logo URL", () => {
+      expect(
+        catalog()
+          .filter(({ logoUrl }) => logoUrl !== undefined)
+          .map(({ name }) => name),
+      ).toEqual(["Go", "Python", "TypeScript", ".NET", "Ruby", "PHP", "Rust"]);
+    });
+
+    it("gives Rust alone the light tile", () => {
+      expect(
+        catalog()
+          .filter((profile) => "lightTile" in profile)
+          .map(({ name, lightTile }) => [name, lightTile]),
+      ).toEqual([["Rust", true]]);
+    });
+
+    it("gives Ruby alone the credit, with the exact text", () => {
+      expect(
+        catalog()
+          .filter((profile) => "credit" in profile)
+          .map(({ name, credit }) => [name, credit]),
+      ).toEqual([
+        ["Ruby", "Ruby logo © 2006 Yukihiro Matsumoto, CC BY-SA 2.5"],
+      ]);
+    });
+
+    it("gives Java no logo URL, credit or light tile", () => {
+      const java = catalog().find(({ name }) => name === "Java");
+
+      expect(java).toBeDefined();
+      expect(Object.keys(java ?? {})).not.toContain("logoUrl");
+      expect(Object.keys(java ?? {})).not.toContain("credit");
+      expect(Object.keys(java ?? {})).not.toContain("lightTile");
+    });
+
+    it("never carries SVG markup", () => {
+      const json = JSON.stringify(catalog());
+
+      expect(json).not.toMatch(/<svg|<\/svg>|<\?xml|xmlns/i);
+      for (const { display } of registeredSdks) {
+        if (display.logo !== undefined) {
+          expect(json).not.toContain(display.logo);
+        }
+      }
+    });
+
+    it("addresses each SDK's logo under its own name, encoded for a path", () => {
+      expect(sdkLogoPath("Go")).toBe("/api/sdks/Go/logo.svg");
+      expect(sdkLogoPath(".NET")).toBe("/api/sdks/.NET/logo.svg");
+      expect(sdkLogoPath("TypeScript")).toBe("/api/sdks/TypeScript/logo.svg");
     });
   });
 

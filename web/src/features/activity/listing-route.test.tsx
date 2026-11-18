@@ -10,8 +10,11 @@ import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
 import {
   failCatalog,
+  logoProfile,
   rustProfile,
   serveCatalog,
+  serveLogo,
+  testLogo,
 } from "../../../test/serve-sdk-catalog";
 import { testCatalog } from "../../../test/sdk-catalog";
 import { chargeCardListing, python } from "./test-versions";
@@ -872,6 +875,14 @@ test("when the catalog cannot be read, the page still renders and shows the SDK'
     .toBeVisible();
   await sdkTag(screen, "Python");
   expect(aboutRowsOf(screen)[0]).toEqual(["SDK", "Python"]);
+  // No logo either: the logo's address comes from the catalog too.
+  expect(
+    screen
+      .getByRole("complementary")
+      .getByRole("region", { name: "About" })
+      .element()
+      .querySelectorAll("img"),
+  ).toHaveLength(0);
   await expect
     .element(screen.getByRole("heading", { name: "Worker requirements" }))
     .not.toBeInTheDocument();
@@ -882,6 +893,26 @@ test("when the catalog cannot be read, the page still renders and shows the SDK'
   await expect
     .element(screen.getByText(/^activities\.py · \d+ lines$/))
     .toBeVisible();
+});
+
+test("an activity page shows its SDK's logo from the catalog before the SDK's name and package", async () => {
+  publishChargeCard();
+  const credit = "Ruby logo © 2006 Yukihiro Matsumoto, CC BY-SA 2.5";
+  serveCatalog([...testCatalog, logoProfile("Ruby", { credit })]);
+  serveLogo(testLogo(16, 16));
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({ ...chargeCard, sdk: "Ruby" }),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const about = screen
+    .getByRole("complementary")
+    .getByRole("region", { name: "About" });
+  await expect.element(about.getByRole("img", { name: credit })).toBeVisible();
+  expect(aboutRowsOf(screen)[0]).toEqual(["SDK", "Ruby, temporalio-sdk"]);
 });
 
 test("an SDK the catalog does not list shows its name only, and the page still renders", async () => {

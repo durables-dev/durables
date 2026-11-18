@@ -1,6 +1,7 @@
 import { rubyDetector, rubyRecognition } from "../checks/ruby-detector";
 import { isRubyStandardLibrary } from "../checks/ruby-stdlib";
 import { rubySnippets } from "../snippets/ruby-snippets";
+import logo from "./logos/ruby.svg";
 import type { SdkEntry } from "./sdk-entry";
 
 /**
@@ -35,5 +36,7 @@ export const ruby: SdkEntry<"Ruby"> = {
       async:
         "This is an async activity. Your worker needs no special setup to run it.",
     },
+    logo,
+    credit: "Ruby logo © 2006 Yukihiro Matsumoto, CC BY-SA 2.5",
   },
 };

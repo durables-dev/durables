@@ -36,6 +36,15 @@ export interface DisplayProfile {
   readonly runsAs: RunsAsWording;
   /** The Worker requirements sentence in the Activity page's Configure section. */
   readonly workerRequirements: RunsAsWording;
+  /**
+   * The SDK's official logo, as SVG markup: the file in `logos/`, unchanged. Left out when the
+   * SDK has no logo Durables may show, as for Java.
+   */
+  readonly logo?: string;
+  /** The credit the logo's licence requires, shown as its tooltip. Left out when none is due. */
+  readonly credit?: string;
+  /** Set when the logo needs a light tile behind it to stay visible in dark mode. */
+  readonly lightTile?: boolean;
 }
 
 /** Everything Durables knows about one Temporal SDK, in one place. */

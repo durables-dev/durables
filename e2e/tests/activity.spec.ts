@@ -504,6 +504,84 @@ test.describe("an activity whose SDK was only inferred", () => {
   });
 });
 
+test.describe("the SDK logo on the About card", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  /** The About card's SDK value, as its first definition. */
+  function sdkValue(page: Page) {
+    return page
+      .getByRole("region", { name: "About" })
+      .getByRole("definition")
+      .first();
+  }
+
+  test("a Ruby activity page shows the Ruby logo beside the SDK name, with its credit as the tooltip", async ({
+    page,
+    expectAccessible,
+    publishListing,
+  }) => {
+    const credit = "Ruby logo © 2006 Yukihiro Matsumoto, CC BY-SA 2.5";
+    const listing = await publishListing({
+      code: sample("ruby"),
+      title: "Send invoice",
+      name: "send-invoice",
+      description: "Sends a Stripe invoice to a customer.",
+    });
+
+    await page.goto(`/${listing.address}`);
+
+    const logo = sdkValue(page).getByRole("img", { name: credit });
+    await expect(logo).toBeVisible();
+    await expect(logo).toHaveAttribute("title", credit);
+    // The image the catalog points at has loaded: it has a size of its own.
+    await expect
+      .poll(() =>
+        logo.evaluate((image: HTMLImageElement) => image.naturalWidth),
+      )
+      .toBeGreaterThan(0);
+    await expect(sdkValue(page)).toHaveText("Ruby, temporalio");
+    await expectAccessible();
+  });
+
+  test("a Python activity page shows the Python logo with empty alt text and no tooltip", async ({
+    page,
+    expectAccessible,
+    publishListing,
+  }) => {
+    const listing = await publishListing(slackListing);
+
+    await page.goto(`/${listing.address}`);
+
+    await expect(sdkValue(page)).toHaveText("Python, temporalio");
+    const logo = sdkValue(page).getByRole("presentation");
+    await expect(logo).toBeVisible();
+    await expect(logo).toHaveAttribute("alt", "");
+    await expect(logo).not.toHaveAttribute("title");
+    await expect(sdkValue(page).getByRole("img")).toHaveCount(0);
+    await expectAccessible();
+  });
+
+  test("a Java activity page shows the SDK name and package with no logo", async ({
+    page,
+    expectAccessible,
+    publishListing,
+  }) => {
+    const listing = await publishListing({
+      code: sample("java"),
+      title: "Send SMS",
+      name: "send-sms",
+      description: "Sends a text message with Twilio.",
+    });
+
+    await page.goto(`/${listing.address}`);
+
+    await expect(sdkValue(page)).toHaveText("Java, io.temporal:temporal-sdk");
+    await expect(sdkValue(page).getByRole("img")).toHaveCount(0);
+    await expect(sdkValue(page).getByRole("presentation")).toHaveCount(0);
+    await expectAccessible();
+  });
+});
+
 test.describe("the publisher bar and Update dialog", () => {
   const ownListing: PublishDetails = {
     ...slackListing,
