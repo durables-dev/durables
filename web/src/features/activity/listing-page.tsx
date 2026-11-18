@@ -16,7 +16,7 @@ import {
   RemovedNotice,
 } from "./listing-notices";
 import styles from "./listing-page.module.css";
-import { listingQuery, versionQuery } from "./listing-queries";
+import { listingQuery, versionQuery } from "@/lib/listing-queries";
 import { ListingSidebar } from "./listing-sidebar";
 import { ListingTop } from "./listing-top";
 import { PublisherBar } from "./publisher-bar";

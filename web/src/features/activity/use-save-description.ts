@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { parseResponse } from "hono/client";
 import { browseResultsKey } from "./browse-results-key";
 import type { ListingAddress } from "./listing-address";
-import { listingQuery } from "./listing-queries";
+import { listingQuery } from "@/lib/listing-queries";
 
 /**
  * Saves the viewed version's one-line description (ADR 0015); other versions keep theirs.

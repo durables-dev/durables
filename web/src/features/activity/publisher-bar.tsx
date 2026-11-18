@@ -3,7 +3,8 @@ import { BarDialog } from "./bar-dialog";
 import { changeFailedMessage, changeRefusal } from "./change-refusal";
 import { DeprecateForm } from "./deprecate-form";
 import type { ListingAddress } from "./listing-address";
-import type { ListingResponse } from "./listing-queries";
+import { NewVersionForm } from "./new-version-form";
+import type { ListingResponse } from "@/lib/listing-queries";
 import styles from "./publisher-bar.module.css";
 import { RemoveForm } from "./remove-form";
 import { SignInEnded } from "./sign-in-ended";
@@ -35,6 +36,8 @@ export function PublisherBar({
   const deprecateDialog = useRef<HTMLDialogElement>(null);
   const removalButton = useRef<HTMLButtonElement>(null);
   const removeDialog = useRef<HTMLDialogElement>(null);
+  const newVersionButton = useRef<HTMLButtonElement>(null);
+  const newVersionDialog = useRef<HTMLDialogElement>(null);
   const undo = useUndoDeprecation(address);
   const returnToSearch = useReturnToSearch(address);
 
@@ -103,7 +106,15 @@ export function PublisherBar({
         >
           {deprecated ? "Undo deprecation" : `Deprecate ${address.version}`}
         </button>
-        <button type="button" className={styles["action"]}>
+        <button
+          ref={newVersionButton}
+          type="button"
+          className={styles["action"]}
+          onClick={() => {
+            clearFailures();
+            newVersionDialog.current?.showModal();
+          }}
+        >
           Create new version
         </button>
         <button
@@ -183,6 +194,22 @@ export function PublisherBar({
           address={address}
           onCancel={closeRemove}
           onSaved={closeRemove}
+        />
+      </BarDialog>
+      <BarDialog
+        dialogRef={newVersionDialog}
+        title="Create a new version"
+        intro="Choose the version to start from. Its title and description are filled in for you. The code starts blank, and its behavior is detected again."
+        onClose={() => {
+          newVersionButton.current?.focus();
+        }}
+      >
+        <NewVersionForm
+          address={address}
+          versions={listing.versions}
+          onCancel={() => {
+            newVersionDialog.current?.close();
+          }}
         />
       </BarDialog>
     </section>

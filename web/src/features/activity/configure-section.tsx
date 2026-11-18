@@ -1,6 +1,6 @@
 import { useSdkProfile } from "@/lib/use-sdk-profile";
 import styles from "./configure-section.module.css";
-import type { VersionResponse } from "./listing-queries";
+import type { VersionResponse } from "@/lib/listing-queries";
 
 /** How the activity runs, as detection found it. Null when detection couldn't tell. */
 export type RunsAs = VersionResponse["facts"]["runsAs"];

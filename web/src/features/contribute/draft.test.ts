@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { CheckResult } from "./check-result";
 import {
+  deprecationValid,
+  detailsValid,
   draftConfirmations,
+  draftDeprecation,
   draftDetails,
   draftFinished,
   draftReducer,
@@ -14,6 +17,7 @@ import {
   type Draft,
 } from "./draft";
 import type { ListingDetails } from "@durables/schemas";
+import type { BaseVersion } from "./new-version";
 import {
   acceptedCheck,
   acceptedDraft,
@@ -975,5 +979,196 @@ describe("a handle taken, as publish reports it", () => {
     expect(draftReducer(refuse(reviewReady), { type: "published" })).toEqual(
       emptyDraft,
     );
+  });
+});
+
+describe("new-version mode", () => {
+  const ref = { handle: "ddieruf", name: "charge-card", basedOn: "2.0.0" };
+  const base: BaseVersion = {
+    ...ref,
+    title: "Charge card",
+    description: "Charges a card through Stripe.",
+    activity: {
+      name: "post_slack_message",
+      input: "SlackMessage",
+      output: "MessageRef",
+    },
+    versions: ["2.0.0", "1.0.0"],
+    latest: "2.0.0",
+    removed: false,
+  };
+  const draft: Draft = {
+    finished: ["detected", "details"],
+    newVersion: ref,
+    code: pastedCode,
+    check: acceptedCheck,
+    details: { version: "2.1.0", whatChanged: "Retries use a fresh key." },
+  };
+
+  describe("enterDraft", () => {
+    test("a link naming a base starts a new draft in new-version mode", () => {
+      expect(
+        enterDraft(acceptedDraft, "/ddieruf/charge-card@2.0.0", ref),
+      ).toEqual({
+        finished: [],
+        origin: "/ddieruf/charge-card@2.0.0",
+        newVersion: ref,
+      });
+    });
+
+    test("a link naming a page but no base sets a new-version draft aside", () => {
+      expect(enterDraft(draft, "/search")).toEqual({
+        finished: [],
+        origin: "/search",
+      });
+    });
+
+    test("with nothing named, as after a reload, the new-version draft is kept", () => {
+      expect(enterDraft(draft, undefined)).toBe(draft);
+    });
+  });
+
+  describe("draftDetails", () => {
+    test("starts from the base's title and description, with the listing's name", () => {
+      expect(draftDetails({ ...draft, details: {} }, base)).toEqual({
+        title: "Charge card",
+        name: "charge-card",
+        description: "Charges a card through Stripe.",
+      });
+    });
+
+    test("keeps the publisher's edits, and the name stays the listing's", () => {
+      expect(
+        draftDetails(
+          {
+            ...draft,
+            details: { title: "Charge", name: "other", description: "Edited." },
+          },
+          base,
+        ),
+      ).toEqual({
+        title: "Charge",
+        name: "charge-card",
+        description: "Edited.",
+      });
+    });
+  });
+
+  describe("detailsValid", () => {
+    test("passes with an allowed number and a note", () => {
+      expect(detailsValid(draft, base)).toBe(true);
+    });
+
+    test("fails until the base has been read", () => {
+      expect(detailsValid(draft, undefined)).toBe(false);
+    });
+
+    test.each([
+      ["no number", { whatChanged: "Fix." }],
+      ["a number already used", { version: "1.0.0", whatChanged: "Fix." }],
+      [
+        "a number not higher than the latest",
+        { version: "1.5.0", whatChanged: "Fix." },
+      ],
+      ["a malformed number", { version: "2.1", whatChanged: "Fix." }],
+      ["no What changed note", { version: "2.1.0" }],
+      ["a blank What changed note", { version: "2.1.0", whatChanged: "   " }],
+      [
+        "a 161-character note",
+        { version: "2.1.0", whatChanged: "x".repeat(161) },
+      ],
+    ])("fails with %s", (_, details) => {
+      expect(detailsValid({ ...draft, details }, base)).toBe(false);
+    });
+
+    test("passes with a 160-character note", () => {
+      expect(
+        detailsValid(
+          {
+            ...draft,
+            details: { version: "2.1.0", whatChanged: "x".repeat(160) },
+          },
+          base,
+        ),
+      ).toBe(true);
+    });
+
+    test("Details is unfinished again when the number becomes invalid", () => {
+      expect(
+        draftFinished(
+          { ...draft, details: { version: "1.0.0", whatChanged: "x" } },
+          base,
+        ),
+      ).toEqual(["detected", "code"]);
+    });
+  });
+
+  describe("the deprecation of the base", () => {
+    test("is unchecked, with a reason naming the new version", () => {
+      expect(draftDeprecation(draft)).toEqual({
+        checked: false,
+        reason: "Replaced by 2.1.0",
+      });
+    });
+
+    test("follows the number until the reason is edited", () => {
+      const toggled = draftReducer(draft, {
+        type: "deprecateBaseToggled",
+        checked: true,
+      });
+      expect(draftDeprecation(toggled)).toEqual({
+        checked: true,
+        reason: "Replaced by 2.1.0",
+      });
+
+      const edited = draftReducer(toggled, {
+        type: "deprecationReasonEdited",
+        reason: "Replaced by 2.1.0, which fixes retries",
+      });
+      const renumbered = draftReducer(edited, {
+        type: "detailsEdited",
+        field: "version",
+        value: "3.0.0",
+      });
+      expect(draftDeprecation(renumbered).reason).toBe(
+        "Replaced by 2.1.0, which fixes retries",
+      );
+    });
+
+    test("an empty reason is invalid only while the box is checked", () => {
+      expect(deprecationValid({ ...draft, deprecationReason: "" })).toBe(true);
+      expect(
+        deprecationValid({
+          ...draft,
+          deprecateBase: true,
+          deprecationReason: " ",
+        }),
+      ).toBe(false);
+      expect(deprecationValid({ ...draft, deprecateBase: true })).toBe(true);
+    });
+  });
+
+  test("is kept across a reload and cleared on publish", () => {
+    const storage = memoryStorage();
+    const kept: Draft = {
+      ...draft,
+      deprecateBase: true,
+      deprecationReason: "Replaced by 2.1.0",
+    };
+    writeDraft(storage, kept);
+
+    expect(readDraft(storage)).toEqual(kept);
+    expect(draftReducer(kept, { type: "published" })).toEqual(emptyDraft);
+  });
+
+  test("an unreadable base makes the kept draft unreadable", () => {
+    const storage = memoryStorage({
+      [draftStorageKey]: JSON.stringify({
+        ...draft,
+        newVersion: { ...ref, basedOn: "two" },
+      }),
+    });
+
+    expect(readDraft(storage)).toEqual(emptyDraft);
   });
 });

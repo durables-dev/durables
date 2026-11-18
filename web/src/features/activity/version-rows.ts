@@ -1,4 +1,4 @@
-import type { ListingResponse } from "./listing-queries";
+import type { ListingResponse } from "@/lib/listing-queries";
 
 /** One version as the listing read answers it. */
 export type ListingVersion = ListingResponse["versions"][number];

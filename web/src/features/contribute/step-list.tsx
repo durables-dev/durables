@@ -1,10 +1,19 @@
 import { Link } from "react-router";
 import styles from "./step-list.module.css";
-import { isLocked, stepPath, steps, type StepId } from "./steps";
+import {
+  flowSteps,
+  isLocked,
+  stepPath,
+  steps,
+  type Flow,
+  type StepId,
+} from "./steps";
 
 export interface StepListProps {
   current: StepId;
   finished: readonly StepId[];
+  /** A new version's flow has no Profile & Handle step. A first publish unless given. */
+  flow?: Flow | undefined;
 }
 
 type StepState = "finished" | "current" | "open" | "locked";
@@ -13,10 +22,11 @@ function stepState(
   step: StepId,
   current: StepId,
   finished: readonly StepId[],
+  flow: Flow,
 ): StepState {
   if (finished.includes(step)) return "finished";
   if (step === current) return "current";
-  return isLocked(step, finished) ? "locked" : "open";
+  return isLocked(step, finished, flow) ? "locked" : "open";
 }
 
 function TickIcon() {
@@ -63,12 +73,20 @@ interface StepItemProps {
   number?: number;
   current: StepId;
   finished: readonly StepId[];
+  flow: Flow;
 }
 
 // One step: a link when it can be opened, plain text while it is locked. A finished step
 // shows a tick. Its state is also spoken, since the tick and the lock are visual only.
-function StepItem({ step, label, number, current, finished }: StepItemProps) {
-  const state = stepState(step, current, finished);
+function StepItem({
+  step,
+  label,
+  number,
+  current,
+  finished,
+  flow,
+}: StepItemProps) {
+  const state = stepState(step, current, finished, flow);
   const isCurrent = step === current;
   const mark = state === "finished" ? <TickIcon /> : (number ?? <PersonIcon />);
   const content = (
@@ -107,21 +125,27 @@ function StepItem({ step, label, number, current, finished }: StepItemProps) {
 }
 
 // The left column of the Contribute flow: Profile & Handle on its own above a divider,
-// then the numbered steps.
-export function StepList({ current, finished }: StepListProps) {
-  const [profile, ...numbered] = steps;
+// then the numbered steps. A new version's flow has only the numbered steps.
+export function StepList({ current, finished, flow = "first" }: StepListProps) {
+  const [profile] = steps;
+  const numbered = flowSteps(flow).filter(({ id }) => id !== profile.id);
 
   return (
     <nav aria-label="Steps" className={styles["nav"]}>
-      <ul className={styles["list"]}>
-        <StepItem
-          step={profile.id}
-          label={profile.label}
-          current={current}
-          finished={finished}
-        />
-      </ul>
-      <hr className={styles["divider"]} />
+      {flow === "first" ? (
+        <>
+          <ul className={styles["list"]}>
+            <StepItem
+              step={profile.id}
+              label={profile.label}
+              current={current}
+              finished={finished}
+              flow={flow}
+            />
+          </ul>
+          <hr className={styles["divider"]} />
+        </>
+      ) : null}
       <ol className={styles["list"]}>
         {numbered.map((step, index) => (
           <StepItem
@@ -131,6 +155,7 @@ export function StepList({ current, finished }: StepListProps) {
             number={index + 1}
             current={current}
             finished={finished}
+            flow={flow}
           />
         ))}
       </ol>

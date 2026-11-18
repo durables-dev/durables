@@ -158,13 +158,13 @@ export function DetailsStep() {
   );
 }
 
-interface FieldMessageProps {
+export interface FieldMessageProps {
   id: string;
   message: string | undefined;
 }
 
 // The short message under a field. Always in the markup, so the field can point at it.
-function FieldMessage({ id, message }: FieldMessageProps) {
+export function FieldMessage({ id, message }: FieldMessageProps) {
   return (
     <p id={id} className={styles["message"]} hidden={message === undefined}>
       {message}

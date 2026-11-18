@@ -62,3 +62,18 @@
   display: flex;
   align-items: center;
 }
+
+/* An outlined link beside View the listing, as the contribute canvas shows. */
+.profile {
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: 600;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}

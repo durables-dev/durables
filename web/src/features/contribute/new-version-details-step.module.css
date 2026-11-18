@@ -1,0 +1,43 @@
+/* The suggested version: a neutral panel under the address, as the contribute canvas shows. */
+.suggestion {
+  padding: 12px 14px;
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  font-size: var(--text-label);
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.suggested {
+  font-weight: 600;
+}
+
+.number {
+  font-family: var(--font-mono);
+}
+
+/* Refusals are neutral text, never Ember (DUR-2). An allowed number is Lagoon. */
+.verdict {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.verdict[data-allowed] {
+  color: var(--positive);
+}
+
+.use {
+  align-self: flex-start;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  cursor: pointer;
+}
