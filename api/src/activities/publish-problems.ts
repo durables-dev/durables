@@ -1,4 +1,8 @@
-import { handleTakenMessage } from "@durables/schemas";
+import {
+  handleTakenMessage,
+  versionNotHigherMessage,
+  versionTakenMessage,
+} from "@durables/schemas";
 import {
   type FieldError,
   type ProblemDetails,
@@ -18,6 +22,9 @@ export const publishProblemTypes = {
   handleTaken: problemType("handle-taken"),
   invalidListing: problemType("invalid-listing"),
   publishLimited: problemType("publish-limited"),
+  versionTaken: problemType("version-taken"),
+  versionNotHigher: problemType("version-not-higher"),
+  baseNotFound: problemType("base-not-found"),
 } as const;
 
 /** The message under the name field when this publisher already has a listing at the address. */
@@ -82,3 +89,39 @@ export const publishLimited = () =>
     status: 429,
     detail: "Too many publishes in a short time. Wait a minute and try again.",
   });
+
+/** The listing already has this version. Versions are published once. Nothing was written. */
+export const versionTaken = (version: string) => {
+  const message = versionTakenMessage(version);
+  return new ProblemError({
+    type: publishProblemTypes.versionTaken,
+    status: 409,
+    title: "Version taken",
+    detail: message,
+    errors: [{ field: "version", message }],
+  });
+};
+
+/** The version is not higher than the listing's latest. Nothing was written. */
+export const versionNotHigher = (latest: string) => {
+  const message = versionNotHigherMessage(latest);
+  return new ProblemError({
+    type: publishProblemTypes.versionNotHigher,
+    status: 422,
+    title: "Version not higher",
+    detail: message,
+    errors: [{ field: "version", message }],
+  });
+};
+
+/** The version a new one is based on is not one of the listing's. Nothing was written. */
+export const baseNotFound = (listing: string, basedOn: string) => {
+  const message = `${listing} has no version ${basedOn}. Start from one of its versions.`;
+  return new ProblemError({
+    type: publishProblemTypes.baseNotFound,
+    status: 422,
+    title: "Base version not found",
+    detail: message,
+    errors: [{ field: "basedOn", message }],
+  });
+};

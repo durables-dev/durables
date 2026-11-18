@@ -16,6 +16,7 @@ export {
   type HandleRuleResult,
 } from "./handle";
 export {
+  compareVersionNumbers,
   deprecationReasonEmptyMessage,
   deprecationReasonMaxLength,
   deprecationReasonSchema,
@@ -40,6 +41,15 @@ export {
   publishConfirmationKeys,
   publishConfirmationMessage,
   publishConfirmationsSchema,
+  versionNotHigherMessage,
+  versionNumberFormatMessage,
+  versionNumberPattern,
+  versionNumberSchema,
+  versionTakenMessage,
+  whatChangedEmptyMessage,
+  whatChangedMaxLength,
+  whatChangedSchema,
+  whatChangedTooLongMessage,
   type Integration,
   type ListingDetails,
   type PublishConfirmationKey,

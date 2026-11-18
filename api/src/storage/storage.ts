@@ -240,14 +240,33 @@ export type CreateListingResult =
   { outcome: "created"; listing: Listing } | { outcome: "address-taken" };
 
 /**
- * What publishing records in the database: the listing and its first version, and the
- * account for a provider identity that has none yet. The new account's handle is the
- * listing's handle.
+ * What a later version of an existing listing records besides its own fields: the version it
+ * was based on, its What changed note, and, when asked, the deprecation of that base version
+ * with the new version as its replacement (ADR 0015).
+ */
+export interface NextVersion {
+  /** The version number of the listing's version the new one was based on. */
+  basedOn: string;
+  /** The What changed note. It can't be changed after publishing. */
+  whatChanged: string;
+  /** The reason to deprecate the base version. Null to leave the base version as it is. */
+  deprecateBase: { reason: string } | null;
+}
+
+/**
+ * What publishing records in the database. A first publish writes the listing and its first
+ * version, and the account for a provider identity that has none yet. The new account's handle
+ * is the listing's handle. A later version writes only the version under its existing listing.
  */
 export interface NewPublication {
   listing: NewListing;
   /** The provider identity to create the account for. Absent when the account exists. */
   newAccount?: ProviderIdentity;
+  /**
+   * Present when this is a later version of an existing listing, which already has an account.
+   * Absent for a first publish.
+   */
+  nextVersion?: NextVersion;
 }
 
 /**
@@ -606,7 +625,11 @@ export class Storage {
   async createPublication({
     listing,
     newAccount,
+    nextVersion,
   }: NewPublication): Promise<CreatePublicationResult> {
+    if (nextVersion !== undefined) {
+      return this.#createNextVersion(listing, nextVersion);
+    }
     if (newAccount === undefined) {
       const result = await this.createListing(listing);
       return result.outcome === "created"
@@ -639,6 +662,84 @@ export class Storage {
       }
       if (!(await this.isHandleAvailable(handle))) {
         return { outcome: "handle-taken" };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Records a later version of an existing listing in one database batch, so either every row
+   * is written or none are (ADR 0015): the version with its base and What changed note, the
+   * base version's deprecation when asked for, with the new version as its replacement, and the
+   * end of a removal from search the publisher made. A removal by account deletion or by
+   * Durables stays. No other version's row is touched. When the version address exists, nothing
+   * is written and the outcome is address-taken. The caller checks the base is one of the
+   * listing's versions and the number is higher than every version's.
+   */
+  async #createNextVersion(
+    listing: NewListing,
+    { basedOn, whatChanged, deprecateBase }: NextVersion,
+  ): Promise<CreatePublicationResult> {
+    const { handle, name, version, title, description, sdk } = listing;
+    const integrations = [...listing.integrations];
+    const insertVersion = this.#db
+      .insert(versions)
+      .values({
+        handle,
+        name,
+        version,
+        title,
+        sdk,
+        integrations,
+        description,
+        whatChanged,
+        basedOn,
+      })
+      .returning({ publishedAt: versions.publishedAt });
+    const returnToSearch = this.#db
+      .update(listings)
+      .set({ removedBy: null })
+      .where(
+        and(
+          eq(listings.handle, handle),
+          eq(listings.name, name),
+          eq(listings.removedBy, "publisher"),
+        ),
+      );
+    try {
+      const [[created]] = await this.#db.batch(
+        deprecateBase === null
+          ? [insertVersion, returnToSearch]
+          : [
+              insertVersion,
+              this.#db
+                .insert(versionDeprecations)
+                .values({
+                  handle,
+                  name,
+                  version: basedOn,
+                  reason: deprecateBase.reason,
+                  replacement: version,
+                })
+                .onConflictDoUpdate({
+                  target: [
+                    versionDeprecations.handle,
+                    versionDeprecations.name,
+                    versionDeprecations.version,
+                  ],
+                  set: { reason: deprecateBase.reason, replacement: version },
+                }),
+              returnToSearch,
+            ],
+      );
+      return {
+        outcome: "created",
+        listing: createdListing(listing, created),
+        accountCreated: false,
+      };
+    } catch (error) {
+      if (isAddressConflict(error)) {
+        return { outcome: "address-taken" };
       }
       throw error;
     }
