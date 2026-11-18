@@ -9,12 +9,12 @@ export interface UpdateDialogProps {
   /** Runs however the dialog closed: Cancel, the close button, Escape, or a save. */
   onClose: () => void;
   address: ListingAddress;
-  /** The listing's saved description. */
+  /** The viewed version's saved description. */
   description: string;
 }
 
-// "Update listing": the heading, the intro, then the description field, the note on what
-// can't be changed here and the buttons. Cancel, the close button and Escape all close it
+// "Update {version}": the heading, the note that only the viewed version changes, then the
+// description field, the note on what can't be changed here and the buttons. Cancel, the close button and Escape all close it
 // without saving. Each close starts the form afresh, so the next opening shows the saved
 // description rather than an abandoned edit.
 export function UpdateDialog({
@@ -44,7 +44,7 @@ export function UpdateDialog({
     >
       <div className={styles["header"]}>
         <h2 id={titleId} className={styles["title"]}>
-          Update listing
+          Update <span className={styles["version"]}>{address.version}</span>
         </h2>
         <button
           type="button"
@@ -67,8 +67,9 @@ export function UpdateDialog({
         </button>
       </div>
       <p id={introId} className={styles["intro"]}>
-        This changes on every version&apos;s page right away. Anything about how
-        the activity behaves needs a new version instead.
+        This changes the description of{" "}
+        <span className={styles["version"]}>{address.version}</span> only.
+        Anything about how the activity behaves needs a new version instead.
       </p>
       <UpdateForm
         key={opening}

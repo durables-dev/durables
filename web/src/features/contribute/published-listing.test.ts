@@ -18,6 +18,18 @@ describe("readPublishedListing", () => {
     expect(readPublishedListing(publishedState(listing))).toEqual(listing);
   });
 
+  test("reads the base a new version was published from", () => {
+    const newVersion = {
+      ...listing,
+      version: "2.1.0",
+      accountCreated: false,
+      basedOn: "2.0.0",
+    };
+    expect(readPublishedListing(publishedState(newVersion))).toEqual(
+      newVersion,
+    );
+  });
+
   test.each([
     ["no state", null],
     ["another state", { origin: "/" }],

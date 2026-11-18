@@ -5,6 +5,7 @@ import {
   formatAddress,
   listingResponse,
   publishResponse,
+  shownRemoval,
   versionLocation,
   versionResponse,
 } from "./responses";
@@ -92,6 +93,13 @@ describe("the version response", () => {
     );
   });
 
+  test("leaves out the deprecation and the versions list, which can change after publishing", () => {
+    const response = versionResponse(version, document);
+
+    expect(response).not.toHaveProperty("deprecation");
+    expect(response).not.toHaveProperty("versions");
+  });
+
   test("answers an empty integrations list when the version has none", () => {
     const response = versionResponse(
       { ...version, integrations: [] },
@@ -136,19 +144,101 @@ describe("the version response", () => {
 });
 
 describe("the listing response", () => {
-  test("holds the handle, name and current description", () => {
+  test("holds the handle, the name, the removal and every version in the order given, with its current state", () => {
     expect(
       listingResponse({
         handle: "acme",
         name: "charge-card",
-        description: "Charges a card through Stripe.",
+        removedBy: null,
+        versions: [
+          {
+            version: "1.1.0",
+            publishedAt: new Date("2026-11-02T08:30:00Z"),
+            whatChanged: "Records the receipt.",
+            basedOn: "1.0.0",
+            deprecation: null,
+            description: "Charges a card and records the receipt.",
+          },
+          {
+            version: "1.0.0",
+            publishedAt: new Date("2026-10-23T12:00:00Z"),
+            whatChanged: null,
+            basedOn: null,
+            deprecation: {
+              reason: "Double-charges on retry.",
+              replacement: "1.1.0",
+            },
+            description: "Charges a card through Stripe.",
+          },
+        ],
       }),
     ).toEqual({
       handle: "acme",
       name: "charge-card",
-      description: "Charges a card through Stripe.",
+      removedBy: null,
+      versions: [
+        {
+          version: "1.1.0",
+          publishedAt: "2026-11-02T08:30:00.000Z",
+          whatChanged: "Records the receipt.",
+          basedOn: "1.0.0",
+          deprecation: null,
+          description: "Charges a card and records the receipt.",
+        },
+        {
+          version: "1.0.0",
+          publishedAt: "2026-10-23T12:00:00.000Z",
+          whatChanged: null,
+          basedOn: null,
+          deprecation: {
+            reason: "Double-charges on retry.",
+            replacement: "1.1.0",
+          },
+          description: "Charges a card through Stripe.",
+        },
+      ],
     });
   });
+
+  test("answers a deprecation with no replacement as a null replacement", () => {
+    expect(
+      listingResponse({
+        handle: "acme",
+        name: "charge-card",
+        removedBy: null,
+        versions: [
+          {
+            version: "1.0.0",
+            publishedAt: new Date("2026-10-23T12:00:00Z"),
+            whatChanged: null,
+            basedOn: null,
+            deprecation: { reason: "Uses a retired API.", replacement: null },
+            description: "Charges a card through Stripe.",
+          },
+        ],
+      }).versions[0]?.deprecation,
+    ).toEqual({ reason: "Uses a retired API.", replacement: null });
+  });
+
+  test.each([
+    ["the publisher", "publisher", "publisher"],
+    ["account deletion", "account-deletion", "publisher"],
+    ["Durables", "durables", "durables"],
+    ["nobody", null, null],
+  ] as const)(
+    "shows a removal by %s as removed by %j",
+    (_, removedBy, shown) => {
+      expect(
+        listingResponse({
+          handle: "acme",
+          name: "charge-card",
+          removedBy,
+          versions: [],
+        }).removedBy,
+      ).toBe(shown);
+      expect(shownRemoval(removedBy)).toBe(shown);
+    },
+  );
 });
 
 describe("the publish response", () => {

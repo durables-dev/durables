@@ -41,7 +41,7 @@ describe("creating an account on first publish", () => {
           ),
       );
     expect(added("accounts")).toEqual([
-      { id, createdAt: expect.any(Date) as Date },
+      { id, createdAt: expect.any(Date) as Date, deletionRequestedAt: null },
     ]);
     expect(added("providerAccounts")).toEqual([
       {

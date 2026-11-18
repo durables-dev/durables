@@ -165,11 +165,7 @@ describe("recording a publication", () => {
     // Publishing never leaves a listing with no version. It makes the listing insert fail.
     const seeded = await seedAccount(env.DB);
     const listing = newListing(seeded.handle);
-    await seedListing(env.DB, {
-      handle: seeded.handle,
-      name: listing.name,
-      description: "Left behind",
-    });
+    await seedListing(env.DB, { handle: seeded.handle, name: listing.name });
     const before = await readAllRows(env.DB);
 
     const result = await storage().createPublication({ listing });

@@ -69,8 +69,9 @@ function publisherBar(page: Page) {
   return main(page).getByRole("region", { name: "Your listing controls" });
 }
 
+/** The Update dialog, named for the version it changes, such as "Update 1.0.0". */
 function updateDialog(page: Page) {
-  return page.getByRole("dialog", { name: "Update listing" });
+  return page.getByRole("dialog", { name: /^Update \d+\.\d+\.\d+$/ });
 }
 
 function descriptionField(page: Page) {
@@ -754,5 +755,123 @@ test.describe("the publisher bar and Update dialog", () => {
     await expect(descriptionField(page)).toHaveValue(tooLong);
     await expectAccessible();
     await expectDescriptionKept(page, savedDescription);
+  });
+});
+
+test.describe("versions and deprecation", () => {
+  /** The Versions section's rows, newest first. */
+  function versionRows(page: Page) {
+    return main(page)
+      .getByRole("list", { name: "Versions" })
+      .getByRole("listitem");
+  }
+
+  function deprecatedNotice(page: Page) {
+    return main(page)
+      .getByRole("status")
+      .filter({ hasText: "is deprecated by the publisher" });
+  }
+
+  test("deprecating with No replacement shows the notice with the reason and no link to another version", async ({
+    page,
+    expectAccessible,
+    publishOwnListing,
+    publishVersionThroughApi,
+  }) => {
+    const first = await publishOwnListing(slackListing);
+    await publishVersionThroughApi(first, {
+      ...slackListing,
+      version: "1.1.0",
+      basedOn: "1.0.0",
+      whatChanged: "Retries when Slack rate-limits the call.",
+    });
+    const reason = "Sends to a channel Slack has retired.";
+    const dialog = page.getByRole("dialog", { name: "Deprecate 1.0.0" });
+    await page.goto(`/${first.address}`);
+
+    await publisherBar(page)
+      .getByRole("button", { name: "Deprecate 1.0.0" })
+      .click();
+    await dialog
+      .getByLabel("Point people to", { exact: true })
+      .selectOption({ label: "No replacement" });
+    await dialog.getByLabel("Reason", { exact: true }).fill(reason);
+    await dialog.getByRole("button", { name: "Deprecate 1.0.0" }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(deprecatedNotice(page)).toContainText(
+      "1.0.0 is deprecated by the publisher",
+    );
+    await expect(deprecatedNotice(page)).toContainText(reason);
+    await expect(deprecatedNotice(page).getByRole("link")).toHaveCount(0);
+    await expect(versionRows(page).nth(1)).toContainText(
+      "Deprecated · no replacement",
+    );
+    await expectAccessible();
+
+    await page.reload();
+
+    await expect(deprecatedNotice(page)).toContainText(reason);
+    await expect(deprecatedNotice(page).getByRole("link")).toHaveCount(0);
+  });
+
+  test("updating an older version's description changes only that version, and search still shows the latest's", async ({
+    page,
+    expectAccessible,
+    publishOwnListing,
+    publishVersionThroughApi,
+    uniqueWord,
+  }) => {
+    const word = uniqueWord();
+    const title = `Post slack message ${word}`;
+    const latestDescription =
+      "Posts a message to a Slack channel and retries when rate-limited.";
+    const corrected = "Posts a message to a Slack channel, without retries.";
+    const first = await publishOwnListing({
+      ...slackListing,
+      title,
+      description: savedDescription,
+    });
+    const latest = await publishVersionThroughApi(first, {
+      ...slackListing,
+      title,
+      description: latestDescription,
+      version: "1.1.0",
+      basedOn: "1.0.0",
+      whatChanged: "Retries when Slack rate-limits the call.",
+    });
+    await page.goto(`/${first.address}`);
+
+    await openUpdate(page, savedDescription);
+    await expect(updateDialog(page)).toHaveAccessibleName("Update 1.0.0");
+    await descriptionField(page).fill(corrected);
+    await updateDialog(page)
+      .getByRole("button", { name: "Save changes" })
+      .click();
+
+    await expect(updateDialog(page)).toBeHidden();
+    await expectDescriptionKept(page, corrected);
+    await expectAccessible();
+
+    await page.goto(`/${latest.address}`);
+
+    await expect(
+      main(page).getByRole("heading", { level: 1, name: title }),
+    ).toBeVisible();
+    await expect(
+      main(page).getByText(latestDescription, { exact: true }),
+    ).toBeVisible();
+    await expect(main(page).getByText(corrected, { exact: true })).toHaveCount(
+      0,
+    );
+
+    await page.goto(`/search?q=${word}`);
+
+    const resultCard = main(page).getByRole("article", {
+      name: title,
+      exact: true,
+    });
+    await expect(resultCard).toContainText(latestDescription);
+    await expect(resultCard).not.toContainText(corrected);
   });
 });

@@ -1,3 +1,4 @@
+import type { NewVersionBase } from "@/lib/new-version-entry";
 import { useEffect, useReducer, type ReactNode } from "react";
 import { ContributeDraftContext } from "./contribute-draft-context";
 import {
@@ -12,6 +13,8 @@ export interface ContributeDraftProviderProps {
   children: ReactNode;
   /** The page the flow was opened from, when the link that opened it named one. Read once. */
   entryOrigin?: string | undefined;
+  /** The version to start a new version from, when the link that opened the flow named one. */
+  entryNewVersion?: NewVersionBase | undefined;
 }
 
 // Holds the draft for the Contribute flow. It starts from the copy in sessionStorage and
@@ -20,9 +23,13 @@ export interface ContributeDraftProviderProps {
 export function ContributeDraftProvider({
   children,
   entryOrigin,
+  entryNewVersion,
 }: ContributeDraftProviderProps) {
-  const [draft, dispatch] = useReducer(draftReducer, entryOrigin, (origin) =>
-    enterDraft(readDraft(sessionStorageIfAvailable()), origin),
+  const [draft, dispatch] = useReducer(
+    draftReducer,
+    { origin: entryOrigin, newVersion: entryNewVersion },
+    ({ origin, newVersion }) =>
+      enterDraft(readDraft(sessionStorageIfAvailable()), origin, newVersion),
   );
 
   useEffect(() => {

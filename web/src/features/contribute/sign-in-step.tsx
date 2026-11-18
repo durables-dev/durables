@@ -1,6 +1,6 @@
+import { SignInProviderList } from "@/components/sign-in-provider-list";
 import { useNavigate } from "react-router";
 import styles from "./sign-in-step.module.css";
-import { signInProviders, signInStartPath } from "./sign-in-providers";
 import { StepFooter } from "./step-footer";
 import stepStyles from "./step.module.css";
 import { stepPath } from "./steps";
@@ -14,9 +14,16 @@ export interface SignInStepProps {
   signedIn: boolean;
 }
 
+/**
+ * Where a returning publisher's finished sign-in comes back to: Contribute, which picks the
+ * step from the session. Someone with no account goes to Profile & Handle whatever this says.
+ */
+const contributeReturnPath = "/contribute";
+
 // The sign-in step: four providers as equal choices, and no Durables password. Each provider
 // is a plain link to the API's start route, so the browser leaves for the provider's consent
-// screen. Back returns to the page the flow was opened from, or home.
+// screen, and a finished sign-in returns to Contribute. Back returns to the page the flow was
+// opened from, or home.
 export function SignInStep({ failed, signedIn }: SignInStepProps) {
   const navigate = useNavigate();
   const { draft } = useContributeDraft();
@@ -38,19 +45,7 @@ export function SignInStep({ failed, signedIn }: SignInStepProps) {
           Sign-in didn&apos;t finish. Try again, or choose another provider.
         </p>
       ) : null}
-      <ul className={styles["providers"]} aria-label="Sign-in providers">
-        {signInProviders.map(({ id, name }) => (
-          <li key={id}>
-            <a
-              href={signInStartPath(id)}
-              className={styles["provider"]}
-              data-provider={id}
-            >
-              Continue with {name}
-            </a>
-          </li>
-        ))}
-      </ul>
+      <SignInProviderList returnTo={contributeReturnPath} />
       <p className={styles["note"]}>
         We keep your name, email and avatar from the provider.
       </p>

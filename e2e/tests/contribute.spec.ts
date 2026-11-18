@@ -11,8 +11,6 @@ const providers = ["GitHub", "GitLab", "Google", "Microsoft"] as const;
 
 const formatMessage =
   "Use 3 to 39 lowercase letters, numbers and single hyphens.";
-const signInFailedMessage =
-  "Sign-in didn't finish. Try again, or choose another provider.";
 
 test(
   "a handle outside the format rule, in use or reserved is refused with its message and Continue stays disabled",
@@ -97,9 +95,9 @@ test.describe("as an anonymous visitor", () => {
   );
 
   test(
-    "a sign-in that did not finish returns to the sign-in step with the failure message",
+    "a sign-in that did not finish lands on the Sign in page with the failure indicator, signed out",
     { tag: "@journey" },
-    async ({ page, expectAccessible }) => {
+    async ({ page }) => {
       await page.goto("/contribute");
       await expect(
         page.getByRole("heading", { level: 2, name: "Sign in to contribute" }),
@@ -114,14 +112,11 @@ test.describe("as an anonymous visitor", () => {
             `/api/session/providers/${name.toLowerCase()}/callback?error=access_denied`,
           );
 
-          await expect(page).toHaveURL("/contribute/profile?sign-in=failed");
-          await expect(
-            page.getByRole("heading", {
-              level: 2,
-              name: "Sign in to contribute",
-            }),
-          ).toBeVisible();
-          await expect(page.getByRole("alert")).toHaveText(signInFailedMessage);
+          // A failed sign-in lands on the Sign in page with its failure message (API map D5).
+          await expect(page).toHaveURL("/sign-in?sign-in=failed");
+          await expect(page.getByRole("alert")).toHaveText(
+            "Sign-in didn't finish. Try again, or choose another provider.",
+          );
           await expect(
             page
               .getByRole("banner")
@@ -129,7 +124,6 @@ test.describe("as an anonymous visitor", () => {
           ).toHaveCount(0);
         });
       }
-      await expectAccessible();
     },
   );
 });

@@ -1,0 +1,79 @@
+/* The offer to deprecate the base version: a bordered panel, as the confirmations are. */
+.deprecate {
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toggle {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: var(--text-small);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.toggle label {
+  cursor: pointer;
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.reason {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* Errors are neutral text, never Ember (DUR-2). */
+.message {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.version {
+  font-family: var(--font-mono);
+}
+
+/* The removed activity's note: neutral, since returning to search is not a warning. */
+.returns {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: var(--text-label);
+  line-height: 1.6;
+}

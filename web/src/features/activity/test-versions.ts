@@ -1,5 +1,5 @@
 import type { ImplementVersion } from "./implement-steps";
-import type { VersionResponse } from "./listing-queries";
+import type { VersionResponse } from "@/lib/listing-queries";
 
 // Versions as the API answers them, one per SDK, for the Implement tests. The snippets follow
 // the API's generated shapes and order: install, workflow, worker, starter, then run.
@@ -253,3 +253,26 @@ export const newSdkSamples = [
     code: "pub async fn charge_card(input: Charge) -> Result<String, Error> {\n    let id = input.id;\n    Ok(id)\n}\n",
   },
 ] as const;
+
+/**
+ * ddieruf/charge-card's listing as the API answers it: listed in search, and each version,
+ * newest first, with the same description and no deprecation.
+ */
+export function chargeCardListing(
+  description: string,
+  versions: string[] = ["1.0.0"],
+) {
+  return {
+    handle: "ddieruf",
+    name: "charge-card",
+    removedBy: null,
+    versions: versions.map((version) => ({
+      version,
+      publishedAt: new Date().toISOString(),
+      whatChanged: null,
+      basedOn: null,
+      deprecation: null,
+      description,
+    })),
+  };
+}

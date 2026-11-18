@@ -19,7 +19,7 @@ import {
 import { draftFinished } from "./draft";
 import styles from "./handle-step.module.css";
 import { lowercaseAsTyped } from "./lowercase-as-typed";
-import { signInProviders } from "./sign-in-providers";
+import { signInProviders } from "@/lib/sign-in-providers";
 import { signInAgainPath } from "./sign-in-view";
 import { StepFooter } from "./step-footer";
 import stepStyles from "./step.module.css";

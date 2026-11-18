@@ -424,7 +424,16 @@ describe("the Published screen", () => {
         HttpResponse.json({
           handle: "ddieruf",
           name: "post-slack-message",
-          description,
+          versions: [
+            {
+              version: "1.0.0",
+              publishedAt: new Date().toISOString(),
+              whatChanged: null,
+              basedOn: null,
+              deprecation: null,
+              description,
+            },
+          ],
         }),
       ),
     );
@@ -443,7 +452,9 @@ describe("the Published screen", () => {
     await expect.element(screen.getByText(description)).toBeVisible();
   });
 
-  test("has no profile link and no backup sign-in note", async () => {
+  // DUR-117 criterion 8: Go to your profile sits beside View the listing. The backup
+  // sign-in tip stays out of this epic.
+  test("offers Go to your profile beside View the listing, and no backup sign-in tip", async () => {
     const { screen, session } = await openReview();
     answerPublish(() => HttpResponse.json(created, { status: 201 }), session);
 
@@ -452,13 +463,12 @@ describe("the Published screen", () => {
     await expect.element(publishedHeading(screen)).toBeVisible();
     const main = screen.getByRole("main");
     await expect
-      .element(main.getByRole("link", { name: /profile/i }))
-      .not.toBeInTheDocument();
-    for (const text of [
-      /Go to your profile/,
-      /backup sign-in/,
-      /One more thing/,
-    ]) {
+      .element(main.getByRole("link", { name: "View the listing" }))
+      .toBeVisible();
+    await expect
+      .element(main.getByRole("link", { name: "Go to your profile" }))
+      .toHaveAttribute("href", "/profile");
+    for (const text of [/backup sign-in/, /One more thing/]) {
       await expect.element(main.getByText(text)).not.toBeInTheDocument();
     }
   });

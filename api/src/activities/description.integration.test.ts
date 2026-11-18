@@ -13,8 +13,8 @@ import {
 import { versionDocumentKey } from "../storage/version-document";
 import type { ListingResponse, VersionResponse } from "./responses";
 
-// Saving a listing's description over HTTP, against the real Worker with real local D1 and R2
-// (api/CONVENTIONS.md). Each test seeds its own account and signs in as it through the local
+// Saving one version's description over HTTP, against the real Worker with real local D1 and
+// R2 (api/CONVENTIONS.md). Each test seeds its own account and signs in as it through the local
 // fake provider, so addresses never collide.
 
 const problemContentType = "application/problem+json";
@@ -113,9 +113,29 @@ const patch = (
 
 const get = (path: string) => exports.default.fetch(`http://localhost${path}`);
 
-/** The description stored for a listing, read straight from storage. */
+/** The description stored for a version, read straight from storage. */
 const storedDescription = async (address: Address) =>
-  (await storage().findListingDescription(address))?.description;
+  (await storage().findListing(address))?.description;
+
+/** Adds a later version under a published listing, with its document and its own description. */
+const addVersion = async (
+  address: Address,
+  version: string,
+  description: string,
+): Promise<Address> => {
+  const later = { ...address, version };
+  await storage().writeVersionDocument(later, document);
+  await seedVersion(env.DB, {
+    ...later,
+    title: document.title,
+    sdk: document.facts.sdk,
+    integrations: [...document.integrations],
+    description,
+    whatChanged: `Changes in ${version}.`,
+    basedOn: address.version,
+  });
+  return later;
+};
 
 /** Every database row and every version document, so a test can show nothing was written. */
 const snapshot = async () => {
@@ -139,16 +159,29 @@ const expectProblem = async (
 
 describe("PATCH /api/activities/:handle/:name", () => {
   describe("a save that succeeds", () => {
-    test("answers 200 with the new description, and the listing stores it", async () => {
+    test("answers 200 with the listing and the version's new description, and the version stores it", async () => {
       const { address, cookie } = await newOwner();
 
-      const response = await patch(address, cookie, { description: saved });
+      const response = await patch(address, cookie, {
+        version: "1.0.0",
+        description: saved,
+      });
 
       expect(response.status).toBe(200);
       expect(await response.json<ListingResponse>()).toEqual({
         handle: address.handle,
         name: address.name,
-        description: saved,
+        removedBy: null,
+        versions: [
+          {
+            version: "1.0.0",
+            publishedAt: expect.any(String) as string,
+            whatChanged: null,
+            basedOn: null,
+            deprecation: null,
+            description: saved,
+          },
+        ],
       });
       expect(await storedDescription(address)).toBe(saved);
     });
@@ -156,7 +189,10 @@ describe("PATCH /api/activities/:handle/:name", () => {
     test("carries no-store", async () => {
       const { address, cookie } = await newOwner();
 
-      const response = await patch(address, cookie, { description: saved });
+      const response = await patch(address, cookie, {
+        version: "1.0.0",
+        description: saved,
+      });
 
       expect(response.headers.get("Cache-Control")).toBe("no-store");
     });
@@ -165,7 +201,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const { address, cookie } = await newOwner();
 
       const saveBody = await (
-        await patch(address, cookie, { description: saved })
+        await patch(address, cookie, { version: "1.0.0", description: saved })
       ).json();
       const readBody = await (await get(listingPath(address))).json();
 
@@ -176,12 +212,13 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const { address, cookie } = await newOwner();
 
       const response = await patch(address, cookie, {
+        version: "1.0.0",
         description: `  ${saved}\t `,
       });
 
-      expect(await response.json<ListingResponse>()).toMatchObject({
-        description: saved,
-      });
+      expect(
+        (await response.json<ListingResponse>()).versions[0]?.description,
+      ).toBe(saved);
       expect(await storedDescription(address)).toBe(saved);
     });
 
@@ -189,7 +226,10 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const { address, cookie } = await newOwner();
       const longest = "a".repeat(160);
 
-      const response = await patch(address, cookie, { description: longest });
+      const response = await patch(address, cookie, {
+        version: "1.0.0",
+        description: longest,
+      });
 
       expect(response.status).toBe(200);
       expect(await storedDescription(address)).toBe(longest);
@@ -199,15 +239,18 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const { address, cookie } = await newOwner();
 
       const response = await patch(address, cookie, {
+        version: "1.0.0",
         description: saved,
         title: "Something else",
         handle: "someone-else",
       });
 
-      expect(await response.json<ListingResponse>()).toEqual({
+      expect(response.status).toBe(200);
+      expect(await storedDescription(address)).toBe(saved);
+      expect(await storage().findListing(address)).toMatchObject({
         handle: address.handle,
         name: address.name,
-        description: saved,
+        title: document.title,
       });
     });
 
@@ -219,39 +262,49 @@ describe("PATCH /api/activities/:handle/:name", () => {
         address.name,
       );
 
-      await patch(address, cookie, { description: saved });
+      await patch(address, cookie, { version: "1.0.0", description: saved });
 
       expect(await storedDescription(sibling)).toBe(published);
       expect(await storedDescription(elsewhere)).toBe(published);
     });
   });
 
-  describe("every version after a save", () => {
-    test("the listing read answers the saved text, and each version and its document are unchanged", async () => {
+  describe("a listing with several versions", () => {
+    test("saving 1.1.0 changes only 1.1.0's description, and every version read and document is unchanged", async () => {
       const { address, cookie } = await newOwner();
-      const later = { ...address, version: "1.1.0" };
-      await storage().writeVersionDocument(later, document);
-      await seedVersion(env.DB, {
-        ...later,
-        title: document.title,
-        sdk: document.facts.sdk,
-        integrations: [...document.integrations],
-      });
+      const middle = await addVersion(address, "1.1.0", "Version 1.1.0's own.");
+      const latest = await addVersion(middle, "1.2.0", "Version 1.2.0's own.");
+      const all = [address, middle, latest];
       const versionsBefore = await Promise.all(
-        [address, later].map(async (version) =>
+        all.map(async (version) =>
           (await get(versionPath(version))).json<VersionResponse>(),
         ),
       );
       const before = await snapshot();
 
-      const response = await patch(address, cookie, { description: saved });
-      expect(response.status).toBe(200);
-
-      const listing = await get(listingPath(address));
-      expect(await listing.json<ListingResponse>()).toMatchObject({
+      const response = await patch(address, cookie, {
+        version: "1.1.0",
         description: saved,
       });
-      for (const [index, version] of [address, later].entries()) {
+      expect(response.status).toBe(200);
+
+      expect(await storedDescription(middle)).toBe(saved);
+      expect(await storedDescription(address)).toBe(published);
+      expect(await storedDescription(latest)).toBe("Version 1.2.0's own.");
+      const listing = await (
+        await get(listingPath(address))
+      ).json<ListingResponse>();
+      expect(
+        listing.versions.map(({ version, description }) => ({
+          version,
+          description,
+        })),
+      ).toEqual([
+        { version: "1.2.0", description: "Version 1.2.0's own." },
+        { version: "1.1.0", description: saved },
+        { version: "1.0.0", description: published },
+      ]);
+      for (const [index, version] of all.entries()) {
         const read = await get(versionPath(version));
         expect(await read.json<VersionResponse>()).toEqual(
           versionsBefore[index],
@@ -261,7 +314,64 @@ describe("PATCH /api/activities/:handle/:name", () => {
       }
       const after = await snapshot();
       expect(after.documents).toEqual(before.documents);
-      expect(after.rows["versions"]).toEqual(before.rows["versions"]);
+      for (const table of Object.keys(before.rows).filter(
+        (t) => t !== "versions",
+      )) {
+        expect(after.rows[table]).toEqual(before.rows[table]);
+      }
+      // Every version row but the one saved is exactly as it was.
+      const isSaved = (row: unknown) => {
+        const { name, version } = row as Address;
+        return name === middle.name && version === middle.version;
+      };
+      expect(after.rows["versions"]?.filter((row) => !isSaved(row))).toEqual(
+        before.rows["versions"]?.filter((row) => !isSaved(row)),
+      );
+    });
+  });
+
+  describe("a version that is not the listing's", () => {
+    test.each([
+      ["a version never published", "9.9.9"],
+      ["a malformed version", "1.0.0-RC"],
+    ])("%s answers 404 and stores nothing", async (_, version) => {
+      const { address, cookie } = await newOwner();
+      const before = await snapshot();
+
+      const response = await patch(address, cookie, {
+        version,
+        description: saved,
+      });
+
+      await expectProblem(response, 404);
+      expect(await snapshot()).toEqual(before);
+    });
+
+    test("another listing's version, under the same handle, answers 404 and stores nothing", async () => {
+      const { address, cookie, handle } = await newOwner();
+      const sibling = await publish(handle);
+      await addVersion(sibling, "2.0.0", "The sibling's own.");
+      const before = await snapshot();
+
+      const response = await patch(address, cookie, {
+        version: "2.0.0",
+        description: saved,
+      });
+
+      await expectProblem(response, 404);
+      expect(await snapshot()).toEqual(before);
+    });
+
+    test("a body with no version answers 400 and stores nothing", async () => {
+      const { address, cookie } = await newOwner();
+      const before = await snapshot();
+
+      const response = await patch(address, cookie, { description: saved });
+
+      await expectProblem(response, 400, {
+        errors: [expect.objectContaining({ field: "version" })],
+      });
+      expect(await snapshot()).toEqual(before);
     });
   });
 
@@ -280,7 +390,10 @@ describe("PATCH /api/activities/:handle/:name", () => {
         const { address, cookie } = await newOwner();
         const before = await snapshot();
 
-        const response = await patch(address, cookie, { description });
+        const response = await patch(address, cookie, {
+          version: "1.0.0",
+          description,
+        });
 
         await expectProblem(response, 400, {
           errors: [{ field: "description", message }],
@@ -293,7 +406,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const { address, cookie } = await newOwner();
       const before = await snapshot();
 
-      const response = await patch(address, cookie, {});
+      const response = await patch(address, cookie, { version: "1.0.0" });
 
       await expectProblem(response, 400, {
         errors: [expect.objectContaining({ field: "description" })],
@@ -307,7 +420,10 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const { address } = await newOwner();
       const before = await snapshot();
 
-      const response = await patch(address, undefined, { description: saved });
+      const response = await patch(address, undefined, {
+        version: "1.0.0",
+        description: saved,
+      });
 
       await expectProblem(response, 401);
       expect(await snapshot()).toEqual(before);
@@ -319,7 +435,10 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const cookie = await signIn(other.providerAccountId);
       const before = await snapshot();
 
-      const response = await patch(address, cookie, { description: saved });
+      const response = await patch(address, cookie, {
+        version: "1.0.0",
+        description: saved,
+      });
 
       await expectProblem(response, 403);
       expect(await snapshot()).toEqual(before);
@@ -330,7 +449,10 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const signedIn = await signIn(`no-account-${crypto.randomUUID()}`);
       const before = await snapshot();
 
-      const response = await patch(address, signedIn, { description: saved });
+      const response = await patch(address, signedIn, {
+        version: "1.0.0",
+        description: saved,
+      });
 
       await expectProblem(response, 403);
       expect(await snapshot()).toEqual(before);
@@ -342,7 +464,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const response = await patch(
         { ...address, handle: address.handle.toUpperCase() },
         cookie,
-        { description: saved },
+        { version: "1.0.0", description: saved },
       );
 
       await expectProblem(response, 403);
@@ -358,7 +480,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const response = await patch(
         { handle: address.handle, name: newName() },
         cookie,
-        { description: saved },
+        { version: "1.0.0", description: saved },
       );
 
       await expectProblem(response, 404);
@@ -371,7 +493,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const response = await patch(
         { ...address, name: address.name.toUpperCase() },
         cookie,
-        { description: saved },
+        { version: "1.0.0", description: saved },
       );
 
       await expectProblem(response, 404);
@@ -383,7 +505,10 @@ describe("PATCH /api/activities/:handle/:name", () => {
     test("signed out with an invalid description answers 401, not 400", async () => {
       const { address } = await newOwner();
 
-      const response = await patch(address, undefined, { description: "" });
+      const response = await patch(address, undefined, {
+        version: "1.0.0",
+        description: "",
+      });
 
       await expectProblem(response, 401);
     });
@@ -393,7 +518,10 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const other = await seedAccount(env.DB);
       const cookie = await signIn(other.providerAccountId);
 
-      const response = await patch(address, cookie, { description: "" });
+      const response = await patch(address, cookie, {
+        version: "1.0.0",
+        description: "",
+      });
 
       await expectProblem(response, 403);
     });
@@ -406,7 +534,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const response = await patch(
         { handle: address.handle, name: newName() },
         cookie,
-        { description: saved },
+        { version: "1.0.0", description: saved },
       );
 
       await expectProblem(response, 403);
@@ -418,7 +546,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const response = await patch(
         { handle: address.handle, name: newName() },
         cookie,
-        { description: "a".repeat(161) },
+        { version: "1.0.0", description: "a".repeat(161) },
       );
 
       await expectProblem(response, 404);
@@ -436,7 +564,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
       const response = await patch(
         address,
         cookie,
-        { description: saved },
+        { version: "1.0.0", description: saved },
         headers,
       );
 
@@ -453,7 +581,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Cookie: cookie },
-          body: JSON.stringify({ description: saved }),
+          body: JSON.stringify({ version: "1.0.0", description: saved }),
         },
       );
 

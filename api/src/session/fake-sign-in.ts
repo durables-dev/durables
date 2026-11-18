@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { AppEnv } from "../app-env";
 import { problemOnInvalid } from "../http/validation";
 import { providers } from "../storage/storage";
+import { beginSignIn } from "./begin-sign-in";
 
 // The local fake sign-in provider (ADR 0004). It signs in as any identity the caller names,
 // with no OAuth application, for local development and the e2e project. It is mounted in
@@ -42,7 +43,8 @@ export const fakeProviderAccountId = (name: string): string => `fake-${name}`;
 
 /**
  * Mounted at /api/session/providers/fake in the local entry point. POST a JSON identity to
- * sign in as it. It issues the normal session through the auth interface and answers 204.
+ * sign in as it. It issues the normal session through the auth interface and answers 204. When
+ * the identity's account is pending deletion, it holds the sign-in for the Restore choice instead.
  * It logs nothing.
  */
 export const fakeSignIn = new Hono<AppEnv>().post(
@@ -51,7 +53,9 @@ export const fakeSignIn = new Hono<AppEnv>().post(
   async (c) => {
     const { name, email, provider, username, providerAccountId } =
       c.req.valid("json");
-    await c.var.auth.start({
+    // A pending account's sign-in is held for the Restore choice, as the provider callback
+    // holds it (ADR 0015). Every other sign-in starts the session as before.
+    await beginSignIn(c.var.auth, c.var.storage, {
       provider,
       providerAccountId: providerAccountId ?? fakeProviderAccountId(name),
       name,

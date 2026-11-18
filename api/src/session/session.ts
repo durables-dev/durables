@@ -4,9 +4,10 @@ import {
   handleTakenMessage,
 } from "@durables/schemas";
 import { zValidator } from "@hono/zod-validator";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
+import { finalDeletionAt } from "../accounts/deletion";
 import type { AppEnv } from "../app-env";
 import type { Session } from "../auth/auth";
 import { initials } from "../auth/initials";
@@ -36,8 +37,24 @@ export interface SessionUser {
   accountExists: boolean;
 }
 
+/**
+ * A finished sign-in held for the Restore choice, because its account is pending deletion
+ * (ADR 0015). It names the handle and when the deletion becomes final. It never lists the
+ * activities.
+ */
+export interface RestoreChoice {
+  handle: string | null;
+  /** When the deletion becomes final, as an ISO 8601 time. */
+  finalAt: string;
+}
+
 export interface SessionResponse {
   user: SessionUser | null;
+  /**
+   * Present only when there is no session and a sign-in is held for the Restore choice. Restore
+   * and Start as a new user are the only things it can do.
+   */
+  restore?: RestoreChoice;
 }
 
 /**
@@ -58,6 +75,47 @@ const sessionUser = (
   accountExists,
 });
 
+/** The refusal when the held sign-in's account is no longer pending deletion. */
+const notPendingDeletion = () =>
+  new ProblemError({
+    status: 409,
+    detail: "This account isn't waiting to be deleted. Sign in again.",
+  });
+
+/**
+ * The held sign-in and its account, which must be pending deletion. Answers 401 when no sign-in
+ * is held, and 409 when its account has been restored or finally deleted since.
+ */
+const heldPendingAccount = async (c: Context<AppEnv>) => {
+  const identity = await c.var.auth.pendingSignIn();
+  if (identity === undefined) {
+    throw new ProblemError({ status: 401, detail: "Sign in first." });
+  }
+  const account = await c.var.storage.findAccountState(identity);
+  if (!account?.deletionRequestedAt) {
+    throw notPendingDeletion();
+  }
+  return { identity, account };
+};
+
+/** The Restore choice for a held sign-in, or undefined when none is held or it is no longer pending. */
+const restoreChoice = async (
+  c: Context<AppEnv>,
+): Promise<RestoreChoice | undefined> => {
+  const identity = await c.var.auth.pendingSignIn();
+  if (identity === undefined) {
+    return undefined;
+  }
+  const account = await c.var.storage.findAccountState(identity);
+  if (!account?.deletionRequestedAt) {
+    return undefined;
+  }
+  return {
+    handle: account.handle,
+    finalAt: finalDeletionAt(account.deletionRequestedAt).toISOString(),
+  };
+};
+
 /** Answers 401 before anything else runs when there is no signed-in session. */
 const requireSession = () =>
   createMiddleware<AppEnv>(async (c, next) => {
@@ -76,7 +134,11 @@ export const session = new Hono<AppEnv>()
     c.header("Cache-Control", "no-store");
     const current = await c.var.auth.session();
     if (current === undefined) {
-      return c.json<SessionResponse>({ user: null }, 200);
+      const restore = await restoreChoice(c);
+      return c.json<SessionResponse>(
+        restore === undefined ? { user: null } : { user: null, restore },
+        200,
+      );
     }
     const account = await c.var.storage.findAccountByProviderIdentity(current);
     return c.json<SessionResponse>(
@@ -133,6 +195,36 @@ export const session = new Hono<AppEnv>()
       return c.json<SessionResponse>({ user: sessionUser(saved, false) }, 200);
     },
   )
+  // Restore: clears the pending mark, returns to search only the activities account deletion
+  // removed, and starts the session (ADR 0015).
+  .post("/restore", async (c) => {
+    const { identity, account } = await heldPendingAccount(c);
+    if (!(await c.var.storage.restoreAccount(account.id))) {
+      throw notPendingDeletion();
+    }
+    const started = await c.var.auth.start(identity);
+    c.header("Cache-Control", "no-store");
+    return c.json<SessionResponse>(
+      {
+        user: {
+          ...sessionUser(started, true),
+          ...sessionHandle(started, account),
+        },
+      },
+      200,
+    );
+  })
+  // Start as a new user: makes the deletion final now, through the same step as the daily
+  // final-deletion job, then starts a session with no account (ADR 0015).
+  .post("/start-over", async (c) => {
+    const { identity, account } = await heldPendingAccount(c);
+    if (!(await c.var.storage.finalizeAccountDeletion(account.id))) {
+      throw notPendingDeletion();
+    }
+    const started = await c.var.auth.start(identity);
+    c.header("Cache-Control", "no-store");
+    return c.json<SessionResponse>({ user: sessionUser(started, false) }, 200);
+  })
   .delete("/", (c) => {
     c.var.auth.end();
     c.header("Cache-Control", "no-store");

@@ -9,6 +9,8 @@ export interface PageFrameProps {
   footer?: boolean;
   /** False leaves the Contribute button out of the header. Defaults to true. */
   contribute?: boolean;
+  /** False leaves the Sign in link out of the header. Defaults to true. */
+  signIn?: boolean;
 }
 
 // The frame every route renders inside: the header, the page's content, then the footer.
@@ -16,10 +18,11 @@ export function PageFrame({
   children,
   footer = true,
   contribute = true,
+  signIn = true,
 }: PageFrameProps) {
   return (
     <div className={styles["frame"]}>
-      <SiteHeader contribute={contribute} />
+      <SiteHeader contribute={contribute} signIn={signIn} />
       <main className={styles["main"]}>{children}</main>
       {footer ? <SiteFooter /> : null}
     </div>

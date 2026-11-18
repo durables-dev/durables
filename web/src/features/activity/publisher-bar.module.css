@@ -24,9 +24,15 @@
   color: var(--fg-muted);
 }
 
-.update {
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action {
   height: 36px;
-  padding: 0 16px;
+  padding: 0 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: transparent;
@@ -35,4 +41,34 @@
   font-size: var(--text-small);
   font-weight: 600;
   cursor: pointer;
+}
+
+.action[aria-disabled="true"] {
+  cursor: default;
+  color: var(--fg-muted);
+}
+
+/* Remove: the dark red, never Ember (DUR-2). */
+.danger {
+  color: var(--danger);
+}
+
+.failed {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: var(--notice);
+  color: var(--fg);
+  font-size: var(--text-label);
+  line-height: 1.6;
+}
+
+.version,
+.address {
+  font-family: var(--font-mono);
+}
+
+.address {
+  font-weight: 600;
 }

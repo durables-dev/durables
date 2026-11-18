@@ -1,4 +1,4 @@
-import type { VersionResponse } from "./listing-queries";
+import type { VersionResponse } from "@/lib/listing-queries";
 
 /**
  * What a file in Implement is for. The activity file is the published code. An "other" file is

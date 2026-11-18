@@ -17,7 +17,7 @@ import {
   testLogo,
 } from "../../../test/serve-sdk-catalog";
 import { testCatalog } from "../../../test/sdk-catalog";
-import { python } from "./test-versions";
+import { chargeCardListing, python } from "./test-versions";
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
 const listingPath = "/api/activities/:handle/:name";
@@ -80,11 +80,7 @@ function publishChargeCard() {
     ),
     http.get(listingPath, ({ params }) =>
       params["handle"] === "ddieruf" && params["name"] === "charge-card"
-        ? HttpResponse.json({
-            handle: "ddieruf",
-            name: "charge-card",
-            description: chargeCardDescription,
-          })
+        ? HttpResponse.json(chargeCardListing(chargeCardDescription))
         : notFound("No activity is listed at that address."),
     ),
   );
@@ -465,11 +461,7 @@ test("the sidebar links the version's integrations and its publisher into search
       }),
     ),
     http.get(listingPath, () =>
-      HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description: chargeCardDescription,
-      }),
+      HttpResponse.json(chargeCardListing(chargeCardDescription)),
     ),
   );
 
@@ -508,13 +500,7 @@ test("the published time is the version's own timestamp", async () => {
 test("a listing with no description shows no description line", async () => {
   publishChargeCard();
   worker.use(
-    http.get(listingPath, () =>
-      HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description: "",
-      }),
-    ),
+    http.get(listingPath, () => HttpResponse.json(chargeCardListing(""))),
   );
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
@@ -568,7 +554,7 @@ test('a copy the clipboard refuses does not show "Copied" and says it failed', a
   await expect.element(status).not.toHaveTextContent("Copied");
 });
 
-test("the section bar links to the Implement, Configure and Source anchors, and there is no Quickstart", async () => {
+test("the section bar links to the Implement, Configure, Source and Versions anchors, and there is no Quickstart", async () => {
   publishChargeCard();
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
@@ -581,13 +567,15 @@ test("the section bar links to the Implement, Configure and Source anchors, and 
     "Implement",
     "Configure",
     "Source",
+    "Versions",
   ]);
   expect(links.map((link) => link.getAttribute("href"))).toEqual([
     "#implement",
     "#configure",
     "#source",
+    "#versions",
   ]);
-  for (const id of ["implement", "configure", "source"]) {
+  for (const id of ["implement", "configure", "source", "versions"]) {
     expect(document.getElementById(id)?.tagName).toBe("SECTION");
   }
   await expect

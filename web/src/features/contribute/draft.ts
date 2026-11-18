@@ -1,19 +1,41 @@
 import { contributeOriginSchema } from "@/lib/contribute-origin";
+import {
+  newVersionBaseSchema,
+  type NewVersionBase,
+} from "@/lib/new-version-entry";
 import type { SdkName } from "@/lib/sdk-catalog";
 import {
+  deprecationReasonSchema,
   listingDetailsSchema,
+  whatChangedSchema,
   type ListingDetails,
   type PublishConfirmationKey,
 } from "@durables/schemas";
 import { z } from "zod";
-import { checkResultSchema, type CheckResult } from "./check-result";
+import {
+  checkResultSchema,
+  type CheckedFacts,
+  type CheckResult,
+} from "./check-result";
 import { defaultName, defaultTitle } from "./listing-defaults";
+import {
+  checkVersion,
+  replacedByReason,
+  suggestVersion,
+  versionAllowed,
+  type BaseVersion,
+} from "./new-version";
 import { stepIdSchema, type StepId } from "./steps";
 
 /** The in-progress contribution. Later steps add what they collect. */
 export interface Draft {
   /** The steps the publisher has finished, in the order they finished them. */
   finished: StepId[];
+  /**
+   * Set in new-version mode: the listing a new version is for, and the version it starts
+   * from. Absent for a first publish.
+   */
+  newVersion?: NewVersionBase | undefined;
   /**
    * The page the publisher opened the flow from. Back on the sign-in step returns there. It is
    * kept with the draft so it survives the round trip to a sign-in provider.
@@ -49,11 +71,24 @@ export interface Draft {
    * code, so they are cleared whenever the code changes.
    */
   confirmations?: DraftConfirmationEdits | undefined;
+  /** New-version mode: the publisher checked Deprecate {base} on the Review step. */
+  deprecateBase?: boolean | undefined;
+  /**
+   * New-version mode: the deprecation reason as the publisher edited it. Until edited, it
+   * reads as "Replaced by {new version}" (see `draftDeprecation`).
+   */
+  deprecationReason?: string | undefined;
 }
+
+/**
+ * The fields the Details step edits. A new version adds its number and its What changed note
+ * to the listing details.
+ */
+export type DraftDetailField = keyof ListingDetails | "version" | "whatChanged";
 
 /** The listing details the publisher has edited so far. */
 export type DraftDetailsEdits = Partial<
-  Record<keyof ListingDetails, string | undefined>
+  Record<DraftDetailField, string | undefined>
 >;
 
 /** The confirmations the publisher has checked or unchecked so far. */
@@ -78,7 +113,7 @@ export type DraftAction =
       declaredSdk?: SdkName | undefined;
       result: CheckResult;
     }
-  | { type: "detailsEdited"; field: keyof ListingDetails; value: string }
+  | { type: "detailsEdited"; field: DraftDetailField; value: string }
   | { type: "nameUsedAtPublish"; name: string }
   | { type: "handleTakenAtPublish"; handle: string }
   | {
@@ -86,6 +121,8 @@ export type DraftAction =
       confirmation: PublishConfirmationKey;
       checked: boolean;
     }
+  | { type: "deprecateBaseToggled"; checked: boolean }
+  | { type: "deprecationReasonEdited"; reason: string }
   | { type: "published" };
 
 export const emptyDraft: Draft = { finished: [] };
@@ -99,6 +136,9 @@ const optionalBoolean = z.boolean().optional().catch(undefined);
 
 const draftSchema = z.object({
   finished: z.array(stepIdSchema),
+  // An unreadable base makes the whole draft unreadable. Kept without it, the draft would turn
+  // into a first publish holding a new version's details.
+  newVersion: newVersionBaseSchema.optional(),
   // An unreadable origin is dropped rather than losing the rest of the draft.
   origin: contributeOriginSchema.optional().catch(undefined),
   code: z.string().optional(),
@@ -115,7 +155,9 @@ const draftSchema = z.object({
       title: optionalString,
       name: optionalString,
       description: optionalString,
-    } satisfies Record<keyof ListingDetails, z.ZodType>)
+      version: optionalString,
+      whatChanged: optionalString,
+    } satisfies Record<DraftDetailField, z.ZodType>)
     .optional()
     .catch(undefined),
   // An unreadable refused name is dropped, so the message under the name goes.
@@ -134,6 +176,8 @@ const draftSchema = z.object({
     } satisfies Record<PublishConfirmationKey, z.ZodType>)
     .optional()
     .catch(undefined),
+  deprecateBase: optionalBoolean,
+  deprecationReason: optionalString,
 });
 
 export function draftReducer(draft: Draft, action: DraftAction): Draft {
@@ -185,6 +229,10 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
           [action.confirmation]: action.checked,
         },
       };
+    case "deprecateBaseToggled":
+      return { ...draft, deprecateBase: action.checked };
+    case "deprecationReasonEdited":
+      return { ...draft, deprecationReason: action.reason };
     case "published":
       return emptyDraft;
   }
@@ -194,8 +242,18 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
  * The listing details to show. A field the publisher has edited keeps their edit, even when
  * they cleared it. Otherwise the title and name default from the accepted activity's name,
  * and follow it when the check changes. The description starts empty.
+ *
+ * In new-version mode the name is the listing's and can't change, and the title and
+ * description start from the base version's. They read as empty until the base is read.
  */
-export function draftDetails(draft: Draft): ListingDetails {
+export function draftDetails(draft: Draft, base?: BaseVersion): ListingDetails {
+  if (draft.newVersion !== undefined) {
+    return {
+      title: draft.details?.title ?? base?.title ?? "",
+      name: draft.newVersion.name,
+      description: draft.details?.description ?? base?.description ?? "",
+    };
+  }
   const activityName =
     draft.check?.outcome === "accepted" ? draft.check.facts.activity.name : "";
   return {
@@ -222,9 +280,61 @@ export function isAccepted(draft: Draft): boolean {
   return draft.check?.outcome === "accepted";
 }
 
-/** The listing details pass the shared rules, as Continue on the Details step requires. */
-export function detailsValid(draft: Draft): boolean {
-  return listingDetailsSchema.safeParse(draftDetails(draft)).success;
+/** The facts of the accepted code. Undefined while the pasted code is not accepted. */
+export function draftFacts(draft: Draft): CheckedFacts | undefined {
+  return draft.check?.outcome === "accepted" ? draft.check.facts : undefined;
+}
+
+/** New-version mode: the number and What changed note as typed. Empty until typed. */
+export function draftVersionFields(draft: Draft): {
+  version: string;
+  whatChanged: string;
+} {
+  return {
+    version: draft.details?.version ?? "",
+    whatChanged: draft.details?.whatChanged ?? "",
+  };
+}
+
+/**
+ * New-version mode: whether to deprecate the base, and the reason. Until the publisher edits
+ * it, the reason is "Replaced by {new version}", following the number as it is typed.
+ */
+export function draftDeprecation(draft: Draft): {
+  checked: boolean;
+  reason: string;
+} {
+  return {
+    checked: draft.deprecateBase ?? false,
+    reason:
+      draft.deprecationReason ??
+      replacedByReason(draftVersionFields(draft).version),
+  };
+}
+
+/** New-version mode: the base is to be deprecated, and its reason passes the shared rule. */
+export function deprecationValid(draft: Draft): boolean {
+  const { checked, reason } = draftDeprecation(draft);
+  return !checked || deprecationReasonSchema.safeParse(reason).success;
+}
+
+/**
+ * The listing details pass the shared rules, as Continue on the Details step requires. In
+ * new-version mode the number must also be allowed and the What changed note given, and
+ * nothing passes until the base has been read.
+ */
+export function detailsValid(draft: Draft, base?: BaseVersion): boolean {
+  if (!listingDetailsSchema.safeParse(draftDetails(draft, base)).success) {
+    return false;
+  }
+  if (draft.newVersion === undefined) return true;
+  if (base === undefined) return false;
+  const { version, whatChanged } = draftVersionFields(draft);
+  const suggestion = suggestVersion(base, draftFacts(draft));
+  return (
+    versionAllowed(checkVersion(version, base, suggestion)) &&
+    whatChangedSchema.safeParse(whatChanged).success
+  );
 }
 
 /**
@@ -232,9 +342,10 @@ export function detailsValid(draft: Draft): boolean {
  * at no other time. Details is finished once the publisher continued from it, and only while
  * the details still pass the shared rules.
  */
-export function draftFinished(draft: Draft): StepId[] {
+export function draftFinished(draft: Draft, base?: BaseVersion): StepId[] {
   const others = draft.finished.filter(
-    (step) => step !== "code" && (step !== "details" || detailsValid(draft)),
+    (step) =>
+      step !== "code" && (step !== "details" || detailsValid(draft, base)),
   );
   return isAccepted(draft) ? [...others, "code"] : others;
 }
@@ -243,9 +354,27 @@ export function draftFinished(draft: Draft): StepId[] {
  * The draft as the flow opens: the kept draft, with the page the flow was opened from when the
  * link that opened it named one. Without one, the kept origin stays, as after a sign-in
  * provider sends the publisher back.
+ *
+ * A link that names a base version starts a new draft in new-version mode, with the code
+ * blank. A link into the flow that names a page but no base starts a first publish: a kept
+ * new-version draft is set aside for an empty one.
  */
-export function enterDraft(draft: Draft, origin: string | undefined): Draft {
-  return origin === undefined ? draft : { ...draft, origin };
+export function enterDraft(
+  draft: Draft,
+  origin: string | undefined,
+  newVersion?: NewVersionBase,
+): Draft {
+  if (newVersion !== undefined) {
+    return {
+      finished: [],
+      newVersion,
+      ...(origin === undefined ? {} : { origin }),
+    };
+  }
+  if (origin === undefined) return draft;
+  return draft.newVersion === undefined
+    ? { ...draft, origin }
+    : { ...emptyDraft, origin };
 }
 
 /**

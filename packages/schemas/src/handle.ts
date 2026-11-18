@@ -12,6 +12,8 @@ export const reservedHandles = new Set([
   "assets",
   "search",
   "contribute",
+  "profile",
+  "sign-in",
   "terms",
   "privacy",
   "security",

@@ -6,6 +6,7 @@ import {
   WorkerVersion,
   type WorkerVersionBindings,
 } from "../.gen/providers/cloudflare/worker-version";
+import { WorkersCronTrigger } from "../.gen/providers/cloudflare/workers-cron-trigger";
 import { WorkersDeployment } from "../.gen/providers/cloudflare/workers-deployment";
 import { workerName } from "./config";
 import type { Storage } from "./storage";
@@ -37,6 +38,8 @@ export class Worker extends Construct {
   readonly version: WorkerVersion;
   /** Cloudflare attaches a custom domain only to a Worker that has a deployment. */
   readonly deployment: WorkersDeployment;
+  /** The Worker's schedules from api/wrangler.toml: the daily final-deletion job (ADR 0015). */
+  readonly cronTrigger: WorkersCronTrigger;
 
   constructor(scope: Construct, id: string, props: WorkerProps) {
     super(scope, id);
@@ -112,6 +115,14 @@ export class Worker extends Construct {
       scriptName: this.worker.name,
       strategy: "percentage",
       versions: [{ versionId: this.version.id, percentage: 100 }],
+    });
+
+    // The schedules run the deployed version's scheduled handler, so they follow the deployment.
+    this.cronTrigger = new WorkersCronTrigger(this, "cron-trigger", {
+      accountId,
+      scriptName: this.worker.name,
+      schedules: props.wrangler.crons.map((cron) => ({ cron })),
+      dependsOn: [this.deployment],
     });
   }
 

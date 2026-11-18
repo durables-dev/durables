@@ -1,4 +1,17 @@
-import { and, count, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { containsPattern, LIKE_ESCAPE } from "./like-pattern";
@@ -8,8 +21,10 @@ import {
   listings,
   providerAccounts,
   retiredHandles,
+  versionDeprecations,
   versions,
   type Provider,
+  type RemovalSource,
   type Sdk,
 } from "./schema";
 import {
@@ -20,7 +35,14 @@ import {
   type WriteVersionDocumentResult,
 } from "./version-document";
 
-export { providers, sdks, type Provider, type Sdk } from "./schema";
+export {
+  providers,
+  removalSources,
+  sdks,
+  type Provider,
+  type RemovalSource,
+  type Sdk,
+} from "./schema";
 export {
   DocumentWriteFailure,
   type Address,
@@ -39,6 +61,14 @@ export interface ProviderIdentity {
 export interface Account {
   id: string;
   handle: string | null;
+}
+
+/**
+ * A Durables account, with its handle and whether it is waiting to be deleted (ADR 0015).
+ */
+export interface AccountState extends Account {
+  /** When the publisher asked to delete the account. Null when it is not pending deletion. */
+  deletionRequestedAt: Date | null;
 }
 
 /** What the first publish records for a new account: who signed in, and the chosen handle. */
@@ -60,7 +90,7 @@ export type CreateAccountResult =
 /** What publishing records for a new listing and its first version. */
 export interface NewListing extends Address {
   title: string;
-  /** The one-line description. It belongs to the listing and can change later. */
+  /** The version's one-line description. It belongs to the version and can change later. */
   description: string;
   sdk: Sdk;
   /** The integrations implied by the code's imports. Empty when there are none. */
@@ -86,12 +116,77 @@ export interface LatestAddress extends Address {
   publishedAt: Date;
 }
 
-/** A listing's current one-line description, which can change after publishing (ADR 0006). */
-export interface ListingDescription {
-  handle: string;
-  name: string;
+/** A version's deprecation: why, and the version of the same listing to use instead, if any. */
+export interface Deprecation {
+  reason: string;
+  /** Null when there is no replacement. */
+  replacement: string | null;
+}
+
+/**
+ * One version of a listing as the listing read shows it: its fixed fields from publishing and
+ * its state that can change afterwards (ADR 0006, ADR 0015).
+ */
+export interface ListingVersion {
+  version: string;
+  publishedAt: Date;
+  /** The What changed note. Null for a version published before notes existed. */
+  whatChanged: string | null;
+  /** The version it was based on. Null for a first version. */
+  basedOn: string | null;
+  /** Null when the version is not deprecated. */
+  deprecation: Deprecation | null;
+  /** The version's current one-line description. */
   description: string;
 }
+
+/** A listing's handle and name, which together identify it. */
+export type ListingKey = Omit<Address, "version">;
+
+/**
+ * A listing and every one of its versions, from the highest version number down, with who took
+ * it out of search.
+ */
+export interface ListingVersions extends ListingKey {
+  /** Who took the listing out of search. Null while it is listed. */
+  removedBy: RemovalSource | null;
+  versions: ListingVersion[];
+}
+
+/**
+ * An account as its owner's profile shows it: its handle, when it was created, and how many of
+ * its listings are in search.
+ */
+export interface AccountProfile {
+  handle: string;
+  /** When the account was created, at its first publish. */
+  joinedAt: Date;
+  /** The account's listings that are in search. Removed listings are not counted. */
+  listedCount: number;
+}
+
+/**
+ * One of an account's listings as its owner's activities list shows it, at its highest version
+ * number. Removed listings are included.
+ */
+export interface OwnedListing extends Address {
+  title: string;
+  sdk: Sdk;
+  /** How many versions the listing has. */
+  versionCount: number;
+  /** When the listing's highest version was published. */
+  publishedAt: Date;
+  /** True when the listing is out of search, whoever removed it. */
+  removed: boolean;
+}
+
+/** A version's new current description, at the version's address. */
+export interface VersionDescription extends Address {
+  description: string;
+}
+
+/** A version's deprecation, at the version's address. */
+export interface VersionDeprecation extends Address, Deprecation {}
 
 /**
  * Where a browse batch ends: the last card's relevance score, published date, handle and name.
@@ -105,9 +200,10 @@ export interface BrowsePosition {
 }
 
 /**
- * What browse narrows by and where it starts. An empty or absent list does not filter. Several
- * SDKs match any one of them, as do several integrations. The publisher matches the handle.
- * Every word must appear in the title, description, address, SDK or one of the integrations.
+ * What browse narrows by and where it starts. A listing removed from search never matches,
+ * whoever removed it (ADR 0015). An empty or absent list does not filter. Several SDKs match
+ * any one of them, as do several integrations. The publisher matches the handle. Every word
+ * must appear in the title, description, address, SDK or one of the integrations.
  */
 export interface BrowseFilter {
   /** The search words. Empty or absent means no words. */
@@ -122,8 +218,9 @@ export interface BrowseFilter {
 }
 
 /**
- * A browse result: a listing and its relevance score. Each word in the title scores 3 and each
- * word in the description scores 1. The score is 0 when there are no words.
+ * A browse result: a listing and its relevance score, at its highest version. Each word in that
+ * version's title scores 3 and each word in that version's description scores 1. The score is 0
+ * when there are no words.
  */
 export interface BrowseListing extends Listing {
   score: number;
@@ -143,14 +240,33 @@ export type CreateListingResult =
   { outcome: "created"; listing: Listing } | { outcome: "address-taken" };
 
 /**
- * What publishing records in the database: the listing and its first version, and the
- * account for a provider identity that has none yet. The new account's handle is the
- * listing's handle.
+ * What a later version of an existing listing records besides its own fields: the version it
+ * was based on, its What changed note, and, when asked, the deprecation of that base version
+ * with the new version as its replacement (ADR 0015).
+ */
+export interface NextVersion {
+  /** The version number of the listing's version the new one was based on. */
+  basedOn: string;
+  /** The What changed note. It can't be changed after publishing. */
+  whatChanged: string;
+  /** The reason to deprecate the base version. Null to leave the base version as it is. */
+  deprecateBase: { reason: string } | null;
+}
+
+/**
+ * What publishing records in the database. A first publish writes the listing and its first
+ * version, and the account for a provider identity that has none yet. The new account's handle
+ * is the listing's handle. A later version writes only the version under its existing listing.
  */
 export interface NewPublication {
   listing: NewListing;
   /** The provider identity to create the account for. Absent when the account exists. */
   newAccount?: ProviderIdentity;
+  /**
+   * Present when this is a later version of an existing listing, which already has an account.
+   * Absent for a first publish.
+   */
+  nextVersion?: NextVersion;
 }
 
 /**
@@ -244,6 +360,195 @@ export class Storage {
   }
 
   /**
+   * The account a provider identity is linked to, with whether it is pending deletion, or
+   * undefined when it has none. A finally deleted account has no provider links, so it is never
+   * found here.
+   */
+  async findAccountState({
+    provider,
+    providerAccountId,
+  }: ProviderIdentity): Promise<AccountState | undefined> {
+    return this.#db
+      .select({
+        id: accounts.id,
+        handle: handles.handle,
+        deletionRequestedAt: accounts.deletionRequestedAt,
+      })
+      .from(providerAccounts)
+      .innerJoin(accounts, eq(accounts.id, providerAccounts.accountId))
+      .leftJoin(handles, eq(handles.accountId, accounts.id))
+      .where(
+        and(
+          eq(providerAccounts.provider, provider),
+          eq(providerAccounts.providerAccountId, providerAccountId),
+        ),
+      )
+      .get();
+  }
+
+  /**
+   * Marks an account pending deletion with the current time, and removes every listing under its
+   * handle that is listed at that moment, with account deletion as the source (ADR 0015). Both
+   * happen in one database batch. Nothing published is deleted. Returns the time deletion was
+   * asked for, or undefined when there is no such account or it is already pending, in which
+   * case nothing is written.
+   */
+  async requestAccountDeletion(accountId: string): Promise<Date | undefined> {
+    const [, marked] = await this.#db.batch([
+      // The listings go first, while the account is still not pending, so a second request
+      // finds it pending and removes nothing.
+      this.#db
+        .update(listings)
+        .set({ removedBy: "account-deletion" })
+        .where(
+          and(
+            isNull(listings.removedBy),
+            inArray(listings.handle, this.#accountHandle(accountId)),
+            exists(
+              this.#db
+                .select({ id: accounts.id })
+                .from(accounts)
+                .where(
+                  and(
+                    eq(accounts.id, accountId),
+                    isNull(accounts.deletionRequestedAt),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      this.#db
+        .update(accounts)
+        .set({ deletionRequestedAt: sql`(unixepoch())` })
+        .where(
+          and(eq(accounts.id, accountId), isNull(accounts.deletionRequestedAt)),
+        )
+        .returning({ deletionRequestedAt: accounts.deletionRequestedAt }),
+    ]);
+    return marked[0]?.deletionRequestedAt ?? undefined;
+  }
+
+  /**
+   * Restores an account that is pending deletion: clears the pending mark and returns to search
+   * only the listings account deletion removed. Listings removed by anyone else stay removed
+   * (ADR 0015). Both happen in one database batch. Returns false, writing nothing, when the
+   * account is not pending or has been finally deleted.
+   */
+  async restoreAccount(accountId: string): Promise<boolean> {
+    const restorable = exists(
+      this.#db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.id, accountId),
+            isNotNull(accounts.deletionRequestedAt),
+            exists(
+              this.#db
+                .select({ accountId: providerAccounts.accountId })
+                .from(providerAccounts)
+                .where(eq(providerAccounts.accountId, accountId)),
+            ),
+          ),
+        ),
+    );
+    const [, restored] = await this.#db.batch([
+      this.#db
+        .update(listings)
+        .set({ removedBy: null })
+        .where(
+          and(
+            eq(listings.removedBy, "account-deletion"),
+            inArray(listings.handle, this.#accountHandle(accountId)),
+            restorable,
+          ),
+        ),
+      this.#db
+        .update(accounts)
+        .set({ deletionRequestedAt: null })
+        .where(and(eq(accounts.id, accountId), restorable))
+        .returning({ id: accounts.id }),
+    ]);
+    return restored.length === 1;
+  }
+
+  /**
+   * The IDs of the accounts the daily final-deletion job must finalize (ADR 0015): pending
+   * deletion, asked for at or before the given time, and still holding provider links. An
+   * account whose deletion is already final has no provider links, so it is never listed again.
+   * A restored account is not pending, so it is never listed.
+   */
+  async listAccountsDueForFinalDeletion(
+    requestedAtOrBefore: Date,
+  ): Promise<string[]> {
+    const rows = await this.#db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(
+        and(
+          isNotNull(accounts.deletionRequestedAt),
+          lte(accounts.deletionRequestedAt, requestedAtOrBefore),
+          exists(
+            this.#db
+              .select({ accountId: providerAccounts.accountId })
+              .from(providerAccounts)
+              .where(eq(providerAccounts.accountId, accounts.id)),
+          ),
+        ),
+      )
+      .orderBy(accounts.deletionRequestedAt, accounts.id);
+    return rows.map(({ id }) => id);
+  }
+
+  /**
+   * Makes a pending account's deletion final (ADR 0015): retires its handle and deletes its
+   * provider links, in one database batch. The account, handle, listing and version rows stay,
+   * so published addresses keep resolving, and the handle is never freed. Start as a new user and
+   * the daily final-deletion job both call this. Returns true when it deleted provider links, and
+   * false, changing nothing, when the account is not pending or is already final.
+   */
+  async finalizeAccountDeletion(accountId: string): Promise<boolean> {
+    const pending = exists(
+      this.#db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.id, accountId),
+            isNotNull(accounts.deletionRequestedAt),
+          ),
+        ),
+    );
+    const [, deleted] = await this.#db.batch([
+      this.#db
+        .insert(retiredHandles)
+        .select(
+          this.#db
+            .select({
+              handle: handles.handle,
+              retiredAt: sql<Date>`unixepoch()`.as("retired_at"),
+            })
+            .from(handles)
+            .where(and(eq(handles.accountId, accountId), pending)),
+        )
+        .onConflictDoNothing(),
+      this.#db
+        .delete(providerAccounts)
+        .where(and(eq(providerAccounts.accountId, accountId), pending))
+        .returning({ provider: providerAccounts.provider }),
+    ]);
+    return deleted.length > 0;
+  }
+
+  /** The handle of an account, as a subquery. */
+  #accountHandle(accountId: string) {
+    return this.#db
+      .select({ handle: handles.handle })
+      .from(handles)
+      .where(eq(handles.accountId, accountId));
+  }
+
+  /**
    * False when the handle is in use or retired. Reserved words and the format rule are
    * checked by the handle schema, not here.
    */
@@ -320,7 +625,11 @@ export class Storage {
   async createPublication({
     listing,
     newAccount,
+    nextVersion,
   }: NewPublication): Promise<CreatePublicationResult> {
+    if (nextVersion !== undefined) {
+      return this.#createNextVersion(listing, nextVersion);
+    }
     if (newAccount === undefined) {
       const result = await this.createListing(listing);
       return result.outcome === "created"
@@ -358,6 +667,84 @@ export class Storage {
     }
   }
 
+  /**
+   * Records a later version of an existing listing in one database batch, so either every row
+   * is written or none are (ADR 0015): the version with its base and What changed note, the
+   * base version's deprecation when asked for, with the new version as its replacement, and the
+   * end of a removal from search the publisher made. A removal by account deletion or by
+   * Durables stays. No other version's row is touched. When the version address exists, nothing
+   * is written and the outcome is address-taken. The caller checks the base is one of the
+   * listing's versions and the number is higher than every version's.
+   */
+  async #createNextVersion(
+    listing: NewListing,
+    { basedOn, whatChanged, deprecateBase }: NextVersion,
+  ): Promise<CreatePublicationResult> {
+    const { handle, name, version, title, description, sdk } = listing;
+    const integrations = [...listing.integrations];
+    const insertVersion = this.#db
+      .insert(versions)
+      .values({
+        handle,
+        name,
+        version,
+        title,
+        sdk,
+        integrations,
+        description,
+        whatChanged,
+        basedOn,
+      })
+      .returning({ publishedAt: versions.publishedAt });
+    const returnToSearch = this.#db
+      .update(listings)
+      .set({ removedBy: null })
+      .where(
+        and(
+          eq(listings.handle, handle),
+          eq(listings.name, name),
+          eq(listings.removedBy, "publisher"),
+        ),
+      );
+    try {
+      const [[created]] = await this.#db.batch(
+        deprecateBase === null
+          ? [insertVersion, returnToSearch]
+          : [
+              insertVersion,
+              this.#db
+                .insert(versionDeprecations)
+                .values({
+                  handle,
+                  name,
+                  version: basedOn,
+                  reason: deprecateBase.reason,
+                  replacement: version,
+                })
+                .onConflictDoUpdate({
+                  target: [
+                    versionDeprecations.handle,
+                    versionDeprecations.name,
+                    versionDeprecations.version,
+                  ],
+                  set: { reason: deprecateBase.reason, replacement: version },
+                }),
+              returnToSearch,
+            ],
+      );
+      return {
+        outcome: "created",
+        listing: createdListing(listing, created),
+        accountCreated: false,
+      };
+    } catch (error) {
+      if (isAddressConflict(error)) {
+        return { outcome: "address-taken" };
+      }
+      throw error;
+    }
+  }
+
   /** The inserts that create an account with its provider link and its handle. */
   #accountInserts(
     id: string,
@@ -365,11 +752,13 @@ export class Storage {
   ) {
     return [
       // No constraint covers retired handles. The account row is skipped when the handle is
-      // retired, and the provider link's foreign key then fails the whole batch.
+      // retired, and the provider link's foreign key then fails the whole batch. The select
+      // gives a value for every column of accounts, in order. A new account is not pending
+      // deletion.
       this.#db
         .insert(accounts)
         .select(
-          sql`select ${id}, unixepoch() where not exists (select 1 from ${retiredHandles} where ${retiredHandles.handle} = ${handle})`,
+          sql`select ${id}, unixepoch(), null where not exists (select 1 from ${retiredHandles} where ${retiredHandles.handle} = ${handle})`,
         ),
       this.#db
         .insert(providerAccounts)
@@ -378,20 +767,31 @@ export class Storage {
     ] as const;
   }
 
-  /** The inserts that create a listing and its first version. */
+  /** The inserts that create a listing and its first version, which holds the description. */
   #listingInserts(listing: NewListing) {
     const { handle, name, version, title, description, sdk } = listing;
     const integrations = [...listing.integrations];
     return [
-      this.#db.insert(listings).values({ handle, name, description }),
+      this.#db.insert(listings).values({ handle, name }),
       this.#db
         .insert(versions)
-        .values({ handle, name, version, title, sdk, integrations })
+        .values({
+          handle,
+          name,
+          version,
+          title,
+          sdk,
+          integrations,
+          description,
+        })
         .returning({ publishedAt: versions.publishedAt }),
     ] as const;
   }
 
-  /** The listing at an address, with its version's fields, or undefined when there is none. */
+  /**
+   * The listing at an address, with that version's fields and current description, or
+   * undefined when there is none.
+   */
   async findListing({
     handle,
     name,
@@ -403,7 +803,7 @@ export class Storage {
         name: versions.name,
         version: versions.version,
         title: versions.title,
-        description: listings.description,
+        description: versions.description,
         sdk: versions.sdk,
         integrations: versions.integrations,
         publishedAt: versions.publishedAt,
@@ -452,7 +852,7 @@ export class Storage {
     const score =
       words.length === 0
         ? sql<number>`0`
-        : sql<number>`(select coalesce(sum(${like(versions.title, word)} * 3 + ${like(listings.description, word)}), 0) from ${eachWord})`;
+        : sql<number>`(select coalesce(sum(${like(versions.title, word)} * 3 + ${like(versions.description, word)}), 0) from ${eachWord})`;
 
     const ranked = this.#db.$with("ranked").as(
       this.#db
@@ -461,7 +861,7 @@ export class Storage {
           name: versions.name,
           version: versions.version,
           title: versions.title,
-          description: listings.description,
+          description: versions.description,
           sdk: versions.sdk,
           integrations: versions.integrations,
           publishedAt: versions.publishedAt,
@@ -477,7 +877,9 @@ export class Storage {
             eq(listings.handle, versions.handle),
             eq(listings.name, versions.name),
           ),
-        ),
+        )
+        // A removed listing is left out of search, browse and search by publisher (ADR 0015).
+        .where(isNull(listings.removedBy)),
     );
 
     const filters: SQL[] = [eq(ranked.rank, 1)];
@@ -563,8 +965,95 @@ export class Storage {
   }
 
   /**
-   * Every listing's highest version, as the sitemap lists them: by handle, then name. The
-   * sitemap protocol allows 50,000 addresses in one file, far more than the registry holds.
+   * The profile of the account a provider identity is linked to, or undefined when it has
+   * none. The listed count leaves out every removed listing, whoever removed it.
+   */
+  async findAccountProfile(
+    identity: ProviderIdentity,
+  ): Promise<AccountProfile | undefined> {
+    const listed = this.#db
+      .select({ count: count() })
+      .from(listings)
+      .where(
+        and(eq(listings.handle, handles.handle), isNull(listings.removedBy)),
+      );
+    return this.#db
+      .select({
+        handle: handles.handle,
+        joinedAt: accounts.createdAt,
+        listedCount: sql<number>`(${listed})`.mapWith(Number),
+      })
+      .from(providerAccounts)
+      .innerJoin(accounts, eq(accounts.id, providerAccounts.accountId))
+      .innerJoin(handles, eq(handles.accountId, accounts.id))
+      .where(
+        and(
+          eq(providerAccounts.provider, identity.provider),
+          eq(providerAccounts.providerAccountId, identity.providerAccountId),
+        ),
+      )
+      .get();
+  }
+
+  /**
+   * Every listing under a handle, removed ones included, each at its highest version number
+   * with its version count. Newest published first, then by name. Handles match exactly, so
+   * no other handle's listings are ever included.
+   */
+  async listOwnedListings(handle: string): Promise<OwnedListing[]> {
+    const ranked = this.#db.$with("ranked").as(
+      this.#db
+        .select({
+          handle: versions.handle,
+          name: versions.name,
+          version: versions.version,
+          title: versions.title,
+          sdk: versions.sdk,
+          publishedAt: versions.publishedAt,
+          removedBy: listings.removedBy,
+          versionCount:
+            sql<number>`count(*) over (partition by ${versions.handle}, ${versions.name})`.as(
+              "version_count",
+            ),
+          rank: sql<number>`row_number() over (partition by ${versions.handle}, ${versions.name} order by ${highestVersionFirst()})`.as(
+            "rank",
+          ),
+        })
+        .from(versions)
+        .innerJoin(
+          listings,
+          and(
+            eq(listings.handle, versions.handle),
+            eq(listings.name, versions.name),
+          ),
+        )
+        .where(eq(versions.handle, handle)),
+    );
+    const rows = await this.#db
+      .with(ranked)
+      .select({
+        handle: ranked.handle,
+        name: ranked.name,
+        version: ranked.version,
+        title: ranked.title,
+        sdk: ranked.sdk,
+        publishedAt: ranked.publishedAt,
+        removedBy: ranked.removedBy,
+        versionCount: ranked.versionCount,
+      })
+      .from(ranked)
+      .where(eq(ranked.rank, 1))
+      .orderBy(desc(ranked.publishedAt), ranked.name);
+    return rows.map(({ removedBy, ...listing }): OwnedListing => ({
+      ...listing,
+      removed: removedBy !== null,
+    }));
+  }
+
+  /**
+   * Every listed listing's highest version, as the sitemap lists them: by handle, then name. A
+   * listing removed from search is left out (ADR 0015). The sitemap protocol allows 50,000
+   * addresses in one file, far more than the registry holds.
    */
   async listLatestAddresses(): Promise<LatestAddress[]> {
     const ranked = this.#db.$with("ranked").as(
@@ -578,7 +1067,15 @@ export class Storage {
             "rank",
           ),
         })
-        .from(versions),
+        .from(versions)
+        .innerJoin(
+          listings,
+          and(
+            eq(listings.handle, versions.handle),
+            eq(listings.name, versions.name),
+          ),
+        )
+        .where(isNull(listings.removedBy)),
     );
     return this.#db
       .with(ranked)
@@ -594,7 +1091,7 @@ export class Storage {
   }
 
   /**
-   * The version at an address, without the listing's description, or undefined when there
+   * The version at an address, with only its fields that never change, or undefined when there
    * is none. Addresses match exactly, so a wrong-case address finds nothing.
    */
   async findVersion({
@@ -624,45 +1121,172 @@ export class Storage {
   }
 
   /**
-   * The current description of the listing at a handle and name, or undefined when there is
-   * none. Handles and names match exactly, so a wrong-case one finds nothing.
+   * The listing at a handle and name with every one of its versions, from the highest version
+   * number down, or undefined when there is no listing. The listing carries who removed it from
+   * search, and each version carries its current description and its deprecation. A removed
+   * listing is found like any other. Handles and names match exactly, so a wrong-case one
+   * finds nothing.
    */
-  async findListingDescription({
+  async findListingVersions({
     handle,
     name,
-  }: Omit<Address, "version">): Promise<ListingDescription | undefined> {
-    return this.#db
-      .select({
-        handle: listings.handle,
-        name: listings.name,
-        description: listings.description,
-      })
-      .from(listings)
-      .where(and(eq(listings.handle, handle), eq(listings.name, name)))
-      .get();
+  }: ListingKey): Promise<ListingVersions | undefined> {
+    const [[listing], rows] = await this.#db.batch([
+      this.#db
+        .select({
+          handle: listings.handle,
+          name: listings.name,
+          removedBy: listings.removedBy,
+        })
+        .from(listings)
+        .where(and(eq(listings.handle, handle), eq(listings.name, name))),
+      this.#db
+        .select({
+          version: versions.version,
+          publishedAt: versions.publishedAt,
+          whatChanged: versions.whatChanged,
+          basedOn: versions.basedOn,
+          description: versions.description,
+          deprecationReason: versionDeprecations.reason,
+          replacement: versionDeprecations.replacement,
+        })
+        .from(versions)
+        .leftJoin(
+          versionDeprecations,
+          and(
+            eq(versionDeprecations.handle, versions.handle),
+            eq(versionDeprecations.name, versions.name),
+            eq(versionDeprecations.version, versions.version),
+          ),
+        )
+        .where(and(eq(versions.handle, handle), eq(versions.name, name)))
+        .orderBy(highestVersionFirst()),
+    ]);
+    if (listing === undefined) {
+      return undefined;
+    }
+    return {
+      ...listing,
+      versions: rows.map(
+        ({ deprecationReason, replacement, ...version }): ListingVersion => ({
+          ...version,
+          deprecation:
+            deprecationReason === null
+              ? null
+              : { reason: deprecationReason, replacement },
+        }),
+      ),
+    };
   }
 
   /**
-   * Changes the current description of the listing at a handle and name, and returns the
-   * listing as stored, or undefined when no listing is there. Only the description column
-   * changes. Version rows and version documents are never touched (ADR 0006). Handles and
-   * names match exactly.
+   * Changes the current description of the version at an address, and returns true, or false
+   * when no version is there. Only that version's description column changes. Other versions,
+   * the version's published fields and its version document are never touched (ADR 0006,
+   * ADR 0015). Addresses match exactly.
    */
-  async updateListingDescription({
+  async updateVersionDescription({
     handle,
     name,
+    version,
     description,
-  }: ListingDescription): Promise<ListingDescription | undefined> {
-    return this.#db
-      .update(listings)
+  }: VersionDescription): Promise<boolean> {
+    const updated = await this.#db
+      .update(versions)
       .set({ description })
-      .where(and(eq(listings.handle, handle), eq(listings.name, name)))
-      .returning({
-        handle: listings.handle,
-        name: listings.name,
-        description: listings.description,
-      })
-      .get();
+      .where(
+        and(
+          eq(versions.handle, handle),
+          eq(versions.name, name),
+          eq(versions.version, version),
+        ),
+      )
+      .returning({ version: versions.version });
+    return updated.length === 1;
+  }
+
+  /**
+   * Takes a listing out of search, recording who removed it (ADR 0015). A listing that is
+   * already removed keeps the removal it has, whoever made it, so removing twice changes
+   * nothing. Nothing else is written. A missing listing is not an error, and nothing is written.
+   */
+  async removeFromSearch(
+    { handle, name }: ListingKey,
+    source: RemovalSource,
+  ): Promise<void> {
+    await this.#db
+      .update(listings)
+      .set({ removedBy: source })
+      .where(
+        and(
+          eq(listings.handle, handle),
+          eq(listings.name, name),
+          isNull(listings.removedBy),
+        ),
+      );
+  }
+
+  /**
+   * Returns a listing to search, but only when it was removed by the given source (ADR 0015).
+   * Each way back clears only its own kind of removal, so a removal by anyone else stays. A
+   * listed listing stays listed. A missing listing is not an error, and nothing is written.
+   */
+  async returnToSearch(
+    { handle, name }: ListingKey,
+    source: RemovalSource,
+  ): Promise<void> {
+    await this.#db
+      .update(listings)
+      .set({ removedBy: null })
+      .where(
+        and(
+          eq(listings.handle, handle),
+          eq(listings.name, name),
+          eq(listings.removedBy, source),
+        ),
+      );
+  }
+
+  /**
+   * Records the deprecation of the version at an address, or replaces its reason and
+   * replacement when it is already deprecated. The version row and its version document are
+   * never touched (ADR 0006, ADR 0015). The caller checks that the version and the replacement
+   * are versions of the listing, and that the replacement is not the version itself.
+   */
+  async deprecateVersion({
+    handle,
+    name,
+    version,
+    reason,
+    replacement,
+  }: VersionDeprecation): Promise<void> {
+    await this.#db
+      .insert(versionDeprecations)
+      .values({ handle, name, version, reason, replacement })
+      .onConflictDoUpdate({
+        target: [
+          versionDeprecations.handle,
+          versionDeprecations.name,
+          versionDeprecations.version,
+        ],
+        set: { reason, replacement },
+      });
+  }
+
+  /**
+   * Deletes the deprecation of the version at an address. A version that is not deprecated is
+   * left as it is. Addresses match exactly.
+   */
+  async undeprecateVersion({ handle, name, version }: Address): Promise<void> {
+    await this.#db
+      .delete(versionDeprecations)
+      .where(
+        and(
+          eq(versionDeprecations.handle, handle),
+          eq(versionDeprecations.name, name),
+          eq(versionDeprecations.version, version),
+        ),
+      );
   }
 
   /**

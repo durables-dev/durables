@@ -238,7 +238,17 @@ describe("POST /api/activities", () => {
       expect(await listing.json<ListingResponse>()).toEqual({
         handle,
         name: body.name,
-        description: "Posts a message to a Slack channel.",
+        removedBy: null,
+        versions: [
+          {
+            version: "1.0.0",
+            publishedAt: row?.publishedAt.toISOString(),
+            whatChanged: null,
+            basedOn: null,
+            deprecation: null,
+            description: "Posts a message to a Slack channel.",
+          },
+        ],
       });
     });
 
@@ -640,11 +650,7 @@ describe("POST /api/activities", () => {
       const { cookie, handle } = await newPublisher();
       await seedAccount(env.DB, { handle });
       const body = publishBody();
-      await seedListing(env.DB, {
-        handle,
-        name: body.name,
-        description: "Published by the handle's owner",
-      });
+      await seedListing(env.DB, { handle, name: body.name });
       await seedVersion(env.DB, {
         handle,
         name: body.name,
@@ -922,11 +928,7 @@ describe("POST /api/activities", () => {
       const { cookie, handle } = await newPublisher();
       expect((await publish(cookie, publishBody())).status).toBe(201);
       const body = publishBody();
-      await seedListing(env.DB, {
-        handle,
-        name: body.name,
-        description: "Left behind",
-      });
+      await seedListing(env.DB, { handle, name: body.name });
       const address = addressOf(handle, body.name);
       const before = await snapshot();
 

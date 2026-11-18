@@ -75,6 +75,81 @@ export const listingDescriptionSchema = z
     error: listingDescriptionTooLongMessage,
   });
 
+/** The longest reason a version's deprecation may give. */
+export const deprecationReasonMaxLength = 160;
+
+export const deprecationReasonEmptyMessage = "Enter a reason.";
+
+export const deprecationReasonTooLongMessage = `Use at most ${deprecationReasonMaxLength} characters.`;
+
+/**
+ * Why a version is deprecated: 1 to 160 characters once leading and trailing whitespace is
+ * trimmed. The parsed value is the trimmed reason, so whitespace alone counts as empty. The
+ * Deprecate dialog and the offer to deprecate the base version when publishing both use it.
+ */
+export const deprecationReasonSchema = z
+  .string()
+  .trim()
+  .min(1, { error: deprecationReasonEmptyMessage, abort: true })
+  .max(deprecationReasonMaxLength, { error: deprecationReasonTooLongMessage });
+
+/**
+ * A version number: three numbers separated by dots, such as 2.1.0. Each number is 0, or 1 to 9
+ * digits with no leading zero, so two different numbers never name the same version.
+ */
+export const versionNumberPattern =
+  /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/;
+
+export const versionNumberFormatMessage = "Use three numbers, like 2.1.0.";
+
+/** A version number in the form `versionNumberPattern` allows. Whitespace is never trimmed. */
+export const versionNumberSchema = z
+  .string()
+  .regex(versionNumberPattern, { error: versionNumberFormatMessage });
+
+/**
+ * Compares two version numbers that match `versionNumberPattern`, major first, then minor, then
+ * patch, each as a number. Negative when `a` is lower, positive when it is higher, and 0 when
+ * they are the same version.
+ */
+export const compareVersionNumbers = (a: string, b: string): number => {
+  const left = a.split(".").map(Number);
+  const right = b.split(".").map(Number);
+  for (let part = 0; part < 3; part++) {
+    const difference = (left[part] ?? 0) - (right[part] ?? 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return 0;
+};
+
+/** The message under the version field when the listing already has that version. */
+export const versionTakenMessage = (version: string) =>
+  `${version} already exists. Versions can't be published twice.`;
+
+/** The message under the version field when it is not higher than the listing's latest. */
+export const versionNotHigherMessage = (latest: string) =>
+  `Must be higher than ${latest}, the latest. Versions can't go backwards.`;
+
+/** The longest What changed note a new version may have. */
+export const whatChangedMaxLength = 160;
+
+export const whatChangedEmptyMessage = "Say what changed.";
+
+export const whatChangedTooLongMessage = `Use at most ${whatChangedMaxLength} characters.`;
+
+/**
+ * A new version's What changed note: 1 to 160 characters once leading and trailing whitespace
+ * is trimmed. The parsed value is the trimmed note, so whitespace alone counts as empty. It
+ * can't be changed after publishing.
+ */
+export const whatChangedSchema = z
+  .string()
+  .trim()
+  .min(1, { error: whatChangedEmptyMessage, abort: true })
+  .max(whatChangedMaxLength, { error: whatChangedTooLongMessage });
+
 /** The listing details from the Details step. A failure's path names the field. */
 export const listingDetailsSchema = z.object({
   title: listingTitleSchema,

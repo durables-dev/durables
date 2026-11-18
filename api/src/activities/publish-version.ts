@@ -89,7 +89,9 @@ const writeDocument = async (
 
 /**
  * Publishes a version: checks the address and handle are free, writes the document, then
- * writes the account when there is none, the listing and the version in one batch.
+ * writes the database rows in one batch. A first version writes the account when there is
+ * none, the listing and the version. A later version writes the version, the base version's
+ * deprecation when asked for, and the end of a publisher's removal from search.
  *
  * @throws {DocumentWriteFailure} when the document store fails. Nothing is written to the
  * database.
@@ -100,7 +102,7 @@ export const publishVersion = async (
   publication: Publication,
   context: PublishContext,
 ): Promise<PublishOutcome> => {
-  const { listing, newAccount } = publication;
+  const { listing, newAccount, nextVersion } = publication;
   // The database is read first, so a published address never reaches the document store. On a
   // first publish the handle is checked before the address: when another account owns the
   // handle, any version at the address is theirs, and the answer is handle-taken.
@@ -123,6 +125,7 @@ export const publishVersion = async (
     result = await storage.createPublication({
       listing,
       ...(newAccount === undefined ? {} : { newAccount }),
+      ...(nextVersion === undefined ? {} : { nextVersion }),
     });
   } catch (error) {
     await cleanUp(storage, listing, context);
