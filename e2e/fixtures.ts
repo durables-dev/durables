@@ -59,6 +59,19 @@ export interface OwnListing extends PublishedListing {
   identity: FakeIdentity & { providerAccountId: string };
 }
 
+/** What a later version's publish through the API sends besides the six confirmations. */
+export interface NewVersionDetails {
+  code: string;
+  title: string;
+  description: string;
+  version: string;
+  /** The version the new one starts from. */
+  basedOn: string;
+  whatChanged: string;
+  /** Deprecates the base version, with the new version as its replacement. */
+  deprecateBase?: { reason: string };
+}
+
 /** An account seeded straight into local D1, as publishing will create one. */
 export interface SeededAccount {
   accountId: string;
@@ -120,6 +133,24 @@ interface Fixtures {
    * publish rate limit.
    */
   publishOwnListing: (details: PublishDetails) => Promise<OwnListing>;
+  /**
+   * Publishes a later version of a listing through the API as the page's signed-in publisher,
+   * with all six confirmations given, the way Contribute's new-version mode does. The publisher
+   * must own the listing. It counts towards their publish rate limit.
+   */
+  publishVersionThroughApi: (
+    listing: PublishedListing,
+    details: NewVersionDetails,
+  ) => Promise<PublishedListing>;
+  /**
+   * Deprecates one version of a listing through the API as the page's signed-in publisher, the
+   * way the publisher bar's Deprecate dialog does. A null replacement points people nowhere.
+   */
+  deprecateThroughApi: (
+    version: PublishedListing,
+    reason: string,
+    replacement: string | null,
+  ) => Promise<void>;
   /**
    * Takes a listing out of search through the API as the page's signed-in publisher, the way
    * the publisher bar's Remove does. The publisher must own the listing.
@@ -413,6 +444,34 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         address: `${response.handle}/${response.name}@${response.version}`,
         identity,
       };
+    });
+  },
+
+  publishVersionThroughApi: async ({ page }, use) => {
+    await use(async ({ handle, name }, details) => {
+      const response = await page.request.post(
+        `${publishPath}/${encodeURIComponent(handle)}/${encodeURIComponent(name)}/versions`,
+        {
+          data: { ...details, confirmations: allConfirmations },
+          headers: sameOrigin,
+        },
+      );
+      expect(response.status(), await response.text()).toBe(201);
+      const published = (await response.json()) as PublishResponse;
+      return {
+        ...published,
+        address: `${published.handle}/${published.name}@${published.version}`,
+      };
+    });
+  },
+
+  deprecateThroughApi: async ({ page }, use) => {
+    await use(async ({ handle, name, version }, reason, replacement) => {
+      const response = await page.request.put(
+        `${publishPath}/${encodeURIComponent(handle)}/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}/deprecation`,
+        { data: { reason, replacement }, headers: sameOrigin },
+      );
+      expect(response.status(), await response.text()).toBe(200);
     });
   },
 

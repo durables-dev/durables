@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import {
   expect,
   publisherInitials,
@@ -1701,6 +1701,957 @@ test.describe("deleting and restoring an account", () => {
         await continueButton.click();
 
         await expectOnCodeStep(page);
+        await expectAccessible();
+      });
+    },
+  );
+});
+
+// Publishing a new version, deprecating a version and taking an activity out of search (API map
+// D22 to D31, D33 to D46). Every version in these journeys is published from python.txt, so the
+// Details step suggests the next minor version.
+
+/** The Slack activity in python.txt, as its publisher describes it. */
+const slackDescription =
+  "Posts a message to a Slack channel and returns its reference.";
+
+function listingControls(page: Page) {
+  return page
+    .getByRole("main")
+    .getByRole("region", { name: "Your listing controls" });
+}
+
+/** The Versions section's rows, newest first. */
+function versionRows(page: Page) {
+  return page
+    .getByRole("main")
+    .getByRole("list", { name: "Versions" })
+    .getByRole("listitem");
+}
+
+/** A notice at the top of a version's page, found by its own words. */
+function notice(page: Page, text: string) {
+  return page.getByRole("main").getByRole("status").filter({ hasText: text });
+}
+
+function olderVersionNotice(page: Page) {
+  return notice(page, "an older version");
+}
+
+function deprecatedNotice(page: Page) {
+  return notice(page, "is deprecated by the publisher");
+}
+
+function removedNotice(page: Page) {
+  return notice(page, "Removed by the publisher.");
+}
+
+const removedNoticeText =
+  "Removed by the publisher. This activity no longer appears in search. Its page and every version's address still work, so existing links and workflows don't break.";
+
+/**
+ * The page's robots marking. Head metadata has no role, label or text, so this is the one
+ * place these journeys locate an element by CSS.
+ */
+function robotsMeta(page: Page) {
+  return page.locator('meta[name="robots"]');
+}
+
+/** A version's radio in the Create a new version dialog, named by its number then its note. */
+function versionChoice(page: Page, version: string) {
+  return page
+    .getByRole("dialog", { name: "Create a new version" })
+    .getByRole("radio", {
+      name: new RegExp(`^${version.replaceAll(".", "\\.")}(?![\\d.])`),
+    });
+}
+
+/**
+ * From the Code step in new-version mode, pastes python.txt and goes through Detected to
+ * Details, then uses the suggested version, types the What changed note and continues to Review.
+ */
+async function newVersionToReview(
+  page: Page,
+  paste: (field: Locator, text: string) => Promise<void>,
+  { version, whatChanged }: { version: string; whatChanged: string },
+) {
+  const continueButton = page.getByRole("button", { name: "Continue" });
+  await expect(page).toHaveURL("/contribute/code");
+  await paste(
+    page.getByLabel("Paste your file", { exact: true }),
+    sample("python"),
+  );
+  await expect(
+    page.getByText(/^✓ Found post_slack_message \(Python\)/),
+  ).toBeVisible();
+  await continueButton.click();
+  await expect(page).toHaveURL("/contribute/detected");
+  await continueButton.click();
+  await expect(page).toHaveURL("/contribute/details");
+
+  await page.getByRole("button", { name: `Use ${version}` }).click();
+  await expect(page.getByLabel("Version", { exact: true })).toHaveValue(
+    version,
+  );
+  await page.getByLabel("What changed", { exact: true }).fill(whatChanged);
+  await continueButton.click();
+  await expect(page).toHaveURL("/contribute/review");
+}
+
+/** Checks the six confirmations on the Review step. */
+async function confirmAll(page: Page) {
+  const confirmations = page
+    .getByRole("group", { name: "Before you publish, confirm each of these" })
+    .getByRole("checkbox");
+  await expect(confirmations).toHaveCount(6);
+  for (const box of await confirmations.all()) {
+    await box.check();
+  }
+}
+
+test.describe("publishing new versions", () => {
+  test(
+    "a publisher starts a new version from an older version, publishes it with a What changed note, and the older version's page points to the new latest",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      paste,
+      publishOwnListing,
+      publishVersionThroughApi,
+      uniqueWord,
+    }) => {
+      const code = sample("python");
+      const title = `Post slack message ${uniqueWord()}`;
+      const first = await publishOwnListing({
+        code,
+        title,
+        name: "post-slack-message",
+        description: slackDescription,
+      });
+      const retryNote = "Retries when Slack rate-limits the call.";
+      await publishVersionThroughApi(first, {
+        code,
+        title,
+        description: slackDescription,
+        version: "1.1.0",
+        basedOn: "1.0.0",
+        whatChanged: retryNote,
+      });
+      const { handle, name } = first;
+      const threadNote = "Posts a threaded reply when a thread is given.";
+      const newest = `${handle}/${name}@1.2.0`;
+      const main = page.getByRole("main");
+      const dialog = page.getByRole("dialog", { name: "Create a new version" });
+      const continueButton = page.getByRole("button", { name: "Continue" });
+      const published = page.getByRole("region", { name: "Published" });
+
+      await test.step("the older version's page says it's older and links to 1.1.0, the latest", async () => {
+        await page.goto(`/${first.address}`);
+
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(olderVersionNotice(page)).toContainText(
+          "You're viewing 1.0.0, an older version. It stays available at its own address, unchanged.",
+        );
+        await expect(
+          olderVersionNotice(page).getByRole("link", {
+            name: "View the latest, 1.1.0",
+          }),
+        ).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("Create new version opens the dialog, starting on the version being viewed", async () => {
+        await listingControls(page)
+          .getByRole("button", { name: "Create new version" })
+          .click();
+
+        await expect(dialog).toBeVisible();
+        await expect(dialog.getByRole("radio")).toHaveCount(2);
+        await expect(versionChoice(page, "1.1.0")).toBeVisible();
+        await expect(versionChoice(page, "1.0.0")).toBeChecked();
+        await expect(
+          dialog.getByText(
+            "The new version number must be higher than 1.1.0, the latest.",
+          ),
+        ).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("Start from 1.0.0 opens Contribute in new-version mode at the Code step", async () => {
+        await dialog.getByRole("button", { name: "Start from 1.0.0" }).click();
+
+        await expect(page).toHaveURL("/contribute/code");
+        await expect(
+          page.getByRole("heading", { level: 1, name: "New version" }),
+        ).toBeVisible();
+        await expect(main).toContainText(`${handle}/${name}`);
+        await expect(main).toContainText(
+          "Based on 1.0.0. Title and description are filled in from it. The code and its behavior start fresh.",
+        );
+        await expect(stepLink(page, "Code")).toHaveAttribute(
+          "aria-current",
+          "step",
+        );
+        await expectAccessible();
+      });
+
+      await test.step("paste the activity and go through Detected to Details", async () => {
+        await paste(page.getByLabel("Paste your file", { exact: true }), code);
+        await expect(
+          page.getByText(/^✓ Found post_slack_message \(Python\)/),
+        ).toBeVisible();
+        await continueButton.click();
+        await expect(page).toHaveURL("/contribute/detected");
+        await continueButton.click();
+
+        await expect(page).toHaveURL("/contribute/details");
+      });
+
+      await test.step("Details starts from 1.0.0 and suggests 1.2.0, above the latest", async () => {
+        const version = page.getByLabel("Version", { exact: true });
+        await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+          title,
+        );
+        await expect(
+          page.getByLabel("Name in the address", { exact: true }),
+        ).toHaveValue(name);
+        await expect(
+          page.getByLabel("One-line description", { exact: true }),
+        ).toHaveValue(slackDescription);
+        await expect(version).toHaveValue("");
+        await expect(version).toHaveAttribute("placeholder", "1.2.0");
+        await expect(page.getByText("Suggested: 1.2.0.")).toBeVisible();
+        await expect(continueButton).toBeDisabled();
+
+        await page.getByRole("button", { name: "Use 1.2.0" }).click();
+        await page.getByLabel("What changed", { exact: true }).fill(threadNote);
+
+        await expect(version).toHaveValue("1.2.0");
+        await expect(page.getByText("✓ 1.2.0 is available.")).toBeVisible();
+        await expect(page.getByText(`durables.dev/${newest}`)).toBeVisible();
+        await expect(continueButton).toBeEnabled();
+        await expectAccessible();
+        await continueButton.click();
+      });
+
+      await test.step("review, leave 1.0.0 as it is, confirm the six terms and publish 1.2.0", async () => {
+        const publishButton = page.getByRole("button", {
+          name: "Publish 1.2.0",
+        });
+        await expect(page).toHaveURL("/contribute/review");
+        await expect(
+          page.getByRole("checkbox", { name: "Deprecate 1.0.0" }),
+        ).not.toBeChecked();
+        await expect(
+          page.getByText("Publishing returns this activity to search."),
+        ).toHaveCount(0);
+        await expect(publishButton).toBeDisabled();
+        await expectAccessible();
+
+        await confirmAll(page);
+        await publishButton.click();
+
+        await expect(page).toHaveURL("/contribute/published");
+        await expect(published.getByText(/is live\./)).toHaveText(
+          `${newest} is live. It's now the latest version. Earlier versions stay available at their own addresses.`,
+        );
+        await expectAccessible();
+      });
+
+      await test.step("View the listing opens 1.2.0 as the latest, with its note in the Versions list", async () => {
+        await published.getByRole("link", { name: "View the listing" }).click();
+
+        await expect(page).toHaveURL(`/${newest}`);
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(main).toContainText(newest);
+        await expect(olderVersionNotice(page)).toHaveCount(0);
+
+        await page
+          .getByRole("navigation", { name: "Page sections" })
+          .getByRole("link", { name: "Versions", exact: true })
+          .click();
+        const rows = versionRows(page);
+        await expect(rows).toHaveCount(3);
+        await expect(rows.nth(0)).toContainText("1.2.0 · latest");
+        await expect(rows.nth(0)).toContainText(threadNote);
+        await expect(rows.nth(0)).toContainText("Based on 1.0.0");
+        await expect(rows.nth(0)).toContainText("Viewing");
+        await expect(rows.nth(1)).toContainText("1.1.0");
+        await expect(rows.nth(1)).not.toContainText("latest");
+        await expect(rows.nth(1)).toContainText(retryNote);
+        await expect(rows.nth(1)).toContainText("Based on 1.0.0");
+        await expect(rows.nth(2)).toContainText("1.0.0");
+        await expect(rows.nth(2)).toContainText("First release.");
+        await expect(rows.nth(2)).toContainText("First version");
+        await expectAccessible();
+      });
+
+      await test.step("the older version's page now links to 1.2.0, which opens the latest", async () => {
+        await versionRows(page)
+          .nth(2)
+          .getByRole("link", { name: "View 1.0.0" })
+          .click();
+
+        await expect(page).toHaveURL(`/${first.address}`);
+        await expect(olderVersionNotice(page)).toContainText(
+          "You're viewing 1.0.0, an older version.",
+        );
+        await olderVersionNotice(page)
+          .getByRole("link", { name: "View the latest, 1.2.0" })
+          .click();
+
+        await expect(page).toHaveURL(`/${newest}`);
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(olderVersionNotice(page)).toHaveCount(0);
+      });
+    },
+  );
+
+  test(
+    "a publisher publishes a new version that deprecates its base, and the base's page shows the reason and links to the new version",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      paste,
+      publishOwnListing,
+      uniqueWord,
+    }) => {
+      const title = `Post slack message ${uniqueWord()}`;
+      const first = await publishOwnListing({
+        code: sample("python"),
+        title,
+        name: "post-slack-message",
+        description: slackDescription,
+      });
+      const replacement = `${first.handle}/${first.name}@1.1.0`;
+      const reason =
+        "Replaced by 1.1.0, which retries when Slack rate-limits the call.";
+      const main = page.getByRole("main");
+      const published = page.getByRole("region", { name: "Published" });
+      const dialog = page.getByRole("dialog", { name: "Create a new version" });
+
+      await test.step("start a new version from 1.0.0, the only version", async () => {
+        await page.goto(`/${first.address}`);
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(deprecatedNotice(page)).toHaveCount(0);
+
+        await listingControls(page)
+          .getByRole("button", { name: "Create new version" })
+          .click();
+        await expect(dialog.getByRole("radio")).toHaveCount(1);
+        await expect(versionChoice(page, "1.0.0")).toBeChecked();
+        await dialog.getByRole("button", { name: "Start from 1.0.0" }).click();
+
+        await newVersionToReview(page, paste, {
+          version: "1.1.0",
+          whatChanged: "Retries when Slack rate-limits the call.",
+        });
+      });
+
+      await test.step("check Deprecate 1.0.0 and see the reason start as Replaced by 1.1.0", async () => {
+        const deprecateBase = page.getByRole("checkbox", {
+          name: "Deprecate 1.0.0",
+        });
+        const reasonField = page.getByLabel("Reason", { exact: true });
+        await expect(deprecateBase).not.toBeChecked();
+        await expect(reasonField).toHaveCount(0);
+
+        await deprecateBase.check();
+
+        await expect(reasonField).toHaveValue("Replaced by 1.1.0");
+        await reasonField.fill(reason);
+        await confirmAll(page);
+        await expectAccessible();
+      });
+
+      await test.step("publish 1.1.0 and open it, with 1.0.0 marked deprecated in the Versions list", async () => {
+        await page.getByRole("button", { name: "Publish 1.1.0" }).click();
+        await expect(published.getByText(/is live\./)).toContainText(
+          `${replacement} is live. It's now the latest version.`,
+        );
+        await published.getByRole("link", { name: "View the listing" }).click();
+
+        await expect(page).toHaveURL(`/${replacement}`);
+        await expect(deprecatedNotice(page)).toHaveCount(0);
+        const rows = versionRows(page);
+        await expect(rows).toHaveCount(2);
+        await expect(rows.nth(0)).toContainText("1.1.0 · latest");
+        await expect(rows.nth(0)).not.toContainText("Deprecated");
+        await expect(rows.nth(1)).toContainText("Deprecated · use 1.1.0");
+        await expectAccessible();
+      });
+
+      await test.step("the base's page shows the deprecated notice with the reason, and no older-version notice", async () => {
+        await versionRows(page)
+          .nth(1)
+          .getByRole("link", { name: "View 1.0.0" })
+          .click();
+
+        await expect(page).toHaveURL(`/${first.address}`);
+        await expect(deprecatedNotice(page)).toContainText(
+          "1.0.0 is deprecated by the publisher",
+        );
+        await expect(deprecatedNotice(page)).toContainText(reason);
+        await expect(olderVersionNotice(page)).toHaveCount(0);
+        await expect(
+          listingControls(page).getByRole("button", {
+            name: "Undo deprecation",
+          }),
+        ).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("Use 1.1.0 instead opens the new version", async () => {
+        await deprecatedNotice(page)
+          .getByRole("link", { name: "Use 1.1.0 instead" })
+          .click();
+
+        await expect(page).toHaveURL(`/${replacement}`);
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(main).toContainText(replacement);
+      });
+    },
+  );
+});
+
+test.describe("deprecating a version", () => {
+  test(
+    "a publisher deprecates an older version with a reason and the latest as its replacement, sees the notice after a reload, then undoes it",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      publishOwnListing,
+      publishVersionThroughApi,
+      uniqueWord,
+    }) => {
+      const code = sample("python");
+      const title = `Post slack message ${uniqueWord()}`;
+      const first = await publishOwnListing({
+        code,
+        title,
+        name: "post-slack-message",
+        description: slackDescription,
+      });
+      const latest = await publishVersionThroughApi(first, {
+        code,
+        title,
+        description: slackDescription,
+        version: "1.1.0",
+        basedOn: "1.0.0",
+        whatChanged: "Retries when Slack rate-limits the call.",
+      });
+      const reason = "Posts twice when Slack is slow to answer.";
+      const main = page.getByRole("main");
+      const controls = listingControls(page);
+      const dialog = page.getByRole("dialog", { name: "Deprecate 1.0.0" });
+      const undo = controls.getByRole("button", { name: "Undo deprecation" });
+
+      await test.step("the older version's page offers Deprecate 1.0.0 in the publisher bar", async () => {
+        await page.goto(`/${first.address}`);
+
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(olderVersionNotice(page)).toBeVisible();
+        await expect(deprecatedNotice(page)).toHaveCount(0);
+        // The closed dialogs inside the bar are hidden, so these are the bar's own buttons.
+        await expect(controls.getByRole("button")).toHaveText([
+          "Update",
+          "Deprecate 1.0.0",
+          "Create new version",
+          "Remove",
+        ]);
+      });
+
+      await test.step("Deprecate 1.0.0 opens the dialog, pointing to the latest, with Deprecate disabled until a reason is typed", async () => {
+        await controls.getByRole("button", { name: "Deprecate 1.0.0" }).click();
+
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toHaveAccessibleDescription(
+          "The version stays available at its address and doesn't change. Its page shows your notice.",
+        );
+        const pointTo = dialog.getByLabel("Point people to", { exact: true });
+        await expect(pointTo).toHaveValue("1.1.0");
+        await expect(pointTo.getByRole("option")).toHaveText([
+          "No replacement",
+          "1.1.0 (latest)",
+        ]);
+        await expect(
+          dialog.getByRole("button", { name: "Deprecate 1.0.0" }),
+        ).toBeDisabled();
+        await expectAccessible();
+      });
+
+      await test.step("type a reason and deprecate, and the notice shows with the reason and a link to 1.1.0", async () => {
+        await dialog.getByLabel("Reason", { exact: true }).fill(reason);
+        await dialog.getByRole("button", { name: "Deprecate 1.0.0" }).click();
+
+        await expect(dialog).toBeHidden();
+        await expect(deprecatedNotice(page)).toContainText(
+          "1.0.0 is deprecated by the publisher",
+        );
+        await expect(deprecatedNotice(page)).toContainText(reason);
+        await expect(
+          deprecatedNotice(page).getByRole("link", {
+            name: "Use 1.1.0 instead",
+          }),
+        ).toHaveAttribute("href", `/${latest.address}`);
+        await expect(olderVersionNotice(page)).toHaveCount(0);
+        await expect(undo).toBeVisible();
+        await expect(versionRows(page).nth(1)).toContainText(
+          "Deprecated · use 1.1.0",
+        );
+        await expectAccessible();
+      });
+
+      await test.step("after a reload the deprecation is still there", async () => {
+        await page.reload();
+
+        await expect(deprecatedNotice(page)).toContainText(reason);
+        await expect(undo).toBeVisible();
+      });
+
+      await test.step("Undo deprecation removes the notice at once and brings back the older-version notice", async () => {
+        await undo.click();
+
+        await expect(deprecatedNotice(page)).toHaveCount(0);
+        await expect(
+          controls.getByRole("button", { name: "Deprecate 1.0.0" }),
+        ).toBeVisible();
+        await expect(olderVersionNotice(page)).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("after a reload the notice is still gone", async () => {
+        await page.reload();
+
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(olderVersionNotice(page)).toBeVisible();
+        await expect(deprecatedNotice(page)).toHaveCount(0);
+        await expect(versionRows(page)).toHaveCount(2);
+        await expect(versionRows(page).nth(1)).not.toContainText("Deprecated");
+      });
+    },
+  );
+});
+
+test.describe("removing an activity from search", () => {
+  /**
+   * Scrolls the results to the last card, as a consumer does to load the next batch, until the
+   * target finds the number of elements expected.
+   */
+  async function scrollUntil(page: Page, target: Locator) {
+    const cards = page.getByRole("main").getByRole("article");
+    await expect(async () => {
+      await cards.last().scrollIntoViewIfNeeded();
+      await expect(target).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+  }
+
+  test(
+    "a publisher removes an activity from search, it leaves search, browse, search by publisher and the sitemap while every version's page still works, and returning it brings it back",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      publishOwnListing,
+      publishThroughApi,
+      publishVersionThroughApi,
+      uniqueWord,
+    }) => {
+      const word = uniqueWord();
+      const code = sample("python");
+      // Three activities by one publisher. Browse is newest first, and activities published in
+      // the same second are ordered by name, so it shows them as alert, post, send. Once the
+      // two either side of the removed one have loaded, its absence from browse is certain.
+      const send = await publishOwnListing({
+        code,
+        title: `Send slack digest ${word}`,
+        name: "send-slack-digest",
+        description: slackDescription,
+      });
+      const postTitle = `Post slack message ${word}`;
+      const postFirst = await publishThroughApi({
+        code,
+        title: postTitle,
+        name: "post-slack-message",
+        description: slackDescription,
+      });
+      const post = await publishVersionThroughApi(
+        {
+          ...postFirst,
+          address: `${postFirst.handle}/${postFirst.name}@${postFirst.version}`,
+        },
+        {
+          code,
+          title: postTitle,
+          description: slackDescription,
+          version: "1.1.0",
+          basedOn: "1.0.0",
+          whatChanged: "Retries when Slack rate-limits the call.",
+        },
+      );
+      const alertTitle = `Alert slack channel ${word}`;
+      await publishThroughApi({
+        code,
+        title: alertTitle,
+        name: "alert-slack-channel",
+        description: slackDescription,
+      });
+      const { handle } = send;
+      const allThree = [alertTitle, postTitle, `Send slack digest ${word}`];
+      const listedTwo = [alertTitle, `Send slack digest ${word}`];
+      const postAddresses = [
+        `${handle}/post-slack-message@1.0.0`,
+        post.address,
+      ];
+      const sitemapEntry = `/${handle}/post-slack-message@`;
+
+      const main = page.getByRole("main");
+      const cards = main.getByRole("article");
+      const card = (title: string) =>
+        main.getByRole("article", { name: title, exact: true });
+      const mine = cards.filter({ hasText: word });
+      const controls = listingControls(page);
+      const dialog = page.getByRole("dialog", { name: "Remove from search?" });
+
+      async function sitemap(): Promise<string> {
+        const response = await page.request.get("/sitemap.xml");
+        expect(response.status()).toBe(200);
+        return response.text();
+      }
+
+      async function expectFound(titles: string[]) {
+        await page.goto(`/search?q=${word}`);
+        await expect(cards).toHaveCount(titles.length);
+        for (const title of titles) {
+          await expect(card(title)).toBeVisible();
+        }
+
+        await page.goto(`/search?publisher=${handle}`);
+        await expect(cards.getByRole("heading")).toHaveText(titles);
+
+        await page.goto("/search");
+        await scrollUntil(page, card(`Send slack digest ${word}`));
+        await expect(mine.getByRole("heading")).toHaveText(titles);
+      }
+
+      await test.step("before removal, search, browse and search by publisher list all three, and the sitemap lists its latest version", async () => {
+        await expectFound(allThree);
+        expect(await sitemap()).toContain(`/${post.address}</loc>`);
+      });
+
+      await test.step("Remove opens the dialog, which says what keeps working", async () => {
+        await page.goto(`/${post.address}`);
+        await expect(
+          main.getByRole("heading", { level: 1, name: postTitle }),
+        ).toBeVisible();
+        await expect(removedNotice(page)).toHaveCount(0);
+        await expect(robotsMeta(page)).toHaveCount(0);
+
+        await controls.getByRole("button", { name: "Remove" }).click();
+
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toHaveAccessibleDescription(
+          `Removing ${handle}/post-slack-message takes every version out of search.`,
+        );
+        await expect(dialog.getByRole("listitem")).toHaveText([
+          "Its page stays up, marked “Removed by the publisher.”",
+          "Every version's address keeps working.",
+          "Copies people already took are theirs and aren't affected.",
+          "You can return it to search later.",
+        ]);
+        await expectAccessible();
+      });
+
+      await test.step("Remove from search marks the page removed and not to be indexed", async () => {
+        await dialog
+          .getByRole("button", { name: "Remove from search" })
+          .click();
+
+        await expect(dialog).toBeHidden();
+        await expect(removedNotice(page)).toHaveText(removedNoticeText);
+        await expect(controls).toContainText(
+          "You published this activity. It's hidden from search.",
+        );
+        await expect(
+          controls.getByRole("button", { name: "Return to search" }),
+        ).toBeVisible();
+        await expect(robotsMeta(page)).toHaveAttribute("content", "noindex");
+        await expectAccessible();
+      });
+
+      await test.step("search, browse, search by publisher and the sitemap leave it out", async () => {
+        await expectFound(listedTwo);
+        await expect(card(postTitle)).toHaveCount(0);
+        expect(await sitemap()).not.toContain(sitemapEntry);
+      });
+
+      await test.step("every version's page and address still work, marked removed and not to be indexed", async () => {
+        for (const address of postAddresses) {
+          const version = address.split("@")[1] ?? "";
+          const read = await page.request.get(
+            `/api/activities/${handle}/post-slack-message/versions/${version}`,
+          );
+          expect(read.status()).toBe(200);
+
+          await page.goto(`/${address}`);
+
+          await expect(page).toHaveURL(`/${address}`);
+          await expect(
+            main.getByRole("heading", { level: 1, name: postTitle }),
+          ).toBeVisible();
+          await expect(main).toContainText(address);
+          await expect(removedNotice(page)).toHaveText(removedNoticeText);
+          await expect(robotsMeta(page)).toHaveAttribute("content", "noindex");
+          await expectAccessible();
+        }
+      });
+
+      await test.step("Return to search brings it back at once, and a reload agrees", async () => {
+        await page.goto(`/${post.address}`);
+        await controls
+          .getByRole("button", { name: "Return to search" })
+          .click();
+
+        await expect(removedNotice(page)).toHaveCount(0);
+        await expect(controls).toContainText(
+          "You published this activity. Only you see these controls.",
+        );
+        await expect(
+          controls.getByRole("button", { name: "Remove" }),
+        ).toBeVisible();
+        await expect(robotsMeta(page)).toHaveCount(0);
+        await expectAccessible();
+
+        await page.reload();
+
+        await expect(
+          main.getByRole("heading", { level: 1, name: postTitle }),
+        ).toBeVisible();
+        await expect(removedNotice(page)).toHaveCount(0);
+        await expect(robotsMeta(page)).toHaveCount(0);
+      });
+
+      await test.step("search, browse, search by publisher and the sitemap list it again", async () => {
+        await expectFound(allThree);
+        expect(await sitemap()).toContain(`/${post.address}</loc>`);
+      });
+    },
+  );
+
+  test(
+    "a publisher publishes a new version of a removed activity, and publishing returns it to search",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      paste,
+      publishOwnListing,
+      removeFromSearch,
+      uniqueWord,
+    }) => {
+      const word = uniqueWord();
+      const title = `Post slack message ${word}`;
+      const first = await publishOwnListing({
+        code: sample("python"),
+        title,
+        name: "post-slack-message",
+        description: slackDescription,
+      });
+      await removeFromSearch(first);
+      const newest = `${first.handle}/${first.name}@1.1.0`;
+      const main = page.getByRole("main");
+      const resultCard = main.getByRole("article", {
+        name: title,
+        exact: true,
+      });
+      const published = page.getByRole("region", { name: "Published" });
+      const controls = listingControls(page);
+
+      await test.step("search doesn't find the removed activity", async () => {
+        await page.goto(`/search?q=${word}`);
+
+        await expect(
+          main.getByRole("heading", { name: "No activities match" }),
+        ).toBeVisible();
+        await expect(resultCard).toHaveCount(0);
+      });
+
+      await test.step("from its page, start a new version and see that publishing returns it to search", async () => {
+        await page.goto(`/${first.address}`);
+        await expect(removedNotice(page)).toBeVisible();
+        await expect(controls).toContainText("It's hidden from search.");
+
+        await controls
+          .getByRole("button", { name: "Create new version" })
+          .click();
+        await page
+          .getByRole("dialog", { name: "Create a new version" })
+          .getByRole("button", { name: "Start from 1.0.0" })
+          .click();
+        await newVersionToReview(page, paste, {
+          version: "1.1.0",
+          whatChanged: "Retries when Slack rate-limits the call.",
+        });
+
+        await expect(
+          page.getByText("Publishing returns this activity to search.", {
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("publish 1.1.0 and open it, listed again", async () => {
+        await confirmAll(page);
+        await page.getByRole("button", { name: "Publish 1.1.0" }).click();
+        await published.getByRole("link", { name: "View the listing" }).click();
+
+        await expect(page).toHaveURL(`/${newest}`);
+        await expect(removedNotice(page)).toHaveCount(0);
+        await expect(robotsMeta(page)).toHaveCount(0);
+        await expect(controls).toContainText("Only you see these controls.");
+        await expect(
+          controls.getByRole("button", { name: "Remove" }),
+        ).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("search finds it again at its new version, and its first version loses the removed notice", async () => {
+        await page.goto(`/search?q=${word}`);
+
+        await expect(resultCard).toContainText(newest);
+
+        await page.goto(`/${first.address}`);
+
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(removedNotice(page)).toHaveCount(0);
+      });
+    },
+  );
+});
+
+test.describe("a consumer viewing a deprecated and removed activity", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test(
+    "a signed-out consumer sees the deprecated and removed notices, follows the replacement, and sees no publisher controls",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      deprecateThroughApi,
+      publishOwnListing,
+      publishVersionThroughApi,
+      removeFromSearch,
+      uniqueWord,
+    }) => {
+      const code = sample("python");
+      const title = `Post slack message ${uniqueWord()}`;
+      const reason = "Posts twice when Slack is slow to answer.";
+      // The publisher deprecates 1.0.0 for 1.1.0 and takes the activity out of search, then
+      // signs out, so the page visits as a consumer.
+      const first = await publishOwnListing({
+        code,
+        title,
+        name: "post-slack-message",
+        description: slackDescription,
+      });
+      const latest = await publishVersionThroughApi(first, {
+        code,
+        title,
+        description: slackDescription,
+        version: "1.1.0",
+        basedOn: "1.0.0",
+        whatChanged: "Retries when Slack rate-limits the call.",
+      });
+      await deprecateThroughApi(first, reason, "1.1.0");
+      await removeFromSearch(first);
+      await page.context().clearCookies();
+
+      const main = page.getByRole("main");
+      const publisherButtons = [
+        "Update",
+        "Deprecate 1.0.0",
+        "Deprecate 1.1.0",
+        "Undo deprecation",
+        "Create new version",
+        "Remove",
+        "Return to search",
+      ];
+
+      async function expectNoPublisherControls() {
+        await expect(
+          page.getByRole("banner").getByRole("link", {
+            name: "Sign in",
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expect(accountMenu(page)).toHaveCount(0);
+        await expect(listingControls(page)).toHaveCount(0);
+        await expect(
+          page.getByText("You published this activity."),
+        ).toHaveCount(0);
+        for (const name of publisherButtons) {
+          await expect(
+            page.getByRole("button", { name, exact: true }),
+          ).toHaveCount(0);
+        }
+      }
+
+      await test.step("the deprecated version's page shows both notices and no publisher controls", async () => {
+        const session = page.waitForResponse(
+          (response) => new URL(response.url()).pathname === "/api/session",
+        );
+        await page.goto(`/${first.address}`);
+        expect((await session).status()).toBe(200);
+
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(deprecatedNotice(page)).toContainText(
+          "1.0.0 is deprecated by the publisher",
+        );
+        await expect(deprecatedNotice(page)).toContainText(reason);
+        await expect(removedNotice(page)).toHaveText(removedNoticeText);
+        await expect(olderVersionNotice(page)).toHaveCount(0);
+        await expect(versionRows(page).nth(1)).toContainText(
+          "Deprecated · use 1.1.0",
+        );
+        await expectNoPublisherControls();
+        await expectAccessible();
+      });
+
+      await test.step("Use 1.1.0 instead opens the replacement, still marked removed and with no publisher controls", async () => {
+        await deprecatedNotice(page)
+          .getByRole("link", { name: "Use 1.1.0 instead" })
+          .click();
+
+        await expect(page).toHaveURL(`/${latest.address}`);
+        await expect(
+          main.getByRole("heading", { level: 1, name: title }),
+        ).toBeVisible();
+        await expect(removedNotice(page)).toHaveText(removedNoticeText);
+        await expect(deprecatedNotice(page)).toHaveCount(0);
+        await expectNoPublisherControls();
         await expectAccessible();
       });
     },
