@@ -69,8 +69,9 @@ function publisherBar(page: Page) {
   return main(page).getByRole("region", { name: "Your listing controls" });
 }
 
+/** The Update dialog, named for the version it changes, such as "Update 1.0.0". */
 function updateDialog(page: Page) {
-  return page.getByRole("dialog", { name: "Update listing" });
+  return page.getByRole("dialog", { name: /^Update \d+\.\d+\.\d+$/ });
 }
 
 function descriptionField(page: Page) {
@@ -182,8 +183,11 @@ test.describe("as an anonymous visitor", () => {
         await expect.poll(readClipboard).toBe(listing.address);
       });
 
-      await test.step("press Quickstart and land on Implement", async () => {
-        await main(page).getByRole("link", { name: "Quickstart" }).click();
+      await test.step("press Implement in the section bar and land on Implement", async () => {
+        await main(page)
+          .getByRole("navigation", { name: "Page sections" })
+          .getByRole("link", { name: "Implement" })
+          .click();
 
         await expect(sectionHeading(page, "Implement")).toBeInViewport();
         await expect(
@@ -460,6 +464,124 @@ test.describe("as an anonymous visitor", () => {
   });
 });
 
+test.describe("an activity whose SDK was only inferred", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  // go-no-marker.txt imports no Temporal package, so its SDK is inferred from the code.
+  test("publishes, and its page shows the SDK and Implement in Go", async ({
+    page,
+    expectAccessible,
+    publishListing,
+  }) => {
+    const listing = await publishListing({
+      code: sample("go-no-marker"),
+      title: "Compose greeting",
+      name: "compose-greeting",
+      description: "Returns a greeting for a name.",
+    });
+
+    await page.goto(`/${listing.address}`);
+
+    await expect(
+      main(page).getByRole("heading", { level: 1, name: "Compose greeting" }),
+    ).toBeVisible();
+    await expect(main(page).getByText("Go", { exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "About" })
+        .getByRole("definition")
+        .first(),
+    ).toHaveText("Go, go.temporal.io/sdk");
+    await expect(
+      main(page).getByRole("tablist", { name: "Files" }).getByRole("tab"),
+    ).toHaveText([
+      "activity.go",
+      "workflow.go",
+      "worker/main.go",
+      "start/main.go",
+    ]);
+    await expectAccessible();
+  });
+});
+
+test.describe("the SDK logo on the About card", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  /** The About card's SDK value, as its first definition. */
+  function sdkValue(page: Page) {
+    return page
+      .getByRole("region", { name: "About" })
+      .getByRole("definition")
+      .first();
+  }
+
+  test("a Ruby activity page shows the Ruby logo beside the SDK name, with its credit as the tooltip", async ({
+    page,
+    expectAccessible,
+    publishListing,
+  }) => {
+    const credit = "Ruby logo © 2006 Yukihiro Matsumoto, CC BY-SA 2.5";
+    const listing = await publishListing({
+      code: sample("ruby"),
+      title: "Send invoice",
+      name: "send-invoice",
+      description: "Sends a Stripe invoice to a customer.",
+    });
+
+    await page.goto(`/${listing.address}`);
+
+    const logo = sdkValue(page).getByRole("img", { name: credit });
+    await expect(logo).toBeVisible();
+    await expect(logo).toHaveAttribute("title", credit);
+    // The image the catalog points at has loaded: it has a size of its own.
+    await expect
+      .poll(() =>
+        logo.evaluate((image: HTMLImageElement) => image.naturalWidth),
+      )
+      .toBeGreaterThan(0);
+    await expect(sdkValue(page)).toHaveText("Ruby, temporalio");
+    await expectAccessible();
+  });
+
+  test("a Python activity page shows the Python logo with empty alt text and no tooltip", async ({
+    page,
+    expectAccessible,
+    publishListing,
+  }) => {
+    const listing = await publishListing(slackListing);
+
+    await page.goto(`/${listing.address}`);
+
+    await expect(sdkValue(page)).toHaveText("Python, temporalio");
+    const logo = sdkValue(page).getByRole("presentation");
+    await expect(logo).toBeVisible();
+    await expect(logo).toHaveAttribute("alt", "");
+    await expect(logo).not.toHaveAttribute("title");
+    await expect(sdkValue(page).getByRole("img")).toHaveCount(0);
+    await expectAccessible();
+  });
+
+  test("a Java activity page shows the SDK name and package with no logo", async ({
+    page,
+    expectAccessible,
+    publishListing,
+  }) => {
+    const listing = await publishListing({
+      code: sample("java"),
+      title: "Send SMS",
+      name: "send-sms",
+      description: "Sends a text message with Twilio.",
+    });
+
+    await page.goto(`/${listing.address}`);
+
+    await expect(sdkValue(page)).toHaveText("Java, io.temporal:temporal-sdk");
+    await expect(sdkValue(page).getByRole("img")).toHaveCount(0);
+    await expect(sdkValue(page).getByRole("presentation")).toHaveCount(0);
+    await expectAccessible();
+  });
+});
+
 test.describe("the publisher bar and Update dialog", () => {
   const ownListing: PublishDetails = {
     ...slackListing,
@@ -633,5 +755,123 @@ test.describe("the publisher bar and Update dialog", () => {
     await expect(descriptionField(page)).toHaveValue(tooLong);
     await expectAccessible();
     await expectDescriptionKept(page, savedDescription);
+  });
+});
+
+test.describe("versions and deprecation", () => {
+  /** The Versions section's rows, newest first. */
+  function versionRows(page: Page) {
+    return main(page)
+      .getByRole("list", { name: "Versions" })
+      .getByRole("listitem");
+  }
+
+  function deprecatedNotice(page: Page) {
+    return main(page)
+      .getByRole("status")
+      .filter({ hasText: "is deprecated by the publisher" });
+  }
+
+  test("deprecating with No replacement shows the notice with the reason and no link to another version", async ({
+    page,
+    expectAccessible,
+    publishOwnListing,
+    publishVersionThroughApi,
+  }) => {
+    const first = await publishOwnListing(slackListing);
+    await publishVersionThroughApi(first, {
+      ...slackListing,
+      version: "1.1.0",
+      basedOn: "1.0.0",
+      whatChanged: "Retries when Slack rate-limits the call.",
+    });
+    const reason = "Sends to a channel Slack has retired.";
+    const dialog = page.getByRole("dialog", { name: "Deprecate 1.0.0" });
+    await page.goto(`/${first.address}`);
+
+    await publisherBar(page)
+      .getByRole("button", { name: "Deprecate 1.0.0" })
+      .click();
+    await dialog
+      .getByLabel("Point people to", { exact: true })
+      .selectOption({ label: "No replacement" });
+    await dialog.getByLabel("Reason", { exact: true }).fill(reason);
+    await dialog.getByRole("button", { name: "Deprecate 1.0.0" }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(deprecatedNotice(page)).toContainText(
+      "1.0.0 is deprecated by the publisher",
+    );
+    await expect(deprecatedNotice(page)).toContainText(reason);
+    await expect(deprecatedNotice(page).getByRole("link")).toHaveCount(0);
+    await expect(versionRows(page).nth(1)).toContainText(
+      "Deprecated · no replacement",
+    );
+    await expectAccessible();
+
+    await page.reload();
+
+    await expect(deprecatedNotice(page)).toContainText(reason);
+    await expect(deprecatedNotice(page).getByRole("link")).toHaveCount(0);
+  });
+
+  test("updating an older version's description changes only that version, and search still shows the latest's", async ({
+    page,
+    expectAccessible,
+    publishOwnListing,
+    publishVersionThroughApi,
+    uniqueWord,
+  }) => {
+    const word = uniqueWord();
+    const title = `Post slack message ${word}`;
+    const latestDescription =
+      "Posts a message to a Slack channel and retries when rate-limited.";
+    const corrected = "Posts a message to a Slack channel, without retries.";
+    const first = await publishOwnListing({
+      ...slackListing,
+      title,
+      description: savedDescription,
+    });
+    const latest = await publishVersionThroughApi(first, {
+      ...slackListing,
+      title,
+      description: latestDescription,
+      version: "1.1.0",
+      basedOn: "1.0.0",
+      whatChanged: "Retries when Slack rate-limits the call.",
+    });
+    await page.goto(`/${first.address}`);
+
+    await openUpdate(page, savedDescription);
+    await expect(updateDialog(page)).toHaveAccessibleName("Update 1.0.0");
+    await descriptionField(page).fill(corrected);
+    await updateDialog(page)
+      .getByRole("button", { name: "Save changes" })
+      .click();
+
+    await expect(updateDialog(page)).toBeHidden();
+    await expectDescriptionKept(page, corrected);
+    await expectAccessible();
+
+    await page.goto(`/${latest.address}`);
+
+    await expect(
+      main(page).getByRole("heading", { level: 1, name: title }),
+    ).toBeVisible();
+    await expect(
+      main(page).getByText(latestDescription, { exact: true }),
+    ).toBeVisible();
+    await expect(main(page).getByText(corrected, { exact: true })).toHaveCount(
+      0,
+    );
+
+    await page.goto(`/search?q=${word}`);
+
+    const resultCard = main(page).getByRole("article", {
+      name: title,
+      exact: true,
+    });
+    await expect(resultCard).toContainText(latestDescription);
+    await expect(resultCard).not.toContainText(corrected);
   });
 });

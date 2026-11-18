@@ -1,3 +1,4 @@
+import { useSdkProfile } from "@/lib/use-sdk-profile";
 import { Navigate, useNavigate } from "react-router";
 import type { CheckedFacts } from "./check-result";
 import { factRows } from "./detected-facts";
@@ -61,8 +62,10 @@ interface FactsCardProps {
 }
 
 // The "What we found" card: eight facts in two columns, each a small label above a monospace
-// value. A fact detection couldn't find shows its fallback in muted text.
+// value. A fact detection couldn't find shows its fallback in muted text. The SDK has a muted
+// note under it saying how it was established. The Runs as wording comes from the SDK catalog.
 function FactsCard({ facts }: FactsCardProps) {
+  const profile = useSdkProfile(facts.sdk);
   return (
     <section aria-labelledby="what-we-found" className={styles["card"]}>
       <div className={styles["cardHead"]}>
@@ -72,12 +75,15 @@ function FactsCard({ facts }: FactsCardProps) {
         <p className={styles["method"]}>Regex, no AI</p>
       </div>
       <dl className={styles["facts"]}>
-        {factRows(facts).map((row) => (
+        {factRows(facts, profile).map((row) => (
           <div key={row.label} className={styles["fact"]}>
             <dt className={styles["label"]}>{row.label}</dt>
             <dd className={styles["value"]} data-found={row.found}>
               {row.value}
             </dd>
+            {row.note === undefined ? null : (
+              <dd className={styles["note"]}>{row.note}</dd>
+            )}
           </div>
         ))}
       </dl>

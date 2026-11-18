@@ -4,8 +4,12 @@ import type { HighlighterCore, LanguageInput } from "shiki/core";
 // with the JavaScript regex engine. Shiki and each grammar load on first use, so a page
 // without code never downloads them.
 
-/** The languages Durables highlights. Anything else is shown as plain text. */
-export type CodeLanguage = "python" | "typescript" | "csharp";
+/**
+ * The languages Durables highlights, named as the SDK catalog's `highlightLanguage` names them.
+ * Anything else is shown as plain text.
+ */
+export type CodeLanguage =
+  "python" | "typescript" | "csharp" | "go" | "java" | "ruby" | "php" | "rust";
 
 /** One coloured run of text. `color` is a `var(--code-token-*)` reference to a token. */
 export interface HighlightedToken {
@@ -19,6 +23,11 @@ const defaultGrammars: Record<CodeLanguage, GrammarLoader> = {
   python: () => import("shiki/langs/python.mjs"),
   typescript: () => import("shiki/langs/typescript.mjs"),
   csharp: () => import("shiki/langs/csharp.mjs"),
+  go: () => import("shiki/langs/go.mjs"),
+  java: () => import("shiki/langs/java.mjs"),
+  ruby: () => import("shiki/langs/ruby.mjs"),
+  php: () => import("shiki/langs/php.mjs"),
+  rust: () => import("shiki/langs/rust.mjs"),
 };
 
 const THEME = "durables";
@@ -41,14 +50,15 @@ export interface Highlighter {
   ) => HighlightedToken[][] | undefined;
 }
 
+const isCodeLanguage = (key: string): key is CodeLanguage =>
+  Object.hasOwn(defaultGrammars, key);
+
 /** Reads a language name and returns it when Durables highlights it. */
 export function codeLanguage(
   name: string | undefined,
 ): CodeLanguage | undefined {
   const key = name?.toLowerCase();
-  return key === "python" || key === "typescript" || key === "csharp"
-    ? key
-    : undefined;
+  return key !== undefined && isCodeLanguage(key) ? key : undefined;
 }
 
 async function createCore(): Promise<HighlighterCore> {

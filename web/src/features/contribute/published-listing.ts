@@ -9,6 +9,8 @@ const publishedListingSchema = z.object({
   version: z.string().min(1),
   /** True when this publish created the publisher's Durables account. */
   accountCreated: z.boolean(),
+  /** The version a new version was based on. Absent for a first version. */
+  basedOn: z.string().min(1).optional(),
 });
 
 export type PublishedListing = z.infer<typeof publishedListingSchema>;

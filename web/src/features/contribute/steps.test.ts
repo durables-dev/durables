@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   earliestUnfinished,
   finishedSteps,
+  flowSteps,
   isLocked,
   resolveStep,
   steps,
@@ -107,5 +108,35 @@ describe("finishedSteps", () => {
       "profile",
       "code",
     ]);
+  });
+});
+
+describe("the new-version flow", () => {
+  test("is Code, Detected, Details and Review, with no Profile & Handle", () => {
+    expect(flowSteps("newVersion").map(({ id }) => id)).toEqual([
+      "code",
+      "detected",
+      "details",
+      "review",
+    ]);
+    expect(flowSteps("first")).toBe(steps);
+  });
+
+  test("starts at Code", () => {
+    expect(earliestUnfinished([], "newVersion")).toBe("code");
+    expect(resolveStep(undefined, [], "newVersion")).toBe("code");
+  });
+
+  test("never opens Profile & Handle", () => {
+    expect(isLocked("profile", [], "newVersion")).toBe(true);
+    expect(resolveStep("profile", ["code"], "newVersion")).toBe("detected");
+  });
+
+  test("locks a step until the steps before it are finished", () => {
+    expect(isLocked("detected", [], "newVersion")).toBe(true);
+    expect(isLocked("detected", ["code"], "newVersion")).toBe(false);
+    expect(resolveStep("review", ["code", "detected"], "newVersion")).toBe(
+      "details",
+    );
   });
 });

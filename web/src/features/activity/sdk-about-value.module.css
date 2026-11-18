@@ -1,0 +1,30 @@
+/* The logo and the name share a line, and the logo is centred on it (API map D1). */
+.with-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The SDK's logo, in its own colours: 16px tall, its width following its proportions up to
+   40px (API map D1, D2). */
+.logo {
+  flex-shrink: 0;
+  height: 16px;
+  width: auto;
+  max-width: 40px;
+  object-fit: contain;
+}
+
+/* A logo that needs a light tile to stay visible in dark mode. The tile is cream in both
+   themes, so it uses the palette colour rather than a semantic one (API map D3). The logo
+   stays 16px tall inside the 2px padding. */
+.tile {
+  box-sizing: content-box;
+  padding: 2px;
+  background: var(--color-cream);
+  border-radius: var(--radius-tag);
+}
+
+.package {
+  font-family: var(--font-mono);
+}

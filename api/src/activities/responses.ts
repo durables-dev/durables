@@ -1,18 +1,22 @@
-import type { Facts } from "../checks/facts";
-import { activityFileName } from "../snippets/labels";
+import type { StoredFacts } from "../checks/facts";
+import { sdkRegistry } from "../sdks/registry";
 import type {
   Snippet,
   Address,
+  Deprecation,
   Listing,
-  ListingDescription,
+  ListingVersion,
+  ListingVersions,
+  RemovalSource,
   Sdk,
   Version,
   VersionDocument,
 } from "../storage/storage";
 
 // What the activities resource answers with. A version response holds only fields that can
-// never change, because it is cached for good (ADR 0006). The description can change, so it
-// is answered by the listing response alone.
+// never change, because it is cached for good (ADR 0006). Each version's description and
+// deprecation can change, and so can the listing's removal from search, so they are answered by
+// the listing response alone (ADR 0015).
 
 /** A published version, as `GET /api/activities/:handle/:name/versions/:version` answers it. */
 export interface VersionResponse extends Address {
@@ -20,8 +24,11 @@ export interface VersionResponse extends Address {
   address: string;
   title: string;
   sdk: Sdk;
-  /** The facts the publish-time checks detected. */
-  facts: Facts;
+  /**
+   * The facts the publish-time checks detected. A version published before fact provenance
+   * carries none.
+   */
+  facts: StoredFacts;
   /** The code exactly as published, byte for byte. Never reindented. */
   code: string;
   /** The file the published code is saved as, which names the Implement activity file. */
@@ -37,12 +44,35 @@ export interface VersionResponse extends Address {
   publishedAt: string;
 }
 
+/** One version in a listing response, with its state that can change after publishing. */
+export interface ListingVersionResponse {
+  version: string;
+  /** When the version was published, as an ISO 8601 timestamp. */
+  publishedAt: string;
+  /** The What changed note. Null for a version published before notes existed. */
+  whatChanged: string | null;
+  /** The version it was based on. Null for a first version. */
+  basedOn: string | null;
+  /** Null when the version is not deprecated. */
+  deprecation: Deprecation | null;
+  /** The version's current one-line description. */
+  description: string;
+}
+
+/**
+ * Who a listing's removal from search is shown as. A removal when the publisher's account was
+ * deleted is shown as the publisher's own (D27).
+ */
+export type ShownRemoval = Exclude<RemovalSource, "account-deletion">;
+
 /** A listing, as `GET /api/activities/:handle/:name` answers it. */
 export interface ListingResponse {
   handle: string;
   name: string;
-  /** The current one-line description. */
-  description: string;
+  /** Who took the listing out of search. Null while it is listed. */
+  removedBy: ShownRemoval | null;
+  /** Every version, newest first, so the first is the latest. */
+  versions: ListingVersionResponse[];
 }
 
 /** One browse result: a listing, shown at its highest version number. */
@@ -51,7 +81,7 @@ export interface ActivityCard extends Address {
   address: string;
   title: string;
   sdk: Sdk;
-  /** The listing's current one-line description. */
+  /** The current one-line description of the version on the card. */
   description: string;
   /** The integrations of the version on the card. Empty when there are none. */
   integrations: string[];
@@ -107,7 +137,7 @@ export const publishResponse = (
 /**
  * The version response, from the version's row and its document. Every field is fixed at
  * publish. The document's description is the one it was published with and is left out,
- * since the listing's can change.
+ * since the version's current description can change.
  */
 export const versionResponse = (
   version: Version,
@@ -121,18 +151,50 @@ export const versionResponse = (
   sdk: version.sdk,
   facts: document.facts,
   code: document.code,
-  activityFileName: activityFileName[version.sdk],
+  activityFileName: sdkRegistry[version.sdk].display.activityFileName,
   snippets: document.snippets,
   integrations: document.integrations,
   publishedAt: version.publishedAt.toISOString(),
 });
 
-/** The listing response, from the listing's current description. */
+/** One version of the listing response. */
+const listingVersionResponse = ({
+  version,
+  publishedAt,
+  whatChanged,
+  basedOn,
+  deprecation,
+  description,
+}: ListingVersion): ListingVersionResponse => ({
+  version,
+  publishedAt: publishedAt.toISOString(),
+  whatChanged,
+  basedOn,
+  deprecation:
+    deprecation === null
+      ? null
+      : { reason: deprecation.reason, replacement: deprecation.replacement },
+  description,
+});
+
+/** Who a removal is shown as. Account deletion is shown as the publisher (D27). */
+export const shownRemoval = (
+  removedBy: RemovalSource | null,
+): ShownRemoval | null =>
+  removedBy === "account-deletion" ? "publisher" : removedBy;
+
+/** The listing response, from the listing and its versions, newest first. */
 export const listingResponse = ({
   handle,
   name,
-  description,
-}: ListingDescription): ListingResponse => ({ handle, name, description });
+  removedBy,
+  versions,
+}: ListingVersions): ListingResponse => ({
+  handle,
+  name,
+  removedBy: shownRemoval(removedBy),
+  versions: versions.map(listingVersionResponse),
+});
 
 /** A browse card, from the listing at its highest version. */
 export const activityCard = ({

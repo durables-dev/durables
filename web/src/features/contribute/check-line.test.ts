@@ -1,15 +1,18 @@
 import type { ProblemDetails } from "@/lib/problem";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   checkingText,
   checkLine,
+  chooseSdkText,
   failedText,
+  foundParts,
   isFileRefusal,
   refusalTypes,
+  sdkControl,
   type CheckState,
 } from "./check-line";
-import type { CheckedFacts, CheckResult } from "./check-result";
+import type { CheckedFacts, CheckResult, SdkTier } from "./check-result";
 import { acceptedCheck, acceptedFacts } from "./test-drafts";
 
 const idle: CheckState = {
@@ -54,6 +57,135 @@ describe("the Found line", () => {
   });
 });
 
+describe("the Found line's SDK tier", () => {
+  function tiered(sdk: string, tier: SdkTier): CheckResult {
+    return {
+      outcome: "accepted",
+      facts: {
+        ...facts(sdk, "Charge"),
+        provenance: { sdk: tier },
+      },
+    };
+  }
+
+  test.each([
+    ["detected", "✓ Found Charge (Go). Next, check what we detected."],
+    [
+      "inferred",
+      "✓ Found Charge (Go, inferred from the code). Next, check what we detected.",
+    ],
+    [
+      "declared",
+      "✓ Found Charge (Go, declared by you). Next, check what we detected.",
+    ],
+  ] as const)("a %s SDK reads as the design words it", (tier, text) => {
+    expect(checkLine({ ...idle, check: tiered("Go", tier) })).toMatchObject({
+      kind: "found",
+      text,
+    });
+  });
+
+  test("a check with no tier recorded reads as detected", () => {
+    expect(
+      checkLine({
+        ...idle,
+        check: { outcome: "accepted", facts: acceptedFacts },
+      }),
+    ).toMatchObject({
+      text: "✓ Found post_slack_message (Python). Next, check what we detected.",
+    });
+  });
+
+  test("splits around the SDK name, so the name can be a link", () => {
+    const check = tiered("Rust", "inferred");
+    if (check.outcome !== "accepted") throw new Error("Expected accepted");
+    expect(foundParts(check.facts)).toEqual([
+      "✓ Found Charge (",
+      "Rust",
+      ", inferred from the code). Next, check what we detected.",
+    ]);
+  });
+});
+
+describe("the SDK control", () => {
+  function accepted(tier: SdkTier): CheckResult {
+    return {
+      outcome: "accepted",
+      facts: { ...facts("Go", "Charge"), provenance: { sdk: tier } },
+    };
+  }
+
+  test("a detected SDK can't be changed", () => {
+    expect(sdkControl(accepted("detected"), undefined)).toEqual({
+      kind: "none",
+    });
+  });
+
+  test("an inferred SDK can be changed", () => {
+    expect(sdkControl(accepted("inferred"), undefined)).toEqual({
+      kind: "change",
+      sdk: "Go",
+    });
+  });
+
+  test("a declared SDK can be changed again", () => {
+    expect(sdkControl(accepted("declared"), "Go")).toEqual({
+      kind: "change",
+      sdk: "Go",
+    });
+  });
+
+  test.each(["not-identified", "ambiguous"])(
+    "a %s result must be chosen",
+    (reason) => {
+      expect(
+        sdkControl(
+          refused({ type: refusalTypes.sdkChoiceNeeded, reason }),
+          undefined,
+        ),
+      ).toEqual({ kind: "choose", chosen: undefined });
+    },
+  );
+
+  test("a declared SDK that found no activity keeps the dropdown, showing the choice", () => {
+    expect(
+      sdkControl(
+        refused({ type: refusalTypes.noActivity, sdk: "Java" }),
+        "Java",
+      ),
+    ).toEqual({ kind: "choose", chosen: "Java" });
+  });
+
+  test("keeps the dropdown while the declared SDK's check has not answered", () => {
+    expect(sdkControl(undefined, "Java")).toEqual({
+      kind: "choose",
+      chosen: "Java",
+    });
+  });
+
+  test("an identified SDK that found no activity has no dropdown", () => {
+    expect(
+      sdkControl(
+        refused({ type: refusalTypes.noActivity, sdk: "Python" }),
+        undefined,
+      ),
+    ).toEqual({ kind: "none" });
+  });
+
+  test("an empty paste has no dropdown", () => {
+    expect(
+      sdkControl(
+        refused({ type: refusalTypes.notTemporalActivity }),
+        undefined,
+      ),
+    ).toEqual({ kind: "none" });
+  });
+
+  test("nothing to show before any check", () => {
+    expect(sdkControl(undefined, undefined)).toEqual({ kind: "none" });
+  });
+});
+
 describe("while a check runs", () => {
   test("says Checking…, over any earlier result for the same code", () => {
     expect(checkLine({ ...idle, checking: true })).toEqual({
@@ -76,13 +208,10 @@ describe("refusals", () => {
     [
       refusalTypes.notTemporalActivity,
       {},
-      "This doesn't look like a Python, TypeScript or .NET Temporal activity.",
+      "This doesn't look like a Temporal activity in any SDK Durables supports.",
     ],
-    [
-      refusalTypes.unacceptedSdk,
-      { sdk: "Java" },
-      "Durables accepts Python, TypeScript and .NET activities. This file looks like a Java activity.",
-    ],
+    [refusalTypes.sdkChoiceNeeded, { reason: "not-identified" }, chooseSdkText],
+    [refusalTypes.sdkChoiceNeeded, { reason: "ambiguous" }, chooseSdkText],
     [
       refusalTypes.multipleActivities,
       { count: 2 },
@@ -92,14 +221,33 @@ describe("refusals", () => {
     expect(lineFor({ type, ...extensions })).toEqual({ kind: "refused", text });
   });
 
-  test.each(["Java", "Go", "PHP"])(
-    "the unaccepted-SDK message names %s",
-    (sdk) => {
-      expect(lineFor({ type: refusalTypes.unacceptedSdk, sdk })).toMatchObject({
-        text: `Durables accepts Python, TypeScript and .NET activities. This file looks like a ${sdk} activity.`,
-      });
-    },
-  );
+  test("the must-choose prompt asks for the SDK", () => {
+    expect(chooseSdkText).toBe(
+      "We couldn't tell which SDK this is. Choose the one it's written for.",
+    );
+  });
+
+  test("a declared SDK that finds no activity names the SDK", () => {
+    expect(
+      checkLine({
+        ...idle,
+        check: refused({ type: refusalTypes.noActivity, sdk: "Ruby" }),
+        declaredSdk: "Ruby",
+      }),
+    ).toEqual({
+      kind: "refused",
+      text: "No activity found for Ruby. Check the code, or choose a different SDK.",
+    });
+  });
+
+  test("the unaccepted-SDK refusal is no longer a refusal web knows", () => {
+    expect(
+      lineFor({
+        type: "https://durables.dev/problems/unaccepted-sdk",
+        sdk: "Java",
+      }),
+    ).toEqual({ kind: "failed", text: failedText });
+  });
 
   test("the multi-activity message carries the count", () => {
     const line = lineFor({ type: refusalTypes.multipleActivities, count: 5 });
@@ -123,10 +271,10 @@ describe("refusals", () => {
   });
 
   test("the message is chosen by the type; other title and detail text change nothing", () => {
-    const plain = lineFor({ type: refusalTypes.unacceptedSdk, sdk: "Go" });
+    const plain = lineFor({ type: refusalTypes.multipleActivities, count: 2 });
     const reworded = lineFor({
-      type: refusalTypes.unacceptedSdk,
-      sdk: "Go",
+      type: refusalTypes.multipleActivities,
+      count: 2,
       title: "Not a Temporal activity",
       detail: "Found the SDK but no activity function.",
     });
@@ -145,7 +293,7 @@ describe("refusals", () => {
   });
 
   test("a refusal missing what its message needs is a failure", () => {
-    expect(lineFor({ type: refusalTypes.unacceptedSdk })).toEqual({
+    expect(lineFor({ type: refusalTypes.sdkChoiceNeeded })).toEqual({
       kind: "failed",
       text: failedText,
     });
@@ -201,7 +349,7 @@ describe("isFileRefusal", () => {
     for (const problem of [
       { type: refusalTypes.noActivity },
       { type: refusalTypes.notTemporalActivity },
-      { type: refusalTypes.unacceptedSdk, sdk: "PHP" },
+      { type: refusalTypes.sdkChoiceNeeded, reason: "ambiguous" },
       { type: refusalTypes.multipleActivities, count: 2 },
       { type: refusalTypes.codeTooLarge },
     ]) {
@@ -240,4 +388,36 @@ test("the refusal panel is Gold tint and uses no Ember colour", () => {
   for (const notice of notices) {
     expect(notice).toMatch(/^rgb\(255 183 0 \/ \d+%\)$/);
   }
+});
+
+describe("web's source", () => {
+  /** Every source file under web/src, tests left out. */
+  function sourceFiles(dir: URL): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), dir);
+      if (entry.isDirectory()) return sourceFiles(url);
+      return /\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)
+        ? [readFileSync(url, "utf8")]
+        : [];
+    });
+  }
+
+  const sources = sourceFiles(new URL("../../", import.meta.url));
+
+  test("is read from the whole of web/src", () => {
+    expect(sources.length).toBeGreaterThan(50);
+  });
+
+  test("holds no unaccepted-SDK list or refusal", () => {
+    for (const source of sources) {
+      expect(source).not.toMatch(/unaccepted/i);
+      expect(source).not.toMatch(/"Java",\s*"Go",\s*"PHP"/);
+    }
+  });
+
+  test("names no three accepted SDKs", () => {
+    for (const source of sources) {
+      expect(source).not.toMatch(/Python, TypeScript (or|and) \.NET/);
+    }
+  });
 });

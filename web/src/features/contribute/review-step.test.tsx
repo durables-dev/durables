@@ -222,6 +222,25 @@ describe("the Review step", () => {
       .toBeVisible();
   });
 
+  test.each(["Go", "Java", "Ruby", "PHP", "Rust"])(
+    "the preview card shows the SDK tag for a %s activity, as for the first three",
+    async (sdk) => {
+      const { screen } = await openReview({
+        ...reviewDraft,
+        check: { outcome: "accepted", facts: { ...acceptedFacts, sdk } },
+      });
+
+      const tag = card(screen).getByText(sdk, { exact: true });
+      await expect.element(tag).toBeVisible();
+      const python = await openReview(reviewDraft);
+      const pythonTag = card(python.screen).getByText("Python", {
+        exact: true,
+      });
+      await expect.element(pythonTag).toBeVisible();
+      expect(tag.element().className).toBe(pythonTag.element().className);
+    },
+  );
+
   test("shows the six confirmations with their exact texts, in order, all unchecked", async () => {
     const { screen } = await openReview(reviewDraft);
 

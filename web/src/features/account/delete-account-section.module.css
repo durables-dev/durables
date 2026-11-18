@@ -1,0 +1,44 @@
+/* The dark red border and button, never Ember (D48). */
+.section {
+  padding: 20px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-panel);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.text {
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--text-h3);
+  font-weight: 600;
+}
+
+.note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-label);
+  line-height: 1.6;
+}
+
+.open {
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--danger);
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  cursor: pointer;
+}

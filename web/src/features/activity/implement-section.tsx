@@ -1,26 +1,28 @@
 import { CodeBlock } from "@/components/code-block";
-import type { CodeLanguage } from "@/lib/highlighter";
-import { sdkLanguage } from "@/lib/sdk-language";
+import { useSdkProfile } from "@/lib/use-sdk-profile";
 import { useId, useState, type KeyboardEvent } from "react";
 import {
+  filesHeading,
   implementSteps,
   type ImplementFile,
   type ImplementVersion,
 } from "./implement-steps";
 import styles from "./implement-section.module.css";
-import type { VersionResponse } from "./listing-queries";
 
 export interface ImplementSectionProps {
   /** The version: its address, published code, activity file name and Implement snippets. */
   version: ImplementVersion;
-  sdk: VersionResponse["sdk"];
+  /** The activity's SDK, named as the api names it. Its catalog profile picks the highlighting. */
+  sdk: string;
 }
 
-// The Implement section: install the dependencies, add the four files, then run them. Every
-// block is the shared code block, so each has line numbers and Copy, and none is reindented.
+// The Implement section: install the dependencies, add the files, then run them. Every block is
+// the shared code block, so each has line numbers and Copy, and none is reindented. The files in
+// the SDK's language are highlighted in the language the SDK catalog names, and are plain text
+// without one. Any other file the worker needs is plain text.
 export function ImplementSection({ version, sdk }: ImplementSectionProps) {
   const { installCommand, files, runCommands } = implementSteps(version);
-  const language = sdkLanguage(sdk);
+  const language = useSdkProfile(sdk)?.highlightLanguage;
 
   return (
     <>
@@ -32,9 +34,7 @@ export function ImplementSection({ version, sdk }: ImplementSectionProps) {
         )}
       </div>
       <div className={styles["step"]}>
-        <h3 className={styles["heading"]}>
-          2. Add these four files to your project
-        </h3>
+        <h3 className={styles["heading"]}>{filesHeading(files.length)}</h3>
         <FileTabs files={files} language={language} />
       </div>
       <div className={styles["step"]}>
@@ -49,7 +49,7 @@ export function ImplementSection({ version, sdk }: ImplementSectionProps) {
 
 interface FileTabsProps {
   files: ImplementFile[];
-  language: CodeLanguage;
+  language: string | undefined;
 }
 
 // The files as tabs, the activity file first and selected. Arrow keys, Home and End move
@@ -119,7 +119,7 @@ function FileTabs({ files, language }: FileTabsProps) {
         <p className={styles["description"]}>{selected.description}</p>
         <CodeBlock
           code={selected.code}
-          language={language}
+          language={selected.inSdkLanguage ? language : undefined}
           label={selected.name}
         />
       </div>

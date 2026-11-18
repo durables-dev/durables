@@ -1,4 +1,4 @@
-import type { Facts } from "../checks/facts";
+import type { StoredFacts } from "../checks/facts";
 
 // The version document (ADR 0005): one R2 object per published version, written once and
 // never changed. It holds what the version was published with. The listing's current
@@ -24,7 +24,7 @@ export interface VersionDocument {
   /** The code exactly as pasted, byte for byte. */
   readonly code: string;
   /** The facts the publish-time checks detected, SDK included. */
-  readonly facts: Facts;
+  readonly facts: StoredFacts;
   /** The integrations implied by the code's imports. Empty when there are none. */
   readonly integrations: readonly string[];
   /** The Implement snippets generated at publish. */

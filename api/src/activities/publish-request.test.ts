@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { ProblemError } from "../http/problem";
 import { MAX_CODE_BYTES } from "../checks/size-limit";
+import { sdks } from "../sdks/sdk-list";
 import { publishProblemTypes } from "./publish-problems";
 import {
   acceptListing,
@@ -67,6 +68,17 @@ describe("the publish body's shape", () => {
         ...body(),
         confirmations: { ...confirmations, terms: "true" },
       }).success,
+    ).toBe(false);
+  });
+
+  test("accepts a declared SDK from the api's list and refuses one not in it", () => {
+    for (const declaredSdk of sdks) {
+      expect(publishBody.parse({ ...body(), declaredSdk })).toEqual(
+        body({ declaredSdk }),
+      );
+    }
+    expect(
+      publishBody.safeParse({ ...body(), declaredSdk: "Kotlin" }).success,
     ).toBe(false);
   });
 

@@ -1,19 +1,20 @@
+import { registeredSdks, sdkRegistry } from "../sdks/registry";
 import { describe, expect, it } from "vitest";
-import { detectors } from "./detectors";
 import { dotnetDetector, dotnetPatterns } from "./dotnet-detector";
 import type { ActivityFacts } from "./facts";
 import { checkCode } from "./pipeline";
 import { CheckRefusal, refusalTypes } from "./refusals";
 import { toSource } from "./source";
 
-const detect = (code: string) => dotnetDetector.detect(toSource(code));
+const detect = (code: string) =>
+  dotnetDetector.detect(toSource(code), sdkRegistry[".NET"].isStandardLibrary);
 
 const lines = (...code: string[]) => code.join("\n");
 
 /** The Problem Details body of the refusal the pipeline throws for the code. */
 const refusalOf = (code: string) => {
   try {
-    checkCode(code, detectors);
+    checkCode(code, registeredSdks);
   } catch (error) {
     expect(error).toBeInstanceOf(CheckRefusal);
     return (error as CheckRefusal).problem;
@@ -117,13 +118,13 @@ describe("dotnetDetector", () => {
     });
 
     it("are registered with the pipeline", () => {
-      expect(detectors).toContain(dotnetDetector);
+      expect(sdkRegistry[".NET"].detector).toBe(dotnetDetector);
     });
   });
 
   describe("an async activity returning Task<T> with typed input", () => {
     it("populates all eight facts", () => {
-      expect(checkCode(chargeCard, detectors)).toEqual({
+      expect(checkCode(chargeCard, registeredSdks)).toEqual({
         sdk: ".NET",
         activity: { name: "ChargeCardAsync", line: 19 },
         input: "ChargeRequest",
@@ -133,6 +134,16 @@ describe("dotnetDetector", () => {
         configurationRead: [{ name: "STRIPE_API_KEY", line: 16 }],
         dependencies: [{ name: "Stripe", line: 3 }],
         heartbeats: [{ line: 21 }],
+        provenance: {
+          sdk: "detected",
+          activity: "detected",
+          inputOutput: "detected",
+          runsAs: "detected",
+          nonRetryableErrors: "detected",
+          configurationRead: "detected",
+          dependencies: "detected",
+          heartbeats: "detected",
+        },
       });
     });
 
@@ -383,7 +394,7 @@ describe("dotnetDetector", () => {
         "    }",
         "}",
       );
-      expect(checkCode(code, detectors)).toMatchObject({
+      expect(checkCode(code, registeredSdks)).toMatchObject({
         sdk: ".NET",
         activity: { name: "Act", line: 9 },
         dependencies: [{ name: "Stripe", line: 3 }],
@@ -626,8 +637,8 @@ describe("dotnetDetector", () => {
   describe("line endings", () => {
     it("gives the same facts for CRLF input as for LF input", () => {
       const crlf = chargeCard.split("\n").join("\r\n");
-      expect(checkCode(crlf, detectors)).toEqual(
-        checkCode(chargeCard, detectors),
+      expect(checkCode(crlf, registeredSdks)).toEqual(
+        checkCode(chargeCard, registeredSdks),
       );
     });
   });
@@ -641,7 +652,7 @@ describe("dotnetDetector", () => {
         "    public Task<Out> Act(In input) => Run(input);",
         "}",
       );
-      expect(checkCode(code, detectors)).toMatchObject({ sdk: ".NET" });
+      expect(checkCode(code, registeredSdks)).toMatchObject({ sdk: ".NET" });
     });
 
     it("leaves Python files to the Python detector", () => {
@@ -652,7 +663,7 @@ describe("dotnetDetector", () => {
         "async def act(items: list[Item]) -> Out:",
         "    ...",
       );
-      expect(checkCode(code, detectors)).toMatchObject({ sdk: "Python" });
+      expect(checkCode(code, registeredSdks)).toMatchObject({ sdk: "Python" });
     });
   });
 });

@@ -1,5 +1,6 @@
 import "@/styles/global.css";
 import { readSearch, searchAddress } from "@/lib/search-address";
+import { testCatalogSdks } from "../../../test/sdk-catalog";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test } from "vitest";
 import { render } from "vitest-browser-react";
@@ -56,7 +57,10 @@ function cardOf({ screen }: Rendered, title = chargeCard.title) {
 
 /** The search the router's current address holds. */
 function currentSearch({ router }: Rendered) {
-  return readSearch(new URLSearchParams(router.state.location.search));
+  return readSearch(
+    new URLSearchParams(router.state.location.search),
+    testCatalogSdks,
+  );
 }
 
 function tileOf(article: HTMLElement): HTMLElement {

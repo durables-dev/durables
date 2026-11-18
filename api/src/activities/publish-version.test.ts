@@ -61,6 +61,7 @@ interface FakeState {
 /** A storage stand-in that records each call in order. */
 const fakeStorage = (state: FakeState = {}) => {
   const calls: string[] = [];
+  const publications: NewPublication[] = [];
   const writes = [...(state.writes ?? ["created"])];
   let versionReads = 0;
   const storage: PublishStorage = {
@@ -98,6 +99,7 @@ const fakeStorage = (state: FakeState = {}) => {
         : Promise.resolve();
     },
     createPublication: (publication: NewPublication) => {
+      publications.push(publication);
       calls.push(
         publication.newAccount === undefined
           ? "createPublication"
@@ -117,7 +119,7 @@ const fakeStorage = (state: FakeState = {}) => {
         : Promise.resolve(result);
     },
   };
-  return { storage, calls };
+  return { storage, calls, publications };
 };
 
 afterEach(() => {
@@ -347,5 +349,46 @@ describe("publishing a version", () => {
       "writeVersionDocument",
       "findVersion",
     ]);
+  });
+  describe("a later version of an existing listing", () => {
+    const nextVersion = {
+      basedOn: "1.0.0",
+      whatChanged: "Retries a declined card once.",
+      deprecateBase: { reason: "Replaced by 1.1.0" },
+    };
+    const later = { ...listing, version: "1.1.0" };
+
+    test("writes the document, then hands the base, note and deprecation to the database write", async () => {
+      const { storage, calls, publications } = fakeStorage();
+
+      const result = await publishVersion(
+        storage,
+        { listing: later, document, nextVersion },
+        context,
+      );
+
+      expect(result).toEqual({ outcome: "published", accountCreated: false });
+      expect(calls).toEqual([
+        "findVersion",
+        "writeVersionDocument",
+        "createPublication",
+      ]);
+      expect(publications).toEqual([{ listing: later, nextVersion }]);
+    });
+
+    test("deletes the document and raises the error when the database write fails", async () => {
+      const { storage, calls } = fakeStorage({
+        publication: new Error("D1 down"),
+      });
+
+      await expect(
+        publishVersion(
+          storage,
+          { listing: later, document, nextVersion },
+          context,
+        ),
+      ).rejects.toThrow("D1 down");
+      expect(calls.at(-1)).toBe("deleteVersionDocument");
+    });
   });
 });

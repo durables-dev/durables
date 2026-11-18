@@ -1,0 +1,52 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Notifications;
+
+use JoliCode\Slack\ClientFactory;
+use Temporal\Activity;
+use Temporal\Activity\ActivityInterface;
+use Temporal\Activity\ActivityMethod;
+use Temporal\Exception\Failure\ApplicationFailure;
+
+final class SlackMessage
+{
+    public function __construct(
+        public readonly string $channel,
+        public readonly string $text,
+    ) {
+    }
+}
+
+final class MessageRef
+{
+    public function __construct(
+        public readonly string $channel,
+        public readonly string $timestamp,
+    ) {
+    }
+}
+
+#[ActivityInterface(prefix: 'Notifications.')]
+class SlackActivities
+{
+    #[ActivityMethod]
+    public function postMessage(SlackMessage $message): MessageRef
+    {
+        $token = getenv('SLACK_BOT_TOKEN');
+        if ($token === false || $token === '') {
+            throw new ApplicationFailure('SLACK_BOT_TOKEN is not set', 'MissingConfiguration', true);
+        }
+
+        Activity::heartbeat($message->channel);
+
+        $client = ClientFactory::create($token);
+        $response = $client->chatPostMessage([
+            'channel' => $message->channel,
+            'text' => $message->text,
+        ]);
+
+        return new MessageRef($response->getChannel(), $response->getTs());
+    }
+}

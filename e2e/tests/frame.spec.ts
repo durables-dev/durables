@@ -85,7 +85,7 @@ test(
     await expect(
       page.getByRole("heading", {
         level: 1,
-        name: "Temporal activities, ready to copy.",
+        name: "Temporal activities, ready to use.",
       }),
     ).toBeVisible();
     await expect(page).toHaveTitle("Durables");
@@ -166,7 +166,7 @@ test.describe("the footer", () => {
       await expect(
         page.getByRole("heading", {
           level: 1,
-          name: "Temporal activities, ready to copy.",
+          name: "Temporal activities, ready to use.",
         }),
       ).toBeVisible();
 
@@ -249,12 +249,15 @@ test(
       ).toBeVisible();
     });
 
-    await test.step("the initials menu holds one item, Sign out", async () => {
+    await test.step("the initials menu holds Your profile, then Sign out", async () => {
       await initials.click();
 
       const menu = page.getByRole("menu", { name: "Account" });
       await expect(menu).toBeVisible();
-      await expect(menu.getByRole("menuitem")).toHaveText(["Sign out"]);
+      await expect(menu.getByRole("menuitem")).toHaveText([
+        "Your profile",
+        "Sign out",
+      ]);
       await expectAccessible();
     });
 

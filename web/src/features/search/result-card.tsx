@@ -1,3 +1,4 @@
+import { ActivityTile } from "@/components/activity-tile";
 import { IntegrationLink } from "@/components/integration-link";
 import { PublisherInitial } from "@/components/publisher-initial";
 import { listingPath } from "@/lib/listing-path";
@@ -7,7 +8,6 @@ import { useId } from "react";
 import { Link } from "react-router";
 import type { ActivityCard } from "./activity-card";
 import styles from "./result-card.module.css";
-import { tileColour } from "./tile-colour";
 
 export interface ResultCardProps {
   /** One result from the browse read. */
@@ -21,19 +21,11 @@ export interface ResultCardProps {
 export function ResultCard({ card }: ResultCardProps) {
   const titleId = useId();
   const activityPath = listingPath(card);
-  const colour = tileColour(card.title, card.handle);
 
   return (
     <article className={styles["card"]} aria-labelledby={titleId}>
       <div className={styles["top"]}>
-        <span
-          className={`${styles["tile"]} ${styles[colour]}`}
-          aria-hidden="true"
-        >
-          <svg width="60%" height="60%" viewBox="0 0 100 100">
-            <path d="M14 18 H58 V36 L82 28 V72 L58 64 V82 H14 Z" />
-          </svg>
-        </span>
+        <ActivityTile title={card.title} handle={card.handle} />
         <div className={styles["identity"]}>
           <h2 id={titleId} className={styles["title"]}>
             <Link to={activityPath}>{card.title}</Link>

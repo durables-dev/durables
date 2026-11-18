@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import {
   deleteCookie,
+  generateSignedCookie,
   getCookie,
   getSignedCookie,
   setCookie,
@@ -68,11 +69,55 @@ const sessionSchema = z.object({
 
 export type Session = z.infer<typeof sessionSchema>;
 
+/**
+ * The cookie that carries the starting page through the provider round trip. Hono adds the
+ * __Host- prefix, so the browser sees __Host-sign-in-return.
+ */
+export const startingPageCookieName = "sign-in-return";
+
+const startingPageCookieOptions = {
+  prefix: "host",
+  path: "/",
+  secure: true,
+  httpOnly: true,
+  sameSite: "Lax",
+} as const;
+
+/** What the starting page cookie carries: the page, and the state of the sign-in it belongs to. */
+const startingPageSchema = z.object({
+  state: z.string().min(1),
+  page: z.string().min(1),
+});
+
+/**
+ * The cookie that holds a finished sign-in whose account is pending deletion, until the visitor
+ * chooses Restore or Start as a new user (ADR 0015). It is not a session: nothing but those two
+ * choices reads it. Hono adds the __Host- prefix, so the browser sees __Host-pending-sign-in.
+ */
+export const pendingSignInCookieName = "pending-sign-in";
+
+/** How long a held sign-in waits for the visitor's choice before they must sign in again. */
+export const pendingSignInLifetimeSeconds = 60 * 60;
+
 /** The provider identity a sign-in starts a session with. */
 export type SessionIdentity = Omit<
   Session,
   "suggestedHandle" | "handle" | "expiresAt"
 >;
+
+/** What the pending sign-in cookie carries: the provider identity, and when the hold ends. */
+const pendingSignInSchema = sessionSchema
+  .pick({
+    provider: true,
+    providerAccountId: true,
+    name: true,
+    email: true,
+    avatarUrl: true,
+    username: true,
+  })
+  .extend({ expiresAt: z.number().int() });
+
+type PendingSignIn = z.infer<typeof pendingSignInSchema>;
 
 /** The parts of a session a handler may change. */
 export type SessionChanges = Pick<Session, "handle">;
@@ -178,8 +223,74 @@ export class Auth {
       handle: null,
       expiresAt: nowInSeconds() + sessionLifetimeSeconds,
     };
+    // A new session replaces a sign-in still waiting for the Restore choice.
+    this.#releasePendingSignIn();
     await this.#issue(session);
     return session;
+  }
+
+  /**
+   * Holds a finished sign-in whose account is pending deletion, instead of starting a session
+   * (ADR 0015). Any current session ends. Only Restore and Start as a new user read what is held,
+   * through pendingSignIn, and each starts a session with it.
+   */
+  async holdPendingSignIn(identity: SessionIdentity): Promise<void> {
+    this.end();
+    const held: PendingSignIn = {
+      ...identity,
+      expiresAt: nowInSeconds() + pendingSignInLifetimeSeconds,
+    };
+    await setSignedCookie(
+      this.#context,
+      pendingSignInCookieName,
+      JSON.stringify(held),
+      this.#key(),
+      { ...cookieOptions, maxAge: pendingSignInLifetimeSeconds },
+    );
+  }
+
+  /**
+   * The provider identity of the held sign-in, or undefined when none is held. A cookie that is
+   * missing, tampered with, signed with another key, malformed or expired counts as none.
+   */
+  async pendingSignIn(): Promise<SessionIdentity | undefined> {
+    if (
+      getCookie(
+        this.#context,
+        pendingSignInCookieName,
+        cookieOptions.prefix,
+      ) === undefined
+    ) {
+      return undefined;
+    }
+    const value = await getSignedCookie(
+      this.#context,
+      this.#key(),
+      pendingSignInCookieName,
+      cookieOptions.prefix,
+    );
+    if (!value) {
+      return undefined;
+    }
+    const parsed = pendingSignInSchema.safeParse(parseJson(value));
+    if (!parsed.success) {
+      return undefined;
+    }
+    const { expiresAt, ...identity } = parsed.data;
+    return expiresAt <= nowInSeconds() ? undefined : identity;
+  }
+
+  /** Clears a held sign-in, when there is one. */
+  #releasePendingSignIn(): void {
+    if (
+      getCookie(
+        this.#context,
+        pendingSignInCookieName,
+        cookieOptions.prefix,
+      ) !== undefined
+    ) {
+      deleteCookie(this.#context, pendingSignInCookieName, cookieOptions);
+    }
   }
 
   /** Changes the current session and reissues it with the same expiry. 401 with no session. */
@@ -202,11 +313,13 @@ export class Auth {
    * Sends the visitor to the provider's consent screen, asking only for identity scopes, and
    * sets the state cookie the callback checks. The package does this for every provider but
    * GitLab, whose flow is hand-written. The callback URL must be the one
-   * completeProviderSignIn is given.
+   * completeProviderSignIn is given. A starting page, already checked by the caller, is kept
+   * with the state until the callback takes it with takeStartingPage.
    */
   async redirectToProvider(
     provider: Provider,
     callbackUrl: string,
+    startingPage?: string,
   ): Promise<Response> {
     const c = this.#context;
     // With a code, the package would run the exchange. Starting never does.
@@ -217,7 +330,10 @@ export class Auth {
       });
     }
     if (provider === "gitlab") {
-      return this.#redirectToGitLab(callbackUrl);
+      return this.#keepStartingPage(
+        this.#redirectToGitLab(callbackUrl),
+        startingPage,
+      );
     }
     const middleware = providerMiddleware(
       provider,
@@ -228,7 +344,72 @@ export class Auth {
     if (!(response instanceof Response)) {
       throw new Error("The sign-in package did not redirect");
     }
-    return response;
+    return this.#keepStartingPage(response, startingPage);
+  }
+
+  /**
+   * The starting page kept by the start step, and clears it. Undefined when none was kept, or
+   * when the cookie was tampered with, has expired, or belongs to a sign-in other than the one
+   * whose state the provider returned. The caller checks the page again before following it.
+   */
+  async takeStartingPage(): Promise<string | undefined> {
+    const c = this.#context;
+    if (
+      getCookie(c, startingPageCookieName, startingPageCookieOptions.prefix) ===
+      undefined
+    ) {
+      return undefined;
+    }
+    const value = await getSignedCookie(
+      c,
+      this.#key(),
+      startingPageCookieName,
+      startingPageCookieOptions.prefix,
+    );
+    deleteCookie(c, startingPageCookieName, startingPageCookieOptions);
+    if (!value) {
+      return undefined;
+    }
+    const kept = startingPageSchema.safeParse(parseJson(value));
+    const returned = c.req.query("state");
+    if (
+      !kept.success ||
+      returned === undefined ||
+      !secretsMatch(kept.data.state, returned)
+    ) {
+      return undefined;
+    }
+    return kept.data.page;
+  }
+
+  /**
+   * Adds the starting page to the redirect to the provider, in a signed cookie bound to the
+   * state the redirect carries. With no starting page the redirect is returned as it is.
+   */
+  async #keepStartingPage(
+    response: Response,
+    startingPage: string | undefined,
+  ): Promise<Response> {
+    if (startingPage === undefined) {
+      return response;
+    }
+    const location = response.headers.get("Location");
+    const state =
+      location === null ? null : new URL(location).searchParams.get("state");
+    if (!state) {
+      return response;
+    }
+    const kept = new Response(response.body, response);
+    kept.headers.append(
+      "Set-Cookie",
+      await generateSignedCookie(
+        startingPageCookieName,
+        JSON.stringify({ state, page: startingPage }),
+        this.#key(),
+        { ...startingPageCookieOptions, maxAge: stateLifetimeSeconds },
+      ),
+    );
+    return kept;
   }
 
   /**

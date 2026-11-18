@@ -28,9 +28,7 @@ export function HomePage() {
   return (
     <div className={styles["hero"]}>
       <PageTitle />
-      <h1 className={styles["headline"]}>
-        Temporal activities, ready to copy.
-      </h1>
+      <h1 className={styles["headline"]}>Temporal activities, ready to use.</h1>
       <BasicsLinks />
       <form role="search" action={submit} className={styles["form"]}>
         <SearchField className={styles["box"]}>

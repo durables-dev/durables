@@ -33,3 +33,16 @@ describe("stillNeeded", () => {
     expect(stillNeeded(allBeforeReview)).not.toContain("Review");
   });
 });
+
+describe("stillNeeded in the new-version flow", () => {
+  test("never asks for Profile & Handle", () => {
+    expect(stillNeeded([], "newVersion")).toEqual([
+      "Code",
+      "Detected",
+      "Details",
+    ]);
+    expect(stillNeeded(["code", "detected"], "newVersion")).toEqual([
+      "Details",
+    ]);
+  });
+});

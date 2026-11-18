@@ -8,7 +8,7 @@ import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
-import { python } from "./test-versions";
+import { chargeCardListing, python } from "./test-versions";
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
 const listingPath = "/api/activities/:handle/:name";
@@ -17,7 +17,7 @@ const description = "Charges a card with Stripe and returns the charge ID.";
 
 const barText = "You published this activity. Only you see these controls.";
 const intro =
-  "This changes on every version's page right away. Anything about how the activity behaves needs a new version instead.";
+  "This changes the description of 1.0.0 only. Anything about how the activity behaves needs a new version instead.";
 const fixedNote =
   "Can't change here: the code, its detected facts and its address. Those are fixed when a version is published.";
 
@@ -58,11 +58,7 @@ function publishChargeCard() {
       }),
     ),
     http.get(listingPath, () =>
-      HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description,
-      }),
+      HttpResponse.json(chargeCardListing(description, ["1.0.0", "0.9.0"])),
     ),
   );
 }
@@ -98,7 +94,7 @@ function updateButton(screen: Screen) {
 }
 
 function dialog(screen: Screen) {
-  return screen.getByRole("dialog", { name: "Update listing" });
+  return screen.getByRole("dialog", { name: "Update 1.0.0" });
 }
 
 async function openOwnListing(path?: string) {
@@ -123,21 +119,23 @@ async function expectNoBar(screen: Screen) {
 }
 
 describe("the publisher bar", () => {
-  test("shows to the publisher, with the bar text and one Update button", async () => {
+  test("shows to the publisher, with the bar text and its four buttons", async () => {
     const screen = await openOwnListing();
 
     await expect.element(bar(screen)).toBeVisible();
     await expect
       .element(bar(screen).getByText(barText, { exact: true }))
       .toBeVisible();
-    // Update is the bar's one button. The rest are inside the closed dialog.
+    // The bar's own buttons, in order. The rest are inside the closed dialogs.
     const barButtons = [...bar(screen).element().querySelectorAll("button")]
       .filter((button) => button.closest("dialog") === null)
       .map((button) => button.textContent);
-    expect(barButtons).toEqual(["Update"]);
-    for (const name of [/Deprecate/, /Create new version/, /Remove/]) {
-      expect(screen.getByRole("button", { name }).elements()).toHaveLength(0);
-    }
+    expect(barButtons).toEqual([
+      "Update",
+      "Deprecate 1.0.0",
+      "Create new version",
+      "Remove",
+    ]);
   });
 
   test("sits under the top of the page and above the section bar", async () => {
@@ -241,7 +239,7 @@ describe("the Update dialog", () => {
       .element(
         dialog(screen).getByRole("heading", {
           level: 2,
-          name: "Update listing",
+          name: "Update 1.0.0",
         }),
       )
       .toBeVisible();

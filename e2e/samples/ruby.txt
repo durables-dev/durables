@@ -1,0 +1,33 @@
+require "stripe"
+require "temporalio/activity"
+require "temporalio/error"
+
+module Billing
+  class SendInvoice < Temporalio::Activity::Definition
+    def initialize
+      @stripe = Stripe::StripeClient.new(ENV.fetch("STRIPE_API_KEY"))
+    end
+
+    def execute(request)
+      customer = request["customer_id"]
+      if customer.nil? || customer.empty?
+        raise Temporalio::Error::ApplicationError.new(
+          "customer_id is missing",
+          type: "InvalidRequest",
+          non_retryable: true
+        )
+      end
+
+      Temporalio::Activity::Context.current.heartbeat(customer)
+
+      invoice = @stripe.v1.invoices.create(
+        customer: customer,
+        collection_method: "send_invoice",
+        days_until_due: request.fetch("days_until_due", 30)
+      )
+      sent = @stripe.v1.invoices.send_invoice(invoice.id)
+
+      { "invoice_id" => sent.id, "status" => sent.status }
+    end
+  end
+end

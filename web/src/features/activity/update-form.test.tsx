@@ -8,7 +8,7 @@ import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
-import { python } from "./test-versions";
+import { chargeCardListing, python } from "./test-versions";
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
 const listingPath = "/api/activities/:handle/:name";
@@ -17,7 +17,7 @@ const problemHeaders = { "Content-Type": "application/problem+json" };
 const saved = "Charges a card with Stripe and returns the charge ID.";
 const edited = "Charges a card with Stripe and returns the charge and receipt.";
 
-const failedMessage = "Your description wasn't saved. Try again.";
+const failedMessage = "That didn't save. Try again.";
 const signInEndedMessage = "Your sign-in has ended. Sign in again, then save.";
 
 const owner: SessionUser = {
@@ -81,11 +81,7 @@ function publishChargeCard({
     ),
     http.get(listingPath, () => {
       traffic.listingReads += 1;
-      return HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description: saved,
-      });
+      return HttpResponse.json(chargeCardListing(saved));
     }),
     http.patch(listingPath, async ({ request }) => {
       const body: unknown = await request.json();
@@ -95,11 +91,7 @@ function publishChargeCard({
           ? String(body.description)
           : "";
       if (answerSave !== undefined) return answerSave(description);
-      return HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description,
-      });
+      return HttpResponse.json(chargeCardListing(description));
     }),
     http.get("/api/activities", async () => {
       await beforeBrowse?.();
@@ -162,7 +154,7 @@ async function openOwnListing(...paths: string[]) {
 type Opened = Awaited<ReturnType<typeof openOwnListing>>;
 
 function dialog({ screen }: Opened) {
-  return screen.getByRole("dialog", { name: "Update listing" });
+  return screen.getByRole("dialog", { name: "Update 1.0.0" });
 }
 
 function field(opened: Opened) {
@@ -240,7 +232,7 @@ describe("the description field", () => {
 
     await expect.element(dialog(opened)).not.toBeInTheDocument();
     expect(traffic.saves.map(({ body }) => body)).toEqual([
-      { description: exact },
+      { version: "1.0.0", description: exact },
     ]);
   });
 
@@ -355,7 +347,7 @@ describe("saving the description", () => {
     expect(traffic.saves).toEqual([
       {
         path: "/api/activities/ddieruf/charge-card",
-        body: { description: edited },
+        body: { version: "1.0.0", description: edited },
       },
     ]);
   });
@@ -451,11 +443,7 @@ describe("saving the description", () => {
     publishChargeCard({
       answerSave: async (description) => {
         await held.opened;
-        return HttpResponse.json({
-          handle: "ddieruf",
-          name: "charge-card",
-          description,
-        });
+        return HttpResponse.json(chargeCardListing(description));
       },
     });
     const opened = await openOwnListing();
@@ -476,11 +464,7 @@ describe("saving the description", () => {
     const traffic = publishChargeCard({
       answerSave: async (description) => {
         await delay(200);
-        return HttpResponse.json({
-          handle: "ddieruf",
-          name: "charge-card",
-          description,
-        });
+        return HttpResponse.json(chargeCardListing(description));
       },
     });
     const opened = await openOwnListing();
@@ -581,11 +565,7 @@ describe("a save that fails", () => {
         attempts += 1;
         return attempts === 1
           ? problem(500)
-          : HttpResponse.json({
-              handle: "ddieruf",
-              name: "charge-card",
-              description,
-            });
+          : HttpResponse.json(chargeCardListing(description));
       },
     });
     const opened = await openOwnListing();

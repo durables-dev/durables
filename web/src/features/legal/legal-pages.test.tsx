@@ -123,10 +123,11 @@ describe.each(legalPages)("$path", ({ path, heading, title }) => {
     await expect
       .element(screen.getByRole("heading", { level: 1, name: heading }))
       .toBeVisible();
-    expect(screen.getByRole("link", { name: /sign in/i }).elements()).toEqual(
-      [],
-    );
-    expect(screen.getByRole("button", { name: /sign in/i }).elements()).toEqual(
+    // The page itself asks nobody to sign in. The header's own Sign in link, shown on every
+    // page to a signed-out visitor (DUR-104), is not the page asking.
+    const body = screen.getByRole("main");
+    expect(body.getByRole("link", { name: /sign in/i }).elements()).toEqual([]);
+    expect(body.getByRole("button", { name: /sign in/i }).elements()).toEqual(
       [],
     );
   });
@@ -149,19 +150,16 @@ function tidy(text: string | null) {
   return (text ?? "").replace(/\s+/g, " ").trim();
 }
 
-// The Terms text, split at each second-level heading. Each section is its heading and the
+// A legal page's text, split at each second-level heading. Each section is its heading and the
 // text of its blocks in order: every paragraph, and every list item on its own. The text
-// before the first heading is the "Introduction".
-async function termsSections() {
-  const screen = await openAt("/terms");
-  const publishing = screen.getByRole("heading", {
-    level: 2,
-    name: "Publishing",
-  });
-  await expect.element(publishing).toBeVisible();
+// before the first heading is the "Introduction". The page is found by one of its headings.
+async function pageSections(path: string, anyHeading: string) {
+  const screen = await openAt(path);
+  const known = screen.getByRole("heading", { level: 2, name: anyHeading });
+  await expect.element(known).toBeVisible();
 
-  const body = publishing.element().parentElement;
-  if (!body) throw new Error("Expected the Terms headings inside a body");
+  const body = known.element().parentElement;
+  if (!body) throw new Error(`Expected the ${path} headings inside a body`);
   const sections: { heading: string; blocks: string[] }[] = [
     { heading: "Introduction", blocks: [] },
   ];
@@ -179,6 +177,11 @@ async function termsSections() {
       ?.blocks.push(...blocks.map((block) => tidy(block.textContent)));
   }
   return { screen, sections };
+}
+
+// The Terms text, split at each second-level heading.
+function termsSections() {
+  return pageSections("/terms", "Publishing");
 }
 
 describe("/terms licence wording", () => {
@@ -260,5 +263,54 @@ describe("/terms licence wording", () => {
         blocks: ["Questions about these terms: hello@durables.dev."],
       },
     ]);
+  });
+});
+
+describe("/privacy deletion and the 30 days", () => {
+  async function privacySection(heading: string) {
+    const { sections } = await pageSections("/privacy", "Your choices");
+    const section = sections.find((each) => each.heading === heading);
+    if (!section) throw new Error(`Expected a "${heading}" section`);
+    return section.blocks;
+  }
+
+  test("How long it's kept says a deleted account can be restored within 30 days, and what is kept until then", async () => {
+    const blocks = await privacySection("How long it's kept");
+
+    expect(blocks).toContain(
+      "A deleted account can be restored by signing in within 30 days. Your provider account ID is kept until then, and deleted afterward.",
+    );
+    expect(blocks).toContain(
+      "Your provider account ID is kept while your account exists. Your name, email address and avatar live only in your sign-in session, so they go when the session ends.",
+    );
+  });
+
+  test("Your choices says how to restore a deleted account, and what happens after 30 days", async () => {
+    const blocks = await privacySection("Your choices");
+
+    expect(blocks).toContain(
+      "You can restore a deleted account by signing in with the same provider account within 30 days. After that, your provider account ID is deleted and your handle is retired for good. Your published versions may stay public.",
+    );
+    expect(blocks).toContain(
+      "Deleting your account ends your sign-in session, which removes your name, email address and avatar at once. Your activities leave search, and their pages and addresses keep working.",
+    );
+  });
+
+  test("If you publish says the name, email and avatar live only in the sign-in session", async () => {
+    const blocks = await privacySection("If you publish");
+
+    expect(blocks).toContain(
+      "Your name, email address and avatar come from the provider each time you sign in. They live only in your sign-in session and are never stored by Durables.",
+    );
+    expect(blocks).not.toContain("your name, email address and avatar;");
+  });
+
+  test("the email address is never shown to anyone but you", async () => {
+    const blocks = await privacySection("If you publish");
+
+    expect(blocks).toContain(
+      "Your handle and what you publish are public. You are shown by handle and initials; your email address is never shown to anyone but you.",
+    );
+    expect(blocks.join(" ")).not.toMatch(/email address is never shown\./);
   });
 });

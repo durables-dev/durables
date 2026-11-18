@@ -6,8 +6,10 @@ import {
   listings,
   providerAccounts,
   retiredHandles,
+  versionDeprecations,
   versions,
   type Provider,
+  type RemovalSource,
   type Sdk,
 } from "./schema";
 
@@ -60,6 +62,20 @@ export const seedProviderLink = async (
   await drizzle(database).insert(providerAccounts).values(link);
 };
 
+/**
+ * Marks an account pending deletion as if it had been asked for at the given time, so a test can
+ * place a deletion anywhere in its 30 days. Null clears the mark, as a restore does.
+ */
+export const seedDeletionRequest = async (
+  database: D1Database,
+  account: { accountId: string; deletionRequestedAt: Date | null },
+): Promise<void> => {
+  await drizzle(database)
+    .update(accounts)
+    .set({ deletionRequestedAt: account.deletionRequestedAt })
+    .where(eq(accounts.id, account.accountId));
+};
+
 /** Records a handle as retired. */
 export const seedRetiredHandle = async (
   database: D1Database,
@@ -74,7 +90,7 @@ export const seedRetiredHandle = async (
  */
 export const seedListing = async (
   database: D1Database,
-  listing: { handle: string; name: string; description: string },
+  listing: { handle: string; name: string },
 ): Promise<void> => {
   await drizzle(database).insert(listings).values(listing);
 };
@@ -82,7 +98,7 @@ export const seedListing = async (
 /**
  * Adds a version under an existing listing. Publishing creates only a listing's first
  * version; later versions are a later increment, so tests write them here. The published date
- * defaults to now.
+ * defaults to now, and the description to empty.
  */
 export const seedVersion = async (
   database: D1Database,
@@ -94,22 +110,64 @@ export const seedVersion = async (
     sdk: Sdk;
     integrations: string[];
     publishedAt?: Date;
+    description?: string;
+    whatChanged?: string | null;
+    basedOn?: string | null;
   },
 ): Promise<void> => {
   await drizzle(database).insert(versions).values(version);
 };
 
 /**
- * Changes a listing's current description directly, so a test that reads the listing need not
+ * Changes a version's current description directly, so a test that reads the listing need not
  * sign in and save it.
  */
 export const seedDescription = async (
   database: D1Database,
-  listing: { handle: string; name: string; description: string },
+  version: {
+    handle: string;
+    name: string;
+    version: string;
+    description: string;
+  },
+): Promise<void> => {
+  await drizzle(database)
+    .update(versions)
+    .set({ description: version.description })
+    .where(
+      and(
+        eq(versions.handle, version.handle),
+        eq(versions.name, version.name),
+        eq(versions.version, version.version),
+      ),
+    );
+};
+
+/**
+ * Records a version's deprecation directly, so a test that reads the listing need not sign in
+ * and deprecate it.
+ */
+export const seedDeprecation = async (
+  database: D1Database,
+  deprecation: {
+    handle: string;
+    name: string;
+    version: string;
+    reason: string;
+    replacement?: string | null;
+  },
+): Promise<void> => {
+  await drizzle(database).insert(versionDeprecations).values(deprecation);
+};
+
+/** Records who removed a listing from search, or null to list it again, directly. */
+export const seedRemoval = async (
+  database: D1Database,
+  listing: { handle: string; name: string; removedBy: RemovalSource | null },
 ): Promise<void> => {
   await drizzle(database)
     .update(listings)
-    .set({ description: listing.description })
+    .set({ removedBy: listing.removedBy })
     .where(
       and(eq(listings.handle, listing.handle), eq(listings.name, listing.name)),
     );
@@ -127,6 +185,7 @@ export const readAllRows = async (
     retiredHandleRows,
     listingRows,
     versionRows,
+    versionDeprecationRows,
   ] = await db.batch([
     db.select().from(accounts),
     db.select().from(providerAccounts),
@@ -134,6 +193,7 @@ export const readAllRows = async (
     db.select().from(retiredHandles),
     db.select().from(listings),
     db.select().from(versions),
+    db.select().from(versionDeprecations),
   ]);
   return {
     accounts: accountRows,
@@ -142,5 +202,6 @@ export const readAllRows = async (
     retiredHandles: retiredHandleRows,
     listings: listingRows,
     versions: versionRows,
+    versionDeprecations: versionDeprecationRows,
   };
 };

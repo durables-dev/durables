@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { createApp } from "../index";
 import { readAllRows } from "../storage/seed";
 import { createChecks } from "./checks";
-import type { Detector } from "./detector";
+import type { CheckedSdk } from "./pipeline";
 import { pythonSdkImport } from "./python-detector";
 import { refusalTypes } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
@@ -53,7 +53,28 @@ const postSlackMessageFacts = {
   configurationRead: [{ name: "SLACK_TOKEN", line: 8 }],
   dependencies: [{ name: "httpx", line: 4 }],
   heartbeats: [{ line: 23 }],
+  provenance: {
+    sdk: "detected",
+    activity: "detected",
+    inputOutput: "detected",
+    runsAs: "detected",
+    nonRetryableErrors: "detected",
+    configurationRead: "detected",
+    dependencies: "detected",
+    heartbeats: "detected",
+  },
 };
+
+/** A TypeScript activity, so a declared SDK can be checked against code it doesn't fit. */
+const greetTypeScript = lines(
+  'import { heartbeat } from "@temporalio/activity";',
+  "",
+  "export async function greet(name: string): Promise<string> {",
+  "  heartbeat();",
+  "  return `Hello ${name}`;",
+  "}",
+  "",
+);
 
 /** A request body of exactly `bytes` bytes: the sample, padded with a trailing comment. */
 const paddedBody = (bytes: number): string => {
@@ -136,6 +157,106 @@ describe("POST /api/checks", () => {
     expect(await response.json()).toEqual(postSlackMessageFacts);
   });
 
+  test("answers 200 with PHP and its eight facts for a PHP activity", async () => {
+    const cookie = await signIn();
+    const phpActivity = lines(
+      "<?php",
+      "",
+      "use Stripe\\StripeClient;",
+      "use Temporal\\Activity;",
+      "use Temporal\\Activity\\ActivityInterface;",
+      "use Temporal\\Exception\\Failure\\ApplicationFailure;",
+      "",
+      "#[ActivityInterface]",
+      "class Payments",
+      "{",
+      "    public function chargeCard(ChargeRequest $request): ChargeResult",
+      "    {",
+      "        $stripe = new StripeClient(getenv('STRIPE_API_KEY'));",
+      "        Activity::heartbeat();",
+      "        throw new ApplicationFailure('Declined', 'CardDeclined', true);",
+      "    }",
+      "}",
+    );
+
+    const response = await checkCode(cookie, phpActivity);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      sdk: "PHP",
+      activity: { name: "chargeCard", line: 11 },
+      input: "ChargeRequest",
+      output: "ChargeResult",
+      runsAs: "sync",
+      nonRetryableErrors: [{ line: 15 }],
+      configurationRead: [{ name: "STRIPE_API_KEY", line: 13 }],
+      dependencies: [{ name: "Stripe", line: 3 }],
+      heartbeats: [{ line: 14 }],
+      provenance: postSlackMessageFacts.provenance,
+    });
+  });
+
+  describe("a Java activity", () => {
+    const sendSms = lines(
+      "import com.twilio.Twilio;",
+      "import io.temporal.activity.ActivityInterface;",
+      "",
+      "@ActivityInterface",
+      "public interface SmsActivities {",
+      "    String sendSms(SmsRequest request);",
+      "}",
+      "",
+      "class SmsActivitiesImpl implements SmsActivities {",
+      "    @Override",
+      "    public String sendSms(SmsRequest request) {",
+      '        Twilio.init(System.getenv("TWILIO_ACCOUNT_SID"), "token");',
+      "        return request.to();",
+      "    }",
+      "}",
+      "",
+    );
+
+    test("answers 200 with the eight facts and the SDK detected", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(cookie, sendSms);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        sdk: "Java",
+        activity: { name: "sendSms", line: 6 },
+        input: "SmsRequest",
+        output: "String",
+        runsAs: "sync",
+        nonRetryableErrors: [],
+        configurationRead: [{ name: "TWILIO_ACCOUNT_SID", line: 12 }],
+        dependencies: [{ name: "com.twilio", line: 1 }],
+        heartbeats: [],
+        provenance: postSlackMessageFacts.provenance,
+      });
+    });
+
+    test("answers 200 with the SDK inferred for an implementation-only paste", async () => {
+      const cookie = await signIn();
+      const implementation = lines(
+        "public class SmsActivitiesImpl implements SmsActivities {",
+        "    public String sendSms(SmsRequest request) {",
+        "        return request.to();",
+        "    }",
+        "}",
+      );
+
+      const response = await checkCode(cookie, implementation);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        sdk: "Java",
+        activity: { name: "sendSms", line: 2 },
+        provenance: { sdk: "inferred", activity: "detected" },
+      });
+    });
+  });
+
   test("ignores detection results sent by the client", async () => {
     const cookie = await signIn();
 
@@ -153,33 +274,268 @@ describe("POST /api/checks", () => {
     expect(await response.json()).toEqual(postSlackMessageFacts);
   });
 
+  describe("a Ruby file", () => {
+    const chargeCard = lines(
+      'require "stripe"',
+      'require "json"',
+      'require "temporalio/activity"',
+      "",
+      "class ChargeCard < Temporalio::Activity::Definition",
+      "    sig { params(input: ChargeRequest).returns(ChargeResult) }",
+      "    def execute(input)",
+      "        Temporalio::Activity::Context.current.heartbeat",
+      '        Stripe.api_key = ENV["STRIPE_API_KEY"]',
+      "        raise Temporalio::Error::ApplicationError.new(",
+      '            "Declined", non_retryable: true',
+      "        )",
+      "    end",
+      "end",
+      "",
+    );
+
+    test("answers 200 with Ruby and its eight facts, the SDK detected", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(cookie, chargeCard);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        sdk: "Ruby",
+        activity: { name: "ChargeCard", line: 5 },
+        input: "ChargeRequest",
+        output: "ChargeResult",
+        runsAs: "sync",
+        nonRetryableErrors: [{ line: 11 }],
+        configurationRead: [{ name: "STRIPE_API_KEY", line: 9 }],
+        dependencies: [{ name: "stripe", line: 1 }],
+        heartbeats: [{ line: 8 }],
+        provenance: { ...postSlackMessageFacts.provenance, sdk: "detected" },
+      });
+    });
+
+    test("answers 422 no activity, naming Ruby, for a Ruby file with no activity class", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(
+        cookie,
+        lines('require "temporalio/client"', "puts 1"),
+      );
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        type: refusalTypes.noActivity,
+        sdk: "Ruby",
+      });
+    });
+  });
+
+  describe("a declared SDK", () => {
+    test("answers 200 with the declared SDK's facts and the SDK declared", async () => {
+      const cookie = await signIn();
+
+      const response = await check(
+        cookie,
+        JSON.stringify({ code: postSlackMessage, declaredSdk: "Python" }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        ...postSlackMessageFacts,
+        provenance: { ...postSlackMessageFacts.provenance, sdk: "declared" },
+      });
+    });
+
+    test("answers 200 for code no SDK is identified in, once the SDK is declared", async () => {
+      const cookie = await signIn();
+      const ambiguous = lines(
+        "from temporalio import activity",
+        "@activity.defn",
+        greetTypeScript,
+      );
+
+      const response = await check(
+        cookie,
+        JSON.stringify({ code: ambiguous, declaredSdk: "TypeScript" }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        sdk: "TypeScript",
+        activity: { name: "greet" },
+        provenance: { sdk: "declared" },
+      });
+    });
+
+    test("answers 422 no activity, naming the SDK, when the declared detector finds none", async () => {
+      const cookie = await signIn();
+
+      const response = await check(
+        cookie,
+        JSON.stringify({ code: greetTypeScript, declaredSdk: ".NET" }),
+      );
+
+      expect(response.status).toBe(422);
+      expect(response.headers.get("Content-Type")).toBe(problemContentType);
+      expect(await response.json()).toMatchObject({
+        type: refusalTypes.noActivity,
+        status: 422,
+        sdk: ".NET",
+      });
+    });
+
+    test.each([
+      { case: "an SDK not in the list", declaredSdk: "Cobol" },
+      { case: "a lowercased SDK", declaredSdk: "python" },
+      { case: "a declared SDK that isn't a string", declaredSdk: 42 },
+    ])("answers 400 with a field error for $case", async ({ declaredSdk }) => {
+      const cookie = await signIn();
+
+      const response = await check(
+        cookie,
+        JSON.stringify({ code: postSlackMessage, declaredSdk }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.headers.get("Content-Type")).toBe(problemContentType);
+      const problem = await response.json<{
+        errors: { field: string; message: string }[];
+      }>();
+      expect(problem.errors).toEqual([
+        { field: "declaredSdk", message: expect.any(String) as string },
+      ]);
+    });
+
+    test("ignores facts and provenance sent by the client with a declared SDK", async () => {
+      const cookie = await signIn();
+
+      const response = await check(
+        cookie,
+        JSON.stringify({
+          code: postSlackMessage,
+          declaredSdk: "Python",
+          activity: { name: "forged", line: 1 },
+          provenance: { sdk: "detected", activity: "declared" },
+          facts: { sdk: "TypeScript" },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        ...postSlackMessageFacts,
+        provenance: { ...postSlackMessageFacts.provenance, sdk: "declared" },
+      });
+    });
+  });
+
+  describe("a Go activity", () => {
+    const greet = (...imports: string[]) =>
+      lines(
+        "package greeting",
+        "",
+        "import (",
+        '    "context"',
+        ...imports,
+        ")",
+        "",
+        "func Greet(ctx context.Context, name string) (string, error) {",
+        '    return "Hello " + name, nil',
+        "}",
+        "",
+      );
+
+    test("answers 200 with the Go facts and the SDK detected from its Temporal import", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(
+        cookie,
+        greet('    "go.temporal.io/sdk/activity"'),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        sdk: "Go",
+        activity: { name: "Greet", line: 8 },
+        input: "string",
+        output: "string",
+        runsAs: "sync",
+        provenance: { sdk: "detected", activity: "detected" },
+      });
+    });
+
+    test("answers 200 with the SDK inferred when the activity has no Temporal marker", async () => {
+      const cookie = await signIn();
+
+      const response = await checkCode(cookie, greet('    "fmt"'));
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        sdk: "Go",
+        activity: { name: "Greet", line: 8 },
+        dependencies: [],
+        provenance: { sdk: "inferred", activity: "detected" },
+      });
+    });
+
+    test("answers 422 more than one activity for a Go file with two", async () => {
+      const cookie = await signIn();
+      const code = lines(
+        greet(),
+        "func Farewell(ctx context.Context, name string) (string, error) {",
+        '    return "Bye " + name, nil',
+        "}",
+      );
+
+      const response = await checkCode(cookie, code);
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        type: refusalTypes.multipleActivities,
+        count: 2,
+      });
+    });
+  });
+
   describe("refusals", () => {
     test.each([
       {
         refusal: "SDK recognised, no activity",
         code: lines("from temporalio import activity", "", "x = 1", ""),
-        expected: { type: refusalTypes.noActivity },
+        expected: { type: refusalTypes.noActivity, sdk: "Python" },
       },
       {
-        refusal: "not a Temporal activity",
+        refusal: "code no SDK is identified in",
         code: lines("def add(a, b):", "    return a + b", ""),
-        expected: { type: refusalTypes.notTemporalActivity },
+        expected: {
+          type: refusalTypes.sdkChoiceNeeded,
+          reason: "not-identified",
+        },
+      },
+      {
+        refusal: "code more than one SDK matches",
+        code: lines(
+          "from temporalio import activity",
+          "@activity.defn",
+          greetTypeScript,
+        ),
+        expected: { type: refusalTypes.sdkChoiceNeeded, reason: "ambiguous" },
       },
       {
         refusal: "empty code",
         code: "",
-        expected: { type: refusalTypes.notTemporalActivity },
+        expected: {
+          type: refusalTypes.notTemporalActivity,
+          detail:
+            "This doesn't look like a Temporal activity in any SDK Durables supports.",
+        },
       },
       {
-        refusal: "Temporal activity in an unaccepted SDK",
-        code: lines(
-          "import io.temporal.activity.ActivityInterface;",
-          "",
-          "@ActivityInterface",
-          "public interface Greeting {}",
-          "",
-        ),
-        expected: { type: refusalTypes.unacceptedSdk, sdk: "Java" },
+        refusal: "whitespace-only code",
+        code: "  \n\t\n   ",
+        expected: {
+          type: refusalTypes.notTemporalActivity,
+          detail:
+            "This doesn't look like a Temporal activity in any SDK Durables supports.",
+        },
       },
       {
         refusal: "more than one activity",
@@ -388,13 +744,19 @@ describe("POST /api/checks", () => {
 
     test("logs no code when a detector fails with a 500", async () => {
       // A detector that fails with the code in its message, to show the code goes no further.
-      const failing: Detector = {
+      const failing: CheckedSdk = {
         sdk: "Python",
-        sdkMarkers: [pythonSdkImport],
-        activityMarkers: [],
-        detect: (source) => {
-          throw new Error(source.text);
+        recognition: {
+          sdkMarkers: [pythonSdkImport],
+          activityMarkers: [],
+          shapeMarkers: [],
         },
+        detector: {
+          detect: (source) => {
+            throw new Error(source.text);
+          },
+        },
+        isStandardLibrary: () => false,
       };
       const app = createApp().route("/api/checks", createChecks([failing]));
       const cookie = await signIn();

@@ -8,7 +8,16 @@ import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
-import { python } from "./test-versions";
+import {
+  failCatalog,
+  logoProfile,
+  rustProfile,
+  serveCatalog,
+  serveLogo,
+  testLogo,
+} from "../../../test/serve-sdk-catalog";
+import { testCatalog } from "../../../test/sdk-catalog";
+import { chargeCardListing, python } from "./test-versions";
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
 const listingPath = "/api/activities/:handle/:name";
@@ -71,11 +80,7 @@ function publishChargeCard() {
     ),
     http.get(listingPath, ({ params }) =>
       params["handle"] === "ddieruf" && params["name"] === "charge-card"
-        ? HttpResponse.json({
-            handle: "ddieruf",
-            name: "charge-card",
-            description: chargeCardDescription,
-          })
+        ? HttpResponse.json(chargeCardListing(chargeCardDescription))
         : notFound("No activity is listed at that address."),
     ),
   );
@@ -292,7 +297,7 @@ test("the home page still opens at /", async () => {
     .element(
       screen.getByRole("heading", {
         level: 1,
-        name: "Temporal activities, ready to copy.",
+        name: "Temporal activities, ready to use.",
       }),
     )
     .toBeVisible();
@@ -456,11 +461,7 @@ test("the sidebar links the version's integrations and its publisher into search
       }),
     ),
     http.get(listingPath, () =>
-      HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description: chargeCardDescription,
-      }),
+      HttpResponse.json(chargeCardListing(chargeCardDescription)),
     ),
   );
 
@@ -499,13 +500,7 @@ test("the published time is the version's own timestamp", async () => {
 test("a listing with no description shows no description line", async () => {
   publishChargeCard();
   worker.use(
-    http.get(listingPath, () =>
-      HttpResponse.json({
-        handle: "ddieruf",
-        name: "charge-card",
-        description: "",
-      }),
-    ),
+    http.get(listingPath, () => HttpResponse.json(chargeCardListing(""))),
   );
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
@@ -559,44 +554,33 @@ test('a copy the clipboard refuses does not show "Copied" and says it failed', a
   await expect.element(status).not.toHaveTextContent("Copied");
 });
 
-test("Quickstart and the section bar link to the Implement, Configure and Source anchors", async () => {
+test("the section bar links to the Implement, Configure, Source and Versions anchors, and there is no Quickstart", async () => {
   publishChargeCard();
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
   const main = screen.getByRole("main");
-  const quickstart = main.getByRole("link", { name: "Quickstart" });
-  await expect.element(quickstart).toHaveAttribute("href", "#implement");
   const bar = main.getByRole("navigation", { name: "Page sections" });
+  await expect.element(bar).toBeVisible();
   const links = bar.getByRole("link").elements();
   expect(links.map((link) => link.textContent)).toEqual([
     "Implement",
     "Configure",
     "Source",
+    "Versions",
   ]);
   expect(links.map((link) => link.getAttribute("href"))).toEqual([
     "#implement",
     "#configure",
     "#source",
+    "#versions",
   ]);
-  for (const id of ["implement", "configure", "source"]) {
+  for (const id of ["implement", "configure", "source", "versions"]) {
     expect(document.getElementById(id)?.tagName).toBe("SECTION");
   }
-});
-
-test("Quickstart sits at the top right, beside the title, on a wide window", async () => {
-  await page.viewport(1280, 900);
-  publishChargeCard();
-
-  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
-
-  const title = screen.getByRole("heading", { level: 1, name: "Charge card" });
-  const quickstart = screen.getByRole("link", { name: "Quickstart" });
-  await expect.element(quickstart).toBeVisible();
-  const titleBox = title.element().getBoundingClientRect();
-  const quickstartBox = quickstart.element().getBoundingClientRect();
-  expect(quickstartBox.left).toBeGreaterThan(titleBox.right);
-  expect(quickstartBox.top).toBeLessThan(titleBox.bottom);
+  await expect
+    .element(main.getByRole("link", { name: "Quickstart" }))
+    .not.toBeInTheDocument();
 });
 
 test("on a wide window the sidebar sits beside the main column", async () => {
@@ -618,7 +602,7 @@ test("on a wide window the sidebar sits beside the main column", async () => {
   expect(sidebarBox?.top).toBe(sectionsBox?.top);
 });
 
-test("below about 960px the sidebar moves under the main column and the top stacks", async () => {
+test("below about 960px the sidebar moves under the main column", async () => {
   await page.viewport(900, 900);
   publishChargeCard();
 
@@ -634,14 +618,6 @@ test("below about 960px the sidebar moves under the main column and the top stac
     sectionsBox?.bottom ?? Infinity,
   );
   expect(sidebarBox?.left).toBe(sectionsBox?.left);
-
-  const publisher = (await topOfPage(screen)).getByText("MIT-0", {
-    exact: true,
-  });
-  const quickstart = screen.getByRole("link", { name: "Quickstart" });
-  expect(
-    quickstart.element().getBoundingClientRect().top,
-  ).toBeGreaterThanOrEqual(publisher.element().getBoundingClientRect().bottom);
 });
 
 test("the page shows no popularity signal, no Start a workflow and no version picker", async () => {
@@ -813,5 +789,145 @@ test("the sidebar shows the version's About and Publisher cards and the no-revie
     .not.toBeInTheDocument();
   await expect
     .element(screen.getByRole("main").getByText(/provenance/i))
+    .not.toBeInTheDocument();
+});
+
+/** The About card's rows, as [term, value] pairs in the order they show. */
+function aboutRowsOf(screen: Awaited<ReturnType<typeof openAt>>["screen"]) {
+  const about = screen
+    .getByRole("complementary")
+    .getByRole("region", { name: "About" });
+  return [...about.element().querySelectorAll("dt")].map((term) => [
+    term.textContent,
+    term.nextElementSibling?.textContent,
+  ]);
+}
+
+/** The SDK tag beside the title: its text and how it looks. */
+async function sdkTag(
+  screen: Awaited<ReturnType<typeof openAt>>["screen"],
+  sdk: string,
+) {
+  const top = await topOfPage(screen);
+  const tag = top.getByText(sdk, { exact: true });
+  await expect.element(tag).toBeVisible();
+  const style = getComputedStyle(tag.element());
+  return {
+    background: style.backgroundColor,
+    color: style.color,
+    radius: style.borderRadius,
+    font: `${style.fontSize} ${style.fontWeight}`,
+  };
+}
+
+test("an activity page for an SDK web has no code for shows the SDK and the catalog's package and wording", async () => {
+  publishChargeCard();
+  serveCatalog([...testCatalog, rustProfile]);
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({
+        ...chargeCard,
+        sdk: "Rust",
+        code: "pub async fn charge_card() {}",
+        activityFileName: "activities.rs",
+      }),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  await sdkTag(screen, "Rust");
+  expect(aboutRowsOf(screen)[0]).toEqual(["SDK", "Rust, temporalio-sdk"]);
+  await expect
+    .element(screen.getByText(rustProfile.workerRequirements.sync))
+    .toBeVisible();
+  await expect
+    .element(screen.getByText("activities.rs · 1 line"))
+    .toBeVisible();
+});
+
+test("the SDK tag beside the title looks the same for every SDK", async () => {
+  publishChargeCard();
+  serveCatalog([...testCatalog, rustProfile]);
+  const python = await openAt("/ddieruf/charge-card@1.0.0");
+  const pythonTag = await sdkTag(python.screen, "Python");
+  await python.screen.unmount();
+
+  for (const sdk of [".NET", "TypeScript", "Rust"]) {
+    worker.use(
+      http.get(versionPath, () => HttpResponse.json({ ...chargeCard, sdk })),
+    );
+    const opened = await openAt("/ddieruf/charge-card@1.0.0");
+    expect(await sdkTag(opened.screen, sdk)).toEqual(pythonTag);
+    await opened.screen.unmount();
+  }
+});
+
+test("when the catalog cannot be read, the page still renders and shows the SDK's name without its details", async () => {
+  publishChargeCard();
+  const failed = failCatalog();
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+  await failed;
+
+  await expect
+    .element(screen.getByRole("heading", { level: 1, name: "Charge card" }))
+    .toBeVisible();
+  await sdkTag(screen, "Python");
+  expect(aboutRowsOf(screen)[0]).toEqual(["SDK", "Python"]);
+  // No logo either: the logo's address comes from the catalog too.
+  expect(
+    screen
+      .getByRole("complementary")
+      .getByRole("region", { name: "About" })
+      .element()
+      .querySelectorAll("img"),
+  ).toHaveLength(0);
+  await expect
+    .element(screen.getByRole("heading", { name: "Worker requirements" }))
+    .not.toBeInTheDocument();
+  await expect.element(screen.getByText(/thread pool/)).not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("tab", { name: "activities.py" }))
+    .toBeVisible();
+  await expect
+    .element(screen.getByText(/^activities\.py · \d+ lines$/))
+    .toBeVisible();
+});
+
+test("an activity page shows its SDK's logo from the catalog before the SDK's name and package", async () => {
+  publishChargeCard();
+  const credit = "Ruby logo © 2006 Yukihiro Matsumoto, CC BY-SA 2.5";
+  serveCatalog([...testCatalog, logoProfile("Ruby", { credit })]);
+  serveLogo(testLogo(16, 16));
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({ ...chargeCard, sdk: "Ruby" }),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const about = screen
+    .getByRole("complementary")
+    .getByRole("region", { name: "About" });
+  await expect.element(about.getByRole("img", { name: credit })).toBeVisible();
+  expect(aboutRowsOf(screen)[0]).toEqual(["SDK", "Ruby, temporalio-sdk"]);
+});
+
+test("an SDK the catalog does not list shows its name only, and the page still renders", async () => {
+  publishChargeCard();
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({ ...chargeCard, sdk: "Zig" }),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  await sdkTag(screen, "Zig");
+  expect(aboutRowsOf(screen)[0]).toEqual(["SDK", "Zig"]);
+  await expect
+    .element(screen.getByRole("heading", { name: "Worker requirements" }))
     .not.toBeInTheDocument();
 });

@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { CheckResult } from "./check-result";
 import {
+  deprecationValid,
+  detailsValid,
   draftConfirmations,
+  draftDeprecation,
   draftDetails,
   draftFinished,
   draftReducer,
@@ -14,6 +17,7 @@ import {
   type Draft,
 } from "./draft";
 import type { ListingDetails } from "@durables/schemas";
+import type { BaseVersion } from "./new-version";
 import {
   acceptedCheck,
   acceptedDraft,
@@ -195,6 +199,111 @@ describe("the pasted code and its check", () => {
   });
 });
 
+describe("the declared SDK", () => {
+  const declaredCheck: CheckResult = {
+    outcome: "accepted",
+    facts: { ...acceptedFacts, sdk: "Go", provenance: { sdk: "declared" } },
+  };
+
+  test("declaring an SDK records it and drops the previous check", () => {
+    const draft = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    expect(draft.declaredSdk).toBe("Go");
+    expect(draft.check).toBeUndefined();
+    expect(draft.code).toBe(pastedCode);
+  });
+
+  test("a check sent with the declared SDK is kept", () => {
+    const declared = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    const checked = draftReducer(declared, {
+      type: "checkFinished",
+      code: pastedCode,
+      declaredSdk: "Go",
+      result: declaredCheck,
+    });
+    expect(checked.check).toEqual(declaredCheck);
+  });
+
+  test("changing the SDK again replaces the previous result, and a late answer for the old SDK is dropped", () => {
+    let draft = draftReducer(acceptedDraft, { type: "sdkDeclared", sdk: "Go" });
+    draft = draftReducer(draft, { type: "sdkDeclared", sdk: "Rust" });
+    draft = draftReducer(draft, {
+      type: "checkFinished",
+      code: pastedCode,
+      declaredSdk: "Go",
+      result: declaredCheck,
+    });
+    expect(draft.declaredSdk).toBe("Rust");
+    expect(draft.check).toBeUndefined();
+  });
+
+  test("a check sent without the declared SDK is dropped", () => {
+    const declared = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    const checked = draftReducer(declared, {
+      type: "checkFinished",
+      code: pastedCode,
+      result: acceptedCheck,
+    });
+    expect(checked.check).toBeUndefined();
+  });
+
+  test("stays while the code is edited", () => {
+    const declared = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    const edited = draftReducer(declared, {
+      type: "codeEdited",
+      code: `${pastedCode}\n`,
+    });
+    expect(edited.declaredSdk).toBe("Go");
+  });
+
+  test.each(["", "  \n\t "])("goes when the editor is emptied (%j)", (code) => {
+    const declared = draftReducer(acceptedDraft, {
+      type: "sdkDeclared",
+      sdk: "Go",
+    });
+    expect(
+      draftReducer(declared, { type: "codeEdited", code }).declaredSdk,
+    ).toBeUndefined();
+  });
+
+  test("is kept through a reload", () => {
+    const storage = memoryStorage();
+    const draft: Draft = {
+      ...acceptedDraft,
+      declaredSdk: "Go",
+      check: declaredCheck,
+    };
+    writeDraft(storage, draft);
+    expect(readDraft(storage)).toEqual(draft);
+  });
+
+  test("an unreadable declared SDK is dropped and the rest kept", () => {
+    const storage = memoryStorage({
+      [draftStorageKey]: JSON.stringify({ ...acceptedDraft, declaredSdk: 7 }),
+    });
+    expect(readDraft(storage)).toEqual(acceptedDraft);
+  });
+
+  test("publishing clears it", () => {
+    const draft = draftReducer(
+      { ...acceptedDraft, declaredSdk: "Go" },
+      { type: "published" },
+    );
+    expect(draft.declaredSdk).toBeUndefined();
+  });
+});
+
 describe("Code is finished", () => {
   test("once the pasted file is accepted", () => {
     expect(draftFinished(acceptedDraft)).toEqual(["profile", "code"]);
@@ -243,17 +352,17 @@ describe("reading the kept code and check back", () => {
     expect(readDraft(storage)).toEqual(refused);
   });
 
-  test("a refusal keeps the members it adds, such as the SDK", () => {
+  test("a refusal keeps the members it adds, such as why the SDK must be chosen", () => {
     const storage = memoryStorage();
     const refused: Draft = {
       ...acceptedDraft,
       check: {
         outcome: "refused",
         problem: {
-          type: "https://durables.dev/problems/unaccepted-sdk",
-          title: "SDK not accepted",
+          type: "https://durables.dev/problems/sdk-choice-needed",
+          title: "Choose an SDK",
           status: 422,
-          sdk: "Java",
+          reason: "ambiguous",
         },
       },
     };
@@ -870,5 +979,196 @@ describe("a handle taken, as publish reports it", () => {
     expect(draftReducer(refuse(reviewReady), { type: "published" })).toEqual(
       emptyDraft,
     );
+  });
+});
+
+describe("new-version mode", () => {
+  const ref = { handle: "ddieruf", name: "charge-card", basedOn: "2.0.0" };
+  const base: BaseVersion = {
+    ...ref,
+    title: "Charge card",
+    description: "Charges a card through Stripe.",
+    activity: {
+      name: "post_slack_message",
+      input: "SlackMessage",
+      output: "MessageRef",
+    },
+    versions: ["2.0.0", "1.0.0"],
+    latest: "2.0.0",
+    removed: false,
+  };
+  const draft: Draft = {
+    finished: ["detected", "details"],
+    newVersion: ref,
+    code: pastedCode,
+    check: acceptedCheck,
+    details: { version: "2.1.0", whatChanged: "Retries use a fresh key." },
+  };
+
+  describe("enterDraft", () => {
+    test("a link naming a base starts a new draft in new-version mode", () => {
+      expect(
+        enterDraft(acceptedDraft, "/ddieruf/charge-card@2.0.0", ref),
+      ).toEqual({
+        finished: [],
+        origin: "/ddieruf/charge-card@2.0.0",
+        newVersion: ref,
+      });
+    });
+
+    test("a link naming a page but no base sets a new-version draft aside", () => {
+      expect(enterDraft(draft, "/search")).toEqual({
+        finished: [],
+        origin: "/search",
+      });
+    });
+
+    test("with nothing named, as after a reload, the new-version draft is kept", () => {
+      expect(enterDraft(draft, undefined)).toBe(draft);
+    });
+  });
+
+  describe("draftDetails", () => {
+    test("starts from the base's title and description, with the listing's name", () => {
+      expect(draftDetails({ ...draft, details: {} }, base)).toEqual({
+        title: "Charge card",
+        name: "charge-card",
+        description: "Charges a card through Stripe.",
+      });
+    });
+
+    test("keeps the publisher's edits, and the name stays the listing's", () => {
+      expect(
+        draftDetails(
+          {
+            ...draft,
+            details: { title: "Charge", name: "other", description: "Edited." },
+          },
+          base,
+        ),
+      ).toEqual({
+        title: "Charge",
+        name: "charge-card",
+        description: "Edited.",
+      });
+    });
+  });
+
+  describe("detailsValid", () => {
+    test("passes with an allowed number and a note", () => {
+      expect(detailsValid(draft, base)).toBe(true);
+    });
+
+    test("fails until the base has been read", () => {
+      expect(detailsValid(draft, undefined)).toBe(false);
+    });
+
+    test.each([
+      ["no number", { whatChanged: "Fix." }],
+      ["a number already used", { version: "1.0.0", whatChanged: "Fix." }],
+      [
+        "a number not higher than the latest",
+        { version: "1.5.0", whatChanged: "Fix." },
+      ],
+      ["a malformed number", { version: "2.1", whatChanged: "Fix." }],
+      ["no What changed note", { version: "2.1.0" }],
+      ["a blank What changed note", { version: "2.1.0", whatChanged: "   " }],
+      [
+        "a 161-character note",
+        { version: "2.1.0", whatChanged: "x".repeat(161) },
+      ],
+    ])("fails with %s", (_, details) => {
+      expect(detailsValid({ ...draft, details }, base)).toBe(false);
+    });
+
+    test("passes with a 160-character note", () => {
+      expect(
+        detailsValid(
+          {
+            ...draft,
+            details: { version: "2.1.0", whatChanged: "x".repeat(160) },
+          },
+          base,
+        ),
+      ).toBe(true);
+    });
+
+    test("Details is unfinished again when the number becomes invalid", () => {
+      expect(
+        draftFinished(
+          { ...draft, details: { version: "1.0.0", whatChanged: "x" } },
+          base,
+        ),
+      ).toEqual(["detected", "code"]);
+    });
+  });
+
+  describe("the deprecation of the base", () => {
+    test("is unchecked, with a reason naming the new version", () => {
+      expect(draftDeprecation(draft)).toEqual({
+        checked: false,
+        reason: "Replaced by 2.1.0",
+      });
+    });
+
+    test("follows the number until the reason is edited", () => {
+      const toggled = draftReducer(draft, {
+        type: "deprecateBaseToggled",
+        checked: true,
+      });
+      expect(draftDeprecation(toggled)).toEqual({
+        checked: true,
+        reason: "Replaced by 2.1.0",
+      });
+
+      const edited = draftReducer(toggled, {
+        type: "deprecationReasonEdited",
+        reason: "Replaced by 2.1.0, which fixes retries",
+      });
+      const renumbered = draftReducer(edited, {
+        type: "detailsEdited",
+        field: "version",
+        value: "3.0.0",
+      });
+      expect(draftDeprecation(renumbered).reason).toBe(
+        "Replaced by 2.1.0, which fixes retries",
+      );
+    });
+
+    test("an empty reason is invalid only while the box is checked", () => {
+      expect(deprecationValid({ ...draft, deprecationReason: "" })).toBe(true);
+      expect(
+        deprecationValid({
+          ...draft,
+          deprecateBase: true,
+          deprecationReason: " ",
+        }),
+      ).toBe(false);
+      expect(deprecationValid({ ...draft, deprecateBase: true })).toBe(true);
+    });
+  });
+
+  test("is kept across a reload and cleared on publish", () => {
+    const storage = memoryStorage();
+    const kept: Draft = {
+      ...draft,
+      deprecateBase: true,
+      deprecationReason: "Replaced by 2.1.0",
+    };
+    writeDraft(storage, kept);
+
+    expect(readDraft(storage)).toEqual(kept);
+    expect(draftReducer(kept, { type: "published" })).toEqual(emptyDraft);
+  });
+
+  test("an unreadable base makes the kept draft unreadable", () => {
+    const storage = memoryStorage({
+      [draftStorageKey]: JSON.stringify({
+        ...draft,
+        newVersion: { ...ref, basedOn: "two" },
+      }),
+    });
+
+    expect(readDraft(storage)).toEqual(emptyDraft);
   });
 });

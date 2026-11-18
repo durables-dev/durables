@@ -1,4 +1,4 @@
-import type { Facts } from "../checks/facts";
+import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
@@ -68,7 +68,7 @@ const typescriptIdWithUuid = (text: string) =>
  * a reserved word stays valid.
  */
 export const typescriptSnippets = (
-  facts: Facts,
+  facts: FactValues,
   address: Address,
 ): Snippet[] => {
   const activity = facts.activity.name;

@@ -1,6 +1,12 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, inject, test } from "vitest";
-import { readAllRows, seedAccount, seedDescription, seedVersion } from "./seed";
+import {
+  readAllRows,
+  seedAccount,
+  seedDeprecation,
+  seedDescription,
+  seedVersion,
+} from "./seed";
 import { Storage, type NewListing } from "./storage";
 
 const storage = () => new Storage(env.DB, env.DOCUMENTS);
@@ -46,6 +52,27 @@ describe("creating a listing", () => {
       Math.floor(before / 1000) * 1000,
     );
     expect(found?.publishedAt.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  test("stores the description on the first version, not the listing", async () => {
+    const listing = await newListing();
+
+    await storage().createListing(listing);
+
+    const { listings, versions } = await readAllRows(env.DB);
+    const isListing = (row: unknown) => {
+      const { handle, name } = row as Record<string, string>;
+      return handle === listing.handle && name === listing.name;
+    };
+    expect(listings?.filter(isListing)).toEqual([
+      { handle: listing.handle, name: listing.name, removedBy: null },
+    ]);
+    expect(versions?.filter(isListing)).toEqual([
+      expect.objectContaining({
+        version: "1.0.0",
+        description: "Posts a message to a Slack channel.",
+      }),
+    ]);
   });
 
   test("returns the created listing as it reads back", async () => {
@@ -206,7 +233,7 @@ describe("finding a version", () => {
     ).toBeUndefined();
   });
 
-  test("is unchanged when the listing's description changes", async () => {
+  test("is unchanged when the version's description changes", async () => {
     const listing = await newListing();
     await storage().createListing(listing);
     const before = await storage().findVersion(listing);
@@ -217,119 +244,237 @@ describe("finding a version", () => {
   });
 });
 
-describe("finding a listing's description", () => {
-  test("returns the current description", async () => {
+/** Adds a version under a stored listing, with its own description and history. */
+const addVersion = (
+  listing: NewListing,
+  version: string,
+  fields: {
+    description?: string;
+    whatChanged?: string | null;
+    basedOn?: string | null;
+    publishedAt?: Date;
+  } = {},
+) =>
+  seedVersion(env.DB, {
+    handle: listing.handle,
+    name: listing.name,
+    version,
+    title: listing.title,
+    sdk: listing.sdk,
+    integrations: [],
+    ...fields,
+  });
+
+describe("finding a listing's versions", () => {
+  test("returns every version newest first, each with its own description, note, base and deprecation", async () => {
     const listing = await newListing();
     await storage().createListing(listing);
+    await addVersion(listing, "1.1.0", {
+      description: "Posts a message and returns its timestamp.",
+      whatChanged: "Returns the message timestamp.",
+      basedOn: "1.0.0",
+      publishedAt: new Date("2026-11-01T09:00:00Z"),
+    });
+    await addVersion(listing, "1.10.0", {
+      description: "Posts a message or a thread reply.",
+      whatChanged: "Replies in threads.",
+      basedOn: "1.1.0",
+      publishedAt: new Date("2026-11-10T09:00:00Z"),
+    });
+    await seedDeprecation(env.DB, {
+      ...listing,
+      version: "1.0.0",
+      reason: "Drops messages over 4,000 characters.",
+      replacement: "1.10.0",
+    });
+    await seedDeprecation(env.DB, {
+      ...listing,
+      version: "1.1.0",
+      reason: "Uses a retired Slack API.",
+    });
 
-    expect(await storage().findListingDescription(listing)).toEqual({
+    const found = await storage().findListingVersions(listing);
+
+    expect(found).toEqual({
       handle: listing.handle,
       name: listing.name,
-      description: "Posts a message to a Slack channel.",
+      removedBy: null,
+      versions: [
+        {
+          version: "1.10.0",
+          publishedAt: new Date("2026-11-10T09:00:00Z"),
+          whatChanged: "Replies in threads.",
+          basedOn: "1.1.0",
+          deprecation: null,
+          description: "Posts a message or a thread reply.",
+        },
+        {
+          version: "1.1.0",
+          publishedAt: new Date("2026-11-01T09:00:00Z"),
+          whatChanged: "Returns the message timestamp.",
+          basedOn: "1.0.0",
+          deprecation: {
+            reason: "Uses a retired Slack API.",
+            replacement: null,
+          },
+          description: "Posts a message and returns its timestamp.",
+        },
+        {
+          version: "1.0.0",
+          publishedAt: expect.any(Date) as Date,
+          whatChanged: null,
+          basedOn: null,
+          deprecation: {
+            reason: "Drops messages over 4,000 characters.",
+            replacement: "1.10.0",
+          },
+          description: "Posts a message to a Slack channel.",
+        },
+      ],
     });
   });
 
-  test("returns the new description once it changes", async () => {
+  test("returns a one-item list for a listing with one version", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+
+    expect(await storage().findListingVersions(listing)).toEqual({
+      handle: listing.handle,
+      name: listing.name,
+      removedBy: null,
+      versions: [
+        {
+          version: "1.0.0",
+          publishedAt: expect.any(Date) as Date,
+          whatChanged: null,
+          basedOn: null,
+          deprecation: null,
+          description: "Posts a message to a Slack channel.",
+        },
+      ],
+    });
+  });
+
+  test("returns a version's new description once it changes", async () => {
     const listing = await newListing();
     await storage().createListing(listing);
 
     await seedDescription(env.DB, { ...listing, description: "Changed." });
 
-    expect(await storage().findListingDescription(listing)).toMatchObject({
-      description: "Changed.",
-    });
-  });
-
-  test("returns nothing for an unknown or wrong-case listing", async () => {
-    const listing = await newListing();
-    await storage().createListing(listing);
-
     expect(
-      await storage().findListingDescription({
-        handle: listing.handle,
-        name: "never-published",
-      }),
-    ).toBeUndefined();
-    expect(
-      await storage().findListingDescription({
-        handle: listing.handle.toUpperCase(),
-        name: listing.name,
-      }),
-    ).toBeUndefined();
-  });
-});
-
-describe("changing a listing's description", () => {
-  test("changes the description and returns the listing as stored", async () => {
-    const listing = await newListing();
-    await storage().createListing(listing);
-
-    const result = await storage().updateListingDescription({
-      handle: listing.handle,
-      name: listing.name,
-      description: "Posts a message and returns its timestamp.",
-    });
-
-    const stored = {
-      handle: listing.handle,
-      name: listing.name,
-      description: "Posts a message and returns its timestamp.",
-    };
-    expect(result).toEqual(stored);
-    expect(await storage().findListingDescription(listing)).toEqual(stored);
+      (await storage().findListingVersions(listing))?.versions[0],
+    ).toMatchObject({ description: "Changed." });
   });
 
-  test("changes only the description of the matching handle and name", async () => {
+  test("returns only the listing's own versions", async () => {
     const listing = await newListing();
     const sibling = await newListing({ handle: listing.handle });
     const sameName = await newListing({ name: listing.name });
     for (const each of [listing, sibling, sameName]) {
       await storage().createListing(each);
     }
-    const before = await readAllRows(env.DB);
+    await addVersion(sibling, "2.0.0");
 
-    await storage().updateListingDescription({
-      handle: listing.handle,
-      name: listing.name,
+    expect(
+      (await storage().findListingVersions(listing))?.versions.map(
+        ({ version }) => version,
+      ),
+    ).toEqual(["1.0.0"]);
+  });
+
+  test("returns nothing for an unknown or wrong-case listing", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+
+    for (const address of [
+      { handle: listing.handle, name: "never-published" },
+      { handle: listing.handle.toUpperCase(), name: listing.name },
+      { handle: listing.handle, name: listing.name.toUpperCase() },
+    ]) {
+      expect(await storage().findListingVersions(address)).toBeUndefined();
+    }
+  });
+});
+
+describe("changing a version's description", () => {
+  test("changes that version's description and reports it", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+
+    const changed = await storage().updateVersionDescription({
+      ...listing,
+      description: "Posts a message and returns its timestamp.",
+    });
+
+    expect(changed).toBe(true);
+    expect(await storage().findListing(listing)).toMatchObject({
+      description: "Posts a message and returns its timestamp.",
+    });
+  });
+
+  test("changes only the named version, and no other row of any table", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+    await addVersion(listing, "1.1.0", { description: "Version 1.1.0's own." });
+    await addVersion(listing, "2.0.0", { description: "Version 2.0.0's own." });
+    const sibling = await newListing({ handle: listing.handle });
+    const sameName = await newListing({ name: listing.name });
+    for (const each of [sibling, sameName]) {
+      await storage().createListing(each);
+    }
+    const before = await readAllRows(env.DB);
+    const isChanged = (row: unknown) => {
+      const { handle, name, version } = row as Record<string, string>;
+      return (
+        handle === listing.handle &&
+        name === listing.name &&
+        version === "1.1.0"
+      );
+    };
+
+    await storage().updateVersionDescription({
+      ...listing,
+      version: "1.1.0",
       description: "Posts a message and returns its timestamp.",
     });
 
     const after = await readAllRows(env.DB);
-    const isChanged = (row: unknown) => {
-      const { handle, name } = row as { handle: string; name: string };
-      return handle === listing.handle && name === listing.name;
-    };
-    expect(after["listings"]?.filter((row) => !isChanged(row))).toEqual(
-      before["listings"]?.filter((row) => !isChanged(row)),
+    expect(after["versions"]?.filter((row) => !isChanged(row))).toEqual(
+      before["versions"]?.filter((row) => !isChanged(row)),
     );
-    expect(after["listings"]?.filter(isChanged)).toEqual([
+    const changedBefore = before["versions"]?.find(isChanged) as object;
+    expect(after["versions"]?.filter(isChanged)).toEqual([
       {
-        handle: listing.handle,
-        name: listing.name,
+        ...changedBefore,
         description: "Posts a message and returns its timestamp.",
       },
     ]);
-    for (const table of Object.keys(before).filter((t) => t !== "listings")) {
+    for (const table of Object.keys(before).filter((t) => t !== "versions")) {
       expect(after[table]).toEqual(before[table]);
     }
   });
 
-  test("returns nothing and writes nothing for an unknown or wrong-case listing", async () => {
+  test("reports no change and writes nothing for an unknown, wrong-case or other listing's version", async () => {
     const listing = await newListing();
     await storage().createListing(listing);
+    const other = await newListing({ handle: listing.handle });
+    await storage().createListing(other);
+    await addVersion(other, "1.1.0");
     const before = await readAllRows(env.DB);
 
     for (const address of [
-      { handle: listing.handle, name: "no-such-activity" },
-      { handle: listing.handle.toUpperCase(), name: listing.name },
-      { handle: listing.handle, name: listing.name.toUpperCase() },
+      { ...listing, version: "9.9.9" },
+      { ...listing, version: "1.1.0" },
+      { ...listing, handle: listing.handle.toUpperCase() },
+      { ...listing, name: listing.name.toUpperCase() },
+      { ...listing, name: "no-such-activity" },
     ]) {
       expect(
-        await storage().updateListingDescription({
+        await storage().updateVersionDescription({
           ...address,
           description: "Posts a message and returns its timestamp.",
         }),
-      ).toBeUndefined();
+      ).toBe(false);
     }
     expect(await readAllRows(env.DB)).toEqual(before);
   });
@@ -347,18 +492,20 @@ describe("the listing and version tables", () => {
       title: "Post slack message v1.1",
       sdk: "Python",
       integrations: [],
+      description: "Posts a message and returns its timestamp.",
     });
 
     expect(await storage().findListing(listing)).toMatchObject({
       version: "1.0.0",
       title: "Post slack message",
+      description: listing.description,
     });
     expect(
       await storage().findListing({ ...listing, version: "1.1.0" }),
     ).toMatchObject({
       version: "1.1.0",
       title: "Post slack message v1.1",
-      description: listing.description,
+      description: "Posts a message and returns its timestamp.",
       integrations: [],
     });
   });
@@ -371,7 +518,7 @@ describe("the listing and version tables", () => {
       env.DB.prepare(
         "insert into versions (handle, name, version, title, sdk, integrations) values (?, ?, ?, ?, ?, ?)",
       )
-        .bind(listing.handle, listing.name, "9.0.0", "Title", "Java", "[]")
+        .bind(listing.handle, listing.name, "9.0.0", "Title", "Kotlin", "[]")
         .run(),
     ).rejects.toThrow(/CHECK constraint failed/);
   });
@@ -416,11 +563,7 @@ describe("the migrations", () => {
         ).all<{ name: string }>()
       ).results.map(({ name }) => name);
 
-    expect(await columns("listings")).toEqual([
-      "handle",
-      "name",
-      "description",
-    ]);
+    expect(await columns("listings")).toEqual(["handle", "name", "removed_by"]);
     expect(await columns("versions")).toEqual([
       "handle",
       "name",
@@ -429,6 +572,9 @@ describe("the migrations", () => {
       "sdk",
       "integrations",
       "published_at",
+      "description",
+      "what_changed",
+      "based_on",
     ]);
   });
 });

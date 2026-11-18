@@ -2,7 +2,11 @@ import type { ListingDetails } from "@durables/schemas";
 import { startTransition, useActionState, useId } from "react";
 import { Link, useNavigate } from "react-router";
 import type { CheckedFacts } from "./check-result";
-import { draftConfirmations, draftDetails } from "./draft";
+import {
+  draftConfirmations,
+  draftDetails,
+  type DraftConfirmations,
+} from "./draft";
 import { listingVersion } from "./listing-version";
 import { publishRefusal } from "./publish-refusal";
 import { publishedPath, publishedState } from "./published-listing";
@@ -28,7 +32,8 @@ export interface ReviewStepProps {
 // Terms page and Back returns to the step as it was. Publish stays disabled until all six are
 // checked and nothing earlier is still needed.
 //
-// Publish sends the code, the details and the confirmations. While it is on its way the button
+// Publish sends the code, the SDK the publisher declared if they chose one, the details and
+// the confirmations. While it is on its way the button
 // says so and can't be pressed again. Once published, the Published screen opens and the draft
 // is cleared. A name the publisher already used sends them back to Details, and a handle
 // taken since they chose it sends them to the handle step. The rest of the draft is kept
@@ -57,6 +62,9 @@ export function ReviewStep({ handle, finished }: ReviewStepProps) {
       if (previous.kind === "published") return previous;
       const request: PublishRequest = {
         code: draft.code ?? "",
+        ...(draft.declaredSdk === undefined
+          ? {}
+          : { declaredSdk: draft.declaredSdk }),
         ...details,
         confirmations,
       };
@@ -122,35 +130,13 @@ export function ReviewStep({ handle, finished }: ReviewStepProps) {
           can't be edited.
         </p>
       </div>
-      <PreviewCard handle={handle} details={details} sdk={sdk} />
-      <fieldset className={styles["confirmations"]}>
-        <legend className={styles["legend"]}>
-          Before you publish, confirm each of these
-        </legend>
-        {reviewConfirmations.map(({ key, text }) => (
-          <Confirmation
-            key={key}
-            text={text}
-            checked={confirmations[key]}
-            onChange={(checked) => {
-              dispatch({
-                type: "confirmationToggled",
-                confirmation: key,
-                checked,
-              });
-            }}
-          />
-        ))}
-        <p className={styles["disclaimer"]}>
-          Durables hosts code as provided. It doesn't review, test or warrant
-          anything published here and accepts no responsibility for how it's
-          used. Read the full{" "}
-          <Link to="/terms" className={styles["terms"]}>
-            Terms
-          </Link>
-          .
-        </p>
-      </fieldset>
+      <PreviewCard
+        handle={handle}
+        details={details}
+        version={listingVersion}
+        sdk={sdk}
+      />
+      <ReviewConfirmations confirmations={confirmations} />
       {missing.length > 0 ? (
         <div role="alert" className={styles["missing"]}>
           Still needed before publishing: {missing.join(", ")}
@@ -176,21 +162,28 @@ export function ReviewStep({ handle, finished }: ReviewStepProps) {
 }
 
 /** Where the latest press of Publish got to. A refusal that moved the publisher on is idle. */
-type PublishOutcome =
+export type PublishOutcome =
   | { kind: "idle" }
   | { kind: "published" }
   | { kind: "failed"; message: string };
 
-interface PreviewCardProps {
+export interface PreviewCardProps {
   handle: string;
   details: ListingDetails;
+  /** The version being published. */
+  version: string;
   /** The SDK from the kept check. Absent while the pasted code is not accepted. */
   sdk: CheckedFacts["sdk"] | undefined;
 }
 
 // The listing as search results will show it: the default activity icon, the title, the
 // address, the SDK and the one-line description.
-function PreviewCard({ handle, details, sdk }: PreviewCardProps) {
+export function PreviewCard({
+  handle,
+  details,
+  version,
+  sdk,
+}: PreviewCardProps) {
   return (
     <section aria-label="Listing preview" className={styles["card"]}>
       <div className={styles["cardHead"]}>
@@ -202,13 +195,55 @@ function PreviewCard({ handle, details, sdk }: PreviewCardProps) {
         <div className={styles["identity"]}>
           <h3 className={styles["title"]}>{details.title}</h3>
           <p className={styles["address"]}>
-            {handle}/{details.name}@{listingVersion}
+            {handle}/{details.name}@{version}
           </p>
         </div>
         {sdk === undefined ? null : <p className={styles["sdk"]}>{sdk}</p>}
       </div>
       <p className={styles["description"]}>{details.description}</p>
     </section>
+  );
+}
+
+export interface ReviewConfirmationsProps {
+  confirmations: DraftConfirmations;
+}
+
+// The six confirmations and the disclaimer under them. Each box is kept in the draft as it is
+// checked or unchecked.
+export function ReviewConfirmations({
+  confirmations,
+}: ReviewConfirmationsProps) {
+  const { dispatch } = useContributeDraft();
+  return (
+    <fieldset className={styles["confirmations"]}>
+      <legend className={styles["legend"]}>
+        Before you publish, confirm each of these
+      </legend>
+      {reviewConfirmations.map(({ key, text }) => (
+        <Confirmation
+          key={key}
+          text={text}
+          checked={confirmations[key]}
+          onChange={(checked) => {
+            dispatch({
+              type: "confirmationToggled",
+              confirmation: key,
+              checked,
+            });
+          }}
+        />
+      ))}
+      <p className={styles["disclaimer"]}>
+        Durables hosts code as provided. It doesn't review, test or warrant
+        anything published here and accepts no responsibility for how it's used.
+        Read the full{" "}
+        <Link to="/terms" className={styles["terms"]}>
+          Terms
+        </Link>
+        .
+      </p>
+    </fieldset>
   );
 }
 

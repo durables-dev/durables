@@ -43,7 +43,7 @@ test("the logo link takes a visitor home from another page", async () => {
   await expect
     .element(
       screen.getByRole("heading", {
-        name: "Temporal activities, ready to copy.",
+        name: "Temporal activities, ready to use.",
       }),
     )
     .toBeVisible();
@@ -106,6 +106,45 @@ test("every page outside the Contribute flow shows the Contribute pill", async (
         screen.getByRole("banner").getByRole("link", { name: "Contribute" }),
       )
       .toBeVisible();
+    await screen.unmount();
+  }
+});
+
+test("signed out, every page outside Contribute and Sign in shows the Sign in link", async () => {
+  for (const path of [
+    "/",
+    "/elsewhere",
+    "/search",
+    "/terms",
+    "/no-such-page",
+  ]) {
+    const screen = await renderAt(path);
+
+    await expect
+      .element(
+        screen.getByRole("banner").getByRole("link", { name: "Sign in" }),
+      )
+      .toBeVisible();
+    await screen.unmount();
+  }
+});
+
+test("the Contribute pages and the Sign in page leave the Sign in link out", async () => {
+  for (const [path, heading] of [
+    ["/contribute", "Sign in to contribute"],
+    ["/contribute/profile", "Sign in to contribute"],
+    ["/sign-in", "Sign in"],
+  ] as const) {
+    const screen = await renderAt(path);
+
+    await expect
+      .element(screen.getByRole("heading", { name: heading, exact: true }))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("banner").getByRole("link", { name: "Sign in" }),
+      )
+      .not.toBeInTheDocument();
     await screen.unmount();
   }
 });

@@ -1,0 +1,24 @@
+<?php
+
+declare(strict_types=1);
+
+use Temporal\Client\GRPC\ServiceClient;
+use Temporal\Client\WorkflowClient;
+use Temporal\Client\WorkflowOptions;
+
+ini_set('display_errors', 'stderr');
+require 'vendor/autoload.php';
+require '{{workflowFile}}';
+
+$client = new WorkflowClient(ServiceClient::create('localhost:7233'));
+$workflow = $client->newWorkflowStub(
+    {{workflowClass}}::class,
+    WorkflowOptions::new()
+        ->withTaskQueue({{taskQueue}})
+        ->withWorkflowId({{workflowId}}),
+);
+
+// Fill in the {{inputType}} to pass to {{activity}}.
+$input = null;
+{{resultAssignment}}$workflow->run($input);
+{{printResult}}

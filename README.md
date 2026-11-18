@@ -35,11 +35,11 @@ Both ports are forwarded to your machine. Installed packages and local D1/R2 dat
 
 ## Branches
 
-`main` is the default and only long-lived branch: branch from it and open pull requests into it. Merging into `main` deploys to production (`docs/adr/0012-work-on-main.md`).
+Work collects on the current release branch, `release/<date>`: branch from it and open pull requests into it. `main` is the default branch, and merging into it deploys to production, so a release reaches `main` through one pull request from the release branch. An urgent fix can branch from and go into `main`; merge `main` into the release branch afterwards (`docs/adr/0014-release-branches.md`).
 
 ## Deploying
 
-Everything deployed is defined in `infrastructure/` (see `docs/adr/0003-infrastructure-as-code.md`). Merging to `main` deploys through the GitHub Actions workflow in `.github/workflows/ci.yml`, which runs the same dev container. Before merging, run the **Plan** workflow from the Actions tab and review its log: it shows what the deploy would change, using the production settings, and changes nothing.
+Everything deployed is defined in `infrastructure/` (see `docs/adr/0003-infrastructure-as-code.md`). Merging the release pull request into `main` deploys through the GitHub Actions workflow in `.github/workflows/ci.yml`, which runs the same dev container. Before merging, run the **Plan** workflow from the Actions tab and review its log: it shows what the deploy would change, using the production settings, and changes nothing.
 
 To deploy by hand from the container, with the same environment variables the workflow uses (`CLOUDFLARE_API_TOKEN`, the R2 state token as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `AWS_SSE_CUSTOMER_KEY`, `AWS_ENDPOINT_URL_S3` set to `https://<account-id>.r2.cloudflarestorage.com`, and the `TF_VAR_*` values, including `TF_VAR_cloudflare_account_id` and `TF_VAR_cloudflare_zone_id`):
 

@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router";
+import { chooseSdkHint } from "./check-line";
 import { CheckLineRow } from "./check-line-row";
 import styles from "./code-step.module.css";
 import { isAccepted } from "./draft";
@@ -19,14 +20,17 @@ export interface CodeStepProps {
 // once, with no choice between linking a file and pasting. The code is kept in the draft, and
 // changing it drops the last check. A paste, or a pause in typing, checks the code; the row
 // under the editor says what the check found. Continue opens Detected once a file is
-// accepted, and stays disabled while a check runs. Back returns to the handle step, or for a
+// accepted, and stays disabled while a check runs. While the api can't tell the SDK, the
+// hint asks the publisher to choose it. Back returns to the handle step, or for a
 // returning publisher to the page the flow was opened from.
 export function CodeStep({ returning }: CodeStepProps) {
   const navigate = useNavigate();
   const { draft, dispatch } = useContributeDraft();
   const heading = useFocusOnAppear<HTMLHeadingElement>();
-  const { check, line } = useCheckCode();
+  const { check, declare, line, control } = useCheckCode();
   const accepted = isAccepted(draft) && line.kind !== "checking";
+  const hint =
+    control.kind === "choose" ? chooseSdkHint : "Paste your activity's file";
 
   return (
     <section aria-label="Code" className={styles["step"]}>
@@ -45,14 +49,19 @@ export function CodeStep({ returning }: CodeStepProps) {
         }}
         onCheck={check}
       />
-      <CheckLineRow line={line} code={draft.code ?? ""} />
+      <CheckLineRow
+        line={line}
+        control={control}
+        code={draft.code ?? ""}
+        onDeclare={declare}
+      />
       <StepFooter
         onBack={() => {
           void navigate(
             returning ? (draft.origin ?? "/") : stepPath("profile"),
           );
         }}
-        hint={accepted ? undefined : "Paste your activity's file"}
+        hint={accepted ? undefined : hint}
         continueDisabled={!accepted}
         onContinue={() => {
           void navigate(stepPath("detected"));

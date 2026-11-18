@@ -8,11 +8,13 @@ import {
 import { z } from "zod";
 import { fieldErrors } from "../http/validation";
 import { MAX_CODE_BYTES } from "../checks/size-limit";
+import { sdkSchema } from "../sdks/sdk-list";
 import { invalidListing } from "./publish-problems";
 
 // The publish request. Its shape is checked by the validator, which answers 400. Its content
-// is checked by the shared listing rules, which answer 422. Only the code is taken from the
-// client: detection results, integrations, snippets and the version are never read from it.
+// is checked by the shared listing rules, which answer 422. Only the code and the declared SDK
+// are taken from the client: detection results, integrations, snippets and the version are
+// never read from it.
 
 /**
  * The largest publish request body, in bytes. It fits code of `MAX_CODE_BYTES` even when JSON
@@ -21,7 +23,10 @@ import { invalidListing } from "./publish-problems";
  */
 export const MAX_PUBLISH_BODY_BYTES = 6 * MAX_CODE_BYTES + 16 * 1024;
 
-/** The version every publish creates. New versions are a later increment. */
+/**
+ * The version a first publish creates. A later version is published at
+ * `POST /api/activities/:handle/:name/versions` with its own number.
+ */
 export const FIRST_VERSION = "1.0.0";
 
 const confirmationShape = Object.fromEntries(
@@ -35,6 +40,8 @@ const confirmationShape = Object.fromEntries(
 export const publishBody = z.object({
   /** The code exactly as pasted. */
   code: z.string(),
+  /** The SDK the publisher chose. Publishing runs its detector instead of identifying one. */
+  declaredSdk: sdkSchema.optional(),
   title: z.string(),
   name: z.string(),
   description: z.string(),

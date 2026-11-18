@@ -19,6 +19,26 @@ const samples: Record<CodeLanguage, { code: string; keyword: string }> = {
     code: "public class Activities\n{\n    [Activity]\n    public Task<string> Run(string input) => Task.FromResult(input);\n}\n",
     keyword: "public",
   },
+  go: {
+    code: 'package activities\n\nfunc ChargeCard(ctx context.Context, input Charge) (string, error) {\n    return "ok", nil\n}\n',
+    keyword: "return",
+  },
+  java: {
+    code: "public class ActivitiesImpl implements Activities {\n    @Override\n    public String charge(String input) {\n        return input;\n    }\n}\n",
+    keyword: "return",
+  },
+  ruby: {
+    code: "class ChargeCard < Temporalio::Activity::Definition\n    def execute(input)\n        'ok' # sent\n    end\nend\n",
+    keyword: "def",
+  },
+  php: {
+    code: "<?php\n\nclass Activities\n{\n    public function chargeCard(string $input): string\n    {\n        return $input;\n    }\n}\n",
+    keyword: "return",
+  },
+  rust: {
+    code: "pub async fn charge_card(input: Charge) -> Result<String, Error> {\n    let id = input.id;\n    Ok(id)\n}\n",
+    keyword: "let",
+  },
 };
 
 function countingGrammars() {
@@ -26,6 +46,11 @@ function countingGrammars() {
     python: vi.fn(() => import("shiki/langs/python.mjs")),
     typescript: vi.fn(() => import("shiki/langs/typescript.mjs")),
     csharp: vi.fn(() => import("shiki/langs/csharp.mjs")),
+    go: vi.fn(() => import("shiki/langs/go.mjs")),
+    java: vi.fn(() => import("shiki/langs/java.mjs")),
+    ruby: vi.fn(() => import("shiki/langs/ruby.mjs")),
+    php: vi.fn(() => import("shiki/langs/php.mjs")),
+    rust: vi.fn(() => import("shiki/langs/rust.mjs")),
   };
   return calls;
 }
@@ -69,15 +94,19 @@ test("a grammar loads only when its language is first needed, and only once", as
   const highlighter = createHighlighter(grammars);
 
   expect(grammars.python).not.toHaveBeenCalled();
-  expect(grammars.typescript).not.toHaveBeenCalled();
-  expect(grammars.csharp).not.toHaveBeenCalled();
+  for (const language of Object.keys(grammars) as CodeLanguage[]) {
+    expect(grammars[language]).not.toHaveBeenCalled();
+  }
 
   await highlighter.load("python");
   await highlighter.load("python");
 
   expect(grammars.python).toHaveBeenCalledTimes(1);
-  expect(grammars.typescript).not.toHaveBeenCalled();
-  expect(grammars.csharp).not.toHaveBeenCalled();
+  for (const language of Object.keys(grammars) as CodeLanguage[]) {
+    if (language !== "python") {
+      expect(grammars[language]).not.toHaveBeenCalled();
+    }
+  }
   expect(highlighter.isLoaded("python")).toBe(true);
   expect(highlighter.isLoaded("typescript")).toBe(false);
   expect(highlighter.highlight("let x = 1", "typescript")).toBeUndefined();
@@ -93,15 +122,29 @@ test("a grammar that fails to load leaves the language unhighlighted", async () 
   expect(highlighter.highlight("public class A {}", "csharp")).toBeUndefined();
 });
 
+test("a new SDK's grammar that fails to load leaves its code unhighlighted", async () => {
+  const grammars = countingGrammars();
+  grammars.php = () => Promise.reject(new Error("offline"));
+  const highlighter = createHighlighter(grammars);
+
+  await expect(highlighter.load("php")).resolves.toBe(false);
+  expect(highlighter.highlight("<?php echo 1;", "php")).toBeUndefined();
+});
+
 test.each([
   ["python", "python"],
   ["TypeScript", "typescript"],
   ["csharp", "csharp"],
+  ["go", "go"],
+  ["java", "java"],
+  ["ruby", "ruby"],
+  ["php", "php"],
+  ["Rust", "rust"],
 ])("%s is a highlighted language", (name, expected) => {
   expect(codeLanguage(name)).toBe(expected);
 });
 
-test.each(["java", "go", "", undefined])(
+test.each(["kotlin", "yaml", "plaintext", "toString", "", undefined])(
   "%s is not a highlighted language",
   (name) => {
     expect(codeLanguage(name)).toBeUndefined();

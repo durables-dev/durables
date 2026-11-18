@@ -2,7 +2,13 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 import { Component as Frame, ErrorBoundary as FrameError } from "./frame-route";
 import type { RouteHandle } from "./route-handle";
 
-const contributeHandle: RouteHandle = { footer: false, contribute: false };
+const contributeHandle: RouteHandle = {
+  footer: false,
+  contribute: false,
+  signIn: false,
+};
+const signInHandle: RouteHandle = { signIn: false };
+const restoreHandle: RouteHandle = { signIn: false, contribute: false };
 
 // React Router in data mode (web/CONVENTIONS.md). Every page route is lazy, so each feature
 // is its own chunk. A route module exports Component, loader and friends by name.
@@ -22,11 +28,31 @@ export const routes: RouteObject[] = [
         lazy: () => import("@/features/home/home-route"),
       },
       {
-        // The step is in the address. The flow has no footer and no Contribute button in its
-        // header, as the contribute canvas shows.
+        // The step is in the address. The flow has no footer and no Contribute button or Sign
+        // in link in its header, as the contribute canvas shows.
         path: "/contribute/:step?",
         lazy: () => import("@/features/contribute/contribute-route"),
         handle: contributeHandle,
+      },
+      {
+        // The Sign in page. The header leaves out its own Sign in link here. The page to
+        // return to after signing in is in the address's search params.
+        path: "/sign-in",
+        lazy: () => import("@/features/account/sign-in-route"),
+        handle: signInHandle,
+      },
+      {
+        // The Restore prompt, where a sign-in lands when its account is pending deletion.
+        // Every other page leads back here until a choice is made (frame-route.tsx), so the
+        // header offers neither Sign in nor Contribute.
+        path: "/sign-in/restore",
+        lazy: () => import("@/features/account/restore-route"),
+        handle: restoreHandle,
+      },
+      {
+        // The signed-in owner's profile. Only its owner can see it.
+        path: "/profile",
+        lazy: () => import("@/features/account/profile-route"),
       },
       {
         // The results page. The words and filters are in the address's search params.

@@ -8,11 +8,7 @@ import { seedAccount, seedListing, seedVersion } from "../storage/seed";
 const seedActivity = async (versions: { version: string; at: string }[]) => {
   const { handle } = await seedAccount(env.DB);
   const name = `activity-${crypto.randomUUID().slice(0, 8)}`;
-  await seedListing(env.DB, {
-    handle,
-    name,
-    description: "Charges a card through Stripe.",
-  });
+  await seedListing(env.DB, { handle, name });
   for (const { version, at } of versions) {
     await seedVersion(env.DB, {
       handle,

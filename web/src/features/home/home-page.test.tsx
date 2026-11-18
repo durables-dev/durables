@@ -1,6 +1,13 @@
 import "@/styles/global.css";
 import { routes } from "@/app/router";
 import { readSearch, searchAddress } from "@/lib/search-address";
+import { testCatalogSdks } from "../../../test/sdk-catalog";
+import {
+  eightSdkCatalog,
+  eightSdks,
+  failCatalog,
+  serveCatalog,
+} from "../../../test/serve-sdk-catalog";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test } from "vitest";
@@ -126,7 +133,7 @@ test("shows the headline above the search box", async () => {
   const headline = opened.screen.getByRole("heading", { level: 1 });
   await expect
     .element(headline)
-    .toHaveTextContent("Temporal activities, ready to copy.");
+    .toHaveTextContent("Temporal activities, ready to use.");
   await expect.element(searchBox(opened)).toBeVisible();
   const headlineBottom = headline.element().getBoundingClientRect().bottom;
   const boxTop = searchBox(opened).element().getBoundingClientRect().top;
@@ -213,7 +220,9 @@ test("words with SDK and integration chips open results with both filters applie
       integrations: ["Stripe", "Amazon S3"],
     }),
   );
-  expect(readSearch(new URLSearchParams(address.split("?")[1]))).toEqual({
+  expect(
+    readSearch(new URLSearchParams(address.split("?")[1]), testCatalogSdks),
+  ).toEqual({
     words: "charge card",
     sdks: ["Python", ".NET"],
     integrations: ["Stripe", "Amazon S3"],
@@ -353,12 +362,15 @@ test("the panel shows the SDK chips with Any on, and only the four integration c
   await expect
     .element(opened.screen.getByText("Here is the activity, make it work"))
     .toBeVisible();
-  expect(pressedIn(opened, "Temporal SDK")).toEqual([
-    ["Any", true],
-    ["Python", false],
-    ["TypeScript", false],
-    [".NET", false],
-  ]);
+  // The SDK chips come with the SDK catalog.
+  await expect
+    .poll(() => pressedIn(opened, "Temporal SDK"))
+    .toEqual([
+      ["Any", true],
+      ["Python", false],
+      ["TypeScript", false],
+      [".NET", false],
+    ]);
   expect(pressedIn(opened, "Integrates with")).toEqual([
     ["Stripe", false],
     ["Amazon S3", false],
@@ -368,6 +380,46 @@ test("the panel shows the SDK chips with Any on, and only the four integration c
   await expect
     .element(opened.screen.getByRole("button", { name: /More/ }))
     .not.toBeInTheDocument();
+});
+
+test("with eight SDKs in the catalog, the chips are Any then the eight in catalog order, with Any on", async () => {
+  serveCatalog(eightSdkCatalog);
+  const opened = await openHome();
+  await openFilters(opened);
+
+  await expect
+    .poll(() => pressedIn(opened, "Temporal SDK"))
+    .toEqual([["Any", true], ...eightSdks.map((sdk) => [sdk, false])]);
+});
+
+test("a new SDK's chip carries into the results address alongside another", async () => {
+  serveNoResults();
+  serveCatalog(eightSdkCatalog);
+  const opened = await openHome();
+  await openFilters(opened);
+
+  await sdkChip(opened, "Go").click();
+  await sdkChip(opened, "Python").click();
+  await expect
+    .element(sdkChip(opened, "Any"))
+    .toHaveAttribute("aria-pressed", "false");
+  await searchButton(opened).click();
+
+  expect(await landedAt(opened)).toBe("/search?sdk=Go&sdk=Python");
+});
+
+test("when the catalog cannot be read, Home still renders and the only SDK chip is Any", async () => {
+  const failed = failCatalog();
+  const opened = await openHome();
+  await openFilters(opened);
+  await failed;
+
+  await expect
+    .element(opened.screen.getByText("What runtime are you using?"))
+    .toBeVisible();
+  expect(pressedIn(opened, "Temporal SDK")).toEqual([["Any", true]]);
+  expect(pressedIn(opened, "Integrates with")).toHaveLength(4);
+  await expect.element(searchBox(opened)).toBeVisible();
 });
 
 // Criterion 6: Any clears the other SDKs; clearing them all returns to Any

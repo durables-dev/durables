@@ -1,6 +1,6 @@
-import type { Sdk } from "@durables/schemas";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
+import type { Sdk } from "../sdks/sdk-list";
 import { seedAccount, seedListing, seedVersion } from "../storage/seed";
 import { encodeBrowseCursor } from "./browse-cursor";
 import {
@@ -19,6 +19,7 @@ const problemContentType = "application/problem+json";
 
 interface SeededVersion {
   version?: string;
+  description?: string;
   title?: string;
   sdk?: Sdk;
   integrations?: string[];
@@ -29,8 +30,9 @@ interface SeededVersion {
 const newHandle = async () => (await seedAccount(env.DB)).handle;
 
 /**
- * Writes a listing and its versions, each defaulting to 1.0.0, Python, Stripe and now. The
- * published date is stored in whole seconds, so dates here are whole seconds too.
+ * Writes a listing and its versions, each defaulting to 1.0.0, Python, Stripe and now. Each
+ * version takes the listing's description unless it names its own. The published date is
+ * stored in whole seconds, so dates here are whole seconds too.
  */
 const seedActivity = async (
   handle: string,
@@ -38,16 +40,16 @@ const seedActivity = async (
   versionRows: SeededVersion[] = [{}],
 ): Promise<{ handle: string; name: string }> => {
   const name = listing.name ?? `activity-${crypto.randomUUID().slice(0, 8)}`;
-  await seedListing(env.DB, {
-    handle,
-    name,
-    description: listing.description ?? "Charges a card through Stripe.",
-  });
+  await seedListing(env.DB, { handle, name });
   for (const row of versionRows) {
     await seedVersion(env.DB, {
       handle,
       name,
       version: row.version ?? "1.0.0",
+      description:
+        row.description ??
+        listing.description ??
+        "Charges a card through Stripe.",
       title: row.title ?? "Charge card",
       sdk: row.sdk ?? "Python",
       integrations: row.integrations ?? ["Stripe"],
@@ -269,6 +271,75 @@ describe("a listing with several versions", () => {
     expect(slack.activities.map((card) => card.version)).toEqual(["2.0.0"]);
   });
 
+  test("shows the description of the version on the card, not an older version's", async () => {
+    const handle = await newHandle();
+    await seedActivity(handle, {}, [
+      { version: "1.0.0", description: "Charges a card through Stripe." },
+      { version: "1.2.0", description: "Charges a card or a saved wallet." },
+      { version: "1.1.0", description: "Charges a card and keeps a receipt." },
+    ]);
+
+    const body = await browse({ publisher: handle });
+
+    expect(body.activities).toMatchObject([
+      { version: "1.2.0", description: "Charges a card or a saved wallet." },
+    ]);
+  });
+
+  test("is found by a word only in the latest version's description, and not by one only in an older version's", async () => {
+    const [latestWord, olderWord] = [newWord(), newWord()];
+    const handle = await newHandle();
+    const { name } = await seedActivity(handle, {}, [
+      { version: "1.0.0", description: `Charges a card, then ${olderWord}.` },
+      { version: "2.0.0", description: `Charges a card, then ${latestWord}.` },
+    ]);
+
+    const latest = await browse({ q: latestWord });
+    const older = await browse({ q: olderWord });
+
+    expect(latest.activities).toMatchObject([
+      {
+        name,
+        version: "2.0.0",
+        description: `Charges a card, then ${latestWord}.`,
+      },
+    ]);
+    expect(older.activities).toEqual([]);
+    expect(older.count).toBe(0);
+  });
+
+  test("is ranked by the latest version's description, not an older version's", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    // Both titles score 3. Only the first listing's latest description adds 1. The second
+    // listing's older description holds the word, scores nothing, and the listing is newer.
+    const latestHasIt = await seedActivity(handle, {}, [
+      {
+        title: `Charge ${word}`,
+        description: `Charges a card for ${word}.`,
+        publishedAt: at("2026-06-01T00:00:00Z"),
+      },
+    ]);
+    const olderHasIt = await seedActivity(handle, {}, [
+      {
+        version: "1.0.0",
+        title: `Charge ${word}`,
+        description: `Charges a card for ${word}.`,
+        publishedAt: at("2026-06-02T00:00:00Z"),
+      },
+      {
+        version: "1.1.0",
+        title: `Charge ${word}`,
+        description: "Charges a card.",
+        publishedAt: at("2026-06-03T00:00:00Z"),
+      },
+    ]);
+
+    const body = await browse({ q: word });
+
+    expect(names(body)).toEqual([latestHasIt.name, olderHasIt.name]);
+  });
+
   test("is ordered by the published date of the version on the card", async () => {
     const handle = await newHandle();
     const refreshed = await seedActivity(handle, {}, [
@@ -325,7 +396,7 @@ describe("the SDK filter", () => {
     expect(body.count).toBe(1);
   });
 
-  test.each(["Java", "python", ""])(
+  test.each(["Cobol", "java", "python", ""])(
     "answers 400 for the unsupported SDK %j",
     async (sdk) => {
       await expectInvalid({ sdk }, "sdk", sdkFilterMessage);
@@ -333,7 +404,7 @@ describe("the SDK filter", () => {
   );
 
   test("answers 400 when one of several SDKs is unsupported", async () => {
-    await expectInvalid({ sdk: ["Python", "Java"] }, "sdk", sdkFilterMessage);
+    await expectInvalid({ sdk: ["Python", "Cobol"] }, "sdk", sdkFilterMessage);
   });
 
   test("answers 200 for an SDK repeated 150 times", async () => {

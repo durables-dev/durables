@@ -9,10 +9,10 @@ import { requirePublisher } from "../auth/require-publisher";
 import { ProblemError } from "../http/problem";
 import { publisherLimitKey } from "../http/rate-limits";
 import { problemOnInvalid } from "../http/validation";
-import type { Detector } from "./detector";
-import { detectors as registeredDetectors } from "./detectors";
+import { registeredSdks } from "../sdks/registry";
+import { sdkSchema } from "../sdks/sdk-list";
 import type { Facts } from "./facts";
-import { checkCode } from "./pipeline";
+import { type CheckedSdk, checkCode } from "./pipeline";
 import { codeTooLarge } from "./refusals";
 import { MAX_CODE_BYTES } from "./size-limit";
 
@@ -26,8 +26,14 @@ interface ChecksEnv {
   Variables: AppEnv["Variables"] & { publisher: Session };
 }
 
-/** The body of a check. Any other field, such as facts sent by the client, is dropped. */
-const checkBody = z.object({ code: z.string() });
+/**
+ * The body of a check. `declaredSdk` is the SDK the publisher chose; the api runs its detector
+ * itself. Any other field, such as facts sent by the client, is dropped.
+ */
+const checkBody = z.object({
+  code: z.string(),
+  declaredSdk: sdkSchema.optional(),
+});
 
 /** Answers 413 Problem Details, the same refusal as oversized code, when the body is too large. */
 const checkBodyLimit = () =>
@@ -54,10 +60,10 @@ const previewRateLimit = () =>
   });
 
 /**
- * The checks resource, mounted at /api/checks, running the given detectors. Production
- * mounts `checks`, which runs the registered detectors.
+ * The checks resource, mounted at /api/checks, checking code against the given SDKs.
+ * Production mounts `checks`, which checks against the SDK registry.
  */
-export const createChecks = (detectors: readonly Detector[]) =>
+export const createChecks = (checkedSdks: readonly CheckedSdk[]) =>
   new Hono<ChecksEnv>().post(
     "/",
     requirePublisher(),
@@ -65,12 +71,12 @@ export const createChecks = (detectors: readonly Detector[]) =>
     previewRateLimit(),
     zValidator("json", checkBody, problemOnInvalid),
     (c) => {
-      const { code } = c.req.valid("json");
-      const facts = checkCode(code, detectors);
+      const { code, declaredSdk } = c.req.valid("json");
+      const facts = checkCode(code, checkedSdks, declaredSdk);
       c.header("Cache-Control", "no-store");
       return c.json<Facts>(facts, 200);
     },
   );
 
-/** The checks resource with the registered detectors. */
-export const checks = createChecks(registeredDetectors);
+/** The checks resource, checking against the SDK registry. */
+export const checks = createChecks(registeredSdks);

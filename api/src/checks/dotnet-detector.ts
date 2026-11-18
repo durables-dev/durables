@@ -1,5 +1,6 @@
 import type { Detector } from "./detector";
 import type { ActivityFacts, LineRef, NamedLineRef } from "./facts";
+import type { SdkRecognition } from "./identify";
 import type { Pattern } from "./pattern";
 import type { Source } from "./source";
 
@@ -167,8 +168,18 @@ export const dotnetPatterns: readonly Pattern[] = [
   dotnetHeartbeatCall,
 ];
 
-/** Root namespaces Dependencies leaves out: the runtime's, Microsoft's and the SDK's own. */
-const notDependencies = new Set(["System", "Microsoft", "Temporalio"]);
+/** The root namespaces of .NET and Microsoft's own libraries, which Dependencies leaves out. */
+const frameworkNamespaces: ReadonlySet<string> = new Set([
+  "System",
+  "Microsoft",
+]);
+
+/** Whether a `using` directive's root namespace is .NET's or Microsoft's own. */
+export const isDotnetFrameworkNamespace = (root: string) =>
+  frameworkNamespaces.has(root);
+
+/** The root namespace of the Temporal .NET SDK, which Dependencies leaves out. */
+const temporalSdkNamespace = "Temporalio";
 
 /** Every match of a pattern in the text, in order. */
 const allMatches = (pattern: Pattern, text: string) => [
@@ -536,15 +547,20 @@ const firstByName = (found: readonly NamedLineRef[]) => {
   });
 };
 
+/** How identification recognises .NET: a using for the SDK, or the activity attribute. */
+export const dotnetRecognition: SdkRecognition = {
+  sdkMarkers: [dotnetSdkUsing, dotnetActivityAttribute],
+  activityMarkers: [dotnetActivityAttribute],
+  // Recognised only by its markers. Inference by shape would change how it is detected.
+  shapeMarkers: [],
+};
+
 /**
  * Detects .NET activities. The file-wide facts (non-retryable errors, configuration read,
  * dependencies and heartbeats) are read from the whole file and reported on every activity.
  */
 export const dotnetDetector: Detector = {
-  sdk: ".NET",
-  sdkMarkers: [dotnetSdkUsing, dotnetActivityAttribute],
-  activityMarkers: [dotnetActivityAttribute],
-  detect(source) {
+  detect(source, isStandardLibrary) {
     const { text } = source;
     const lineOf = lineFinder(text);
     const ignored = ignoredSpans(text);
@@ -575,7 +591,9 @@ export const dotnetDetector: Detector = {
     const dependencies = firstByName(
       found(dotnetUsingDirective).flatMap((match) => {
         const root = match[1];
-        return root === undefined || notDependencies.has(root)
+        return root === undefined ||
+          root === temporalSdkNamespace ||
+          isStandardLibrary(root)
           ? []
           : [{ name: root, line: lineOf(match.index) }];
       }),

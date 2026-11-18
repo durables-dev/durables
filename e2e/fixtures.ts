@@ -59,6 +59,19 @@ export interface OwnListing extends PublishedListing {
   identity: FakeIdentity & { providerAccountId: string };
 }
 
+/** What a later version's publish through the API sends besides the six confirmations. */
+export interface NewVersionDetails {
+  code: string;
+  title: string;
+  description: string;
+  version: string;
+  /** The version the new one starts from. */
+  basedOn: string;
+  whatChanged: string;
+  /** Deprecates the base version, with the new version as its replacement. */
+  deprecateBase?: { reason: string };
+}
+
 /** An account seeded straight into local D1, as publishing will create one. */
 export interface SeededAccount {
   accountId: string;
@@ -121,6 +134,35 @@ interface Fixtures {
    */
   publishOwnListing: (details: PublishDetails) => Promise<OwnListing>;
   /**
+   * Publishes a later version of a listing through the API as the page's signed-in publisher,
+   * with all six confirmations given, the way Contribute's new-version mode does. The publisher
+   * must own the listing. It counts towards their publish rate limit.
+   */
+  publishVersionThroughApi: (
+    listing: PublishedListing,
+    details: NewVersionDetails,
+  ) => Promise<PublishedListing>;
+  /**
+   * Deprecates one version of a listing through the API as the page's signed-in publisher, the
+   * way the publisher bar's Deprecate dialog does. A null replacement points people nowhere.
+   */
+  deprecateThroughApi: (
+    version: PublishedListing,
+    reason: string,
+    replacement: string | null,
+  ) => Promise<void>;
+  /**
+   * Takes a listing out of search through the API as the page's signed-in publisher, the way
+   * the publisher bar's Remove does. The publisher must own the listing.
+   */
+  removeFromSearch: (listing: PublishedListing) => Promise<void>;
+  /**
+   * Deletes the page's signed-in publisher's account through the API, the way the profile's
+   * Delete account dialog does, confirming with the handle. The session ends and the account
+   * waits 30 days to be deleted for good.
+   */
+  deleteOwnAccount: (handle: string) => Promise<void>;
+  /**
    * Adds another version under a published listing, the way a later publish will. Publishing
    * creates only a listing's first version, so the version's row is written to local D1 and its
    * document is a copy of the first version's in local R2, pointing at its own address. It
@@ -164,6 +206,7 @@ export function sample(name: string): string {
 const fakeSignInPath = "/api/session/providers/fake";
 const chosenHandlePath = "/api/session/handle";
 const publishPath = "/api/activities";
+const accountPath = "/api/account";
 
 // The API accepts writes only from its own pages, which the browser marks this way.
 const sameOrigin = { "Sec-Fetch-Site": "same-origin" };
@@ -404,6 +447,54 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     });
   },
 
+  publishVersionThroughApi: async ({ page }, use) => {
+    await use(async ({ handle, name }, details) => {
+      const response = await page.request.post(
+        `${publishPath}/${encodeURIComponent(handle)}/${encodeURIComponent(name)}/versions`,
+        {
+          data: { ...details, confirmations: allConfirmations },
+          headers: sameOrigin,
+        },
+      );
+      expect(response.status(), await response.text()).toBe(201);
+      const published = (await response.json()) as PublishResponse;
+      return {
+        ...published,
+        address: `${published.handle}/${published.name}@${published.version}`,
+      };
+    });
+  },
+
+  deprecateThroughApi: async ({ page }, use) => {
+    await use(async ({ handle, name, version }, reason, replacement) => {
+      const response = await page.request.put(
+        `${publishPath}/${encodeURIComponent(handle)}/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}/deprecation`,
+        { data: { reason, replacement }, headers: sameOrigin },
+      );
+      expect(response.status(), await response.text()).toBe(200);
+    });
+  },
+
+  removeFromSearch: async ({ page }, use) => {
+    await use(async ({ handle, name }) => {
+      const response = await page.request.put(
+        `${publishPath}/${encodeURIComponent(handle)}/${encodeURIComponent(name)}/removal`,
+        { headers: sameOrigin },
+      );
+      expect(response.status(), await response.text()).toBe(200);
+    });
+  },
+
+  deleteOwnAccount: async ({ page }, use) => {
+    await use(async (handle) => {
+      const response = await page.request.delete(accountPath, {
+        data: { handle },
+        headers: sameOrigin,
+      });
+      expect(response.status(), await response.text()).toBe(204);
+    });
+  },
+
   // eslint-disable-next-line no-empty-pattern -- Playwright reads the fixtures a fixture needs from this pattern; this one needs none.
   seedVersion: async ({}, use) => {
     await use(async ({ handle, name, version: first, address }, version) => {
@@ -427,7 +518,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
       // The document is written before the row, as publishing does, so the row never points at
       // a missing document.
       await executeSql(
-        `INSERT INTO versions (handle, name, version, title, sdk, integrations) SELECT handle, name, ${sqlValue(version)}, title, sdk, integrations FROM versions WHERE handle = ${sqlValue(handle)} AND name = ${sqlValue(name)} AND version = ${sqlValue(first)};`,
+        `INSERT INTO versions (handle, name, version, title, sdk, integrations, description) SELECT handle, name, ${sqlValue(version)}, title, sdk, integrations, description FROM versions WHERE handle = ${sqlValue(handle)} AND name = ${sqlValue(name)} AND version = ${sqlValue(first)};`,
       );
       return later;
     });

@@ -6,6 +6,7 @@ import {
   WorkerVersion,
   type WorkerVersionBindings,
 } from "../.gen/providers/cloudflare/worker-version";
+import { WorkersCronTrigger } from "../.gen/providers/cloudflare/workers-cron-trigger";
 import { WorkersDeployment } from "../.gen/providers/cloudflare/workers-deployment";
 import { workerName } from "./config";
 import type { Storage } from "./storage";
@@ -27,6 +28,9 @@ export interface WorkerProps {
   readonly plainText: Readonly<Record<string, TerraformVariable>>;
 }
 
+// The api bundle's files that Wrangler emits as Text modules, which Cloudflare takes as text/plain.
+const textModuleExtensions = [".txt", ".svg"] as const;
+
 // The one Worker: the API plus the site's static assets (ADR 0003, 0010). A version is
 // immutable; each apply that changes anything creates a new version and deploys it at 100%.
 export class Worker extends Construct {
@@ -34,6 +38,8 @@ export class Worker extends Construct {
   readonly version: WorkerVersion;
   /** Cloudflare attaches a custom domain only to a Worker that has a deployment. */
   readonly deployment: WorkersDeployment;
+  /** The Worker's schedules from api/wrangler.toml: the daily final-deletion job (ADR 0015). */
+  readonly cronTrigger: WorkersCronTrigger;
 
   constructor(scope: Construct, id: string, props: WorkerProps) {
     super(scope, id);
@@ -70,10 +76,13 @@ export class Worker extends Construct {
           contentType: "application/javascript+module",
           contentFile: `${bundle.path}/index.js`,
         },
-        // Wrangler's bundle imports text files (api's snippets) as separate modules beside
-        // index.js; each is uploaded as a text module under the name index.js imports.
+        // Wrangler's bundle imports text files (api's snippets, and its SDK logos through the
+        // Text rule in api/wrangler.toml) as separate modules beside index.js; each is uploaded
+        // as a text module under the name index.js imports.
         ...readdirSync(props.apiBundleDir)
-          .filter((file) => file.endsWith(".txt"))
+          .filter((file) =>
+            textModuleExtensions.some((extension) => file.endsWith(extension)),
+          )
           .sort()
           .map((file) => ({
             name: file,
@@ -106,6 +115,14 @@ export class Worker extends Construct {
       scriptName: this.worker.name,
       strategy: "percentage",
       versions: [{ versionId: this.version.id, percentage: 100 }],
+    });
+
+    // The schedules run the deployed version's scheduled handler, so they follow the deployment.
+    this.cronTrigger = new WorkersCronTrigger(this, "cron-trigger", {
+      accountId,
+      scriptName: this.worker.name,
+      schedules: props.wrangler.crons.map((cron) => ({ cron })),
+      dependsOn: [this.deployment],
     });
   }
 

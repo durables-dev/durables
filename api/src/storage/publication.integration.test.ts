@@ -148,7 +148,7 @@ describe("recording a publication", () => {
   test("writes no account when the version's row fails, so the batch is all or nothing", async () => {
     // The version's SDK check refuses this value. Its insert is the batch's last statement.
     const identity = newIdentity();
-    const listing = newListing(newHandle(), { sdk: "Java" as Sdk });
+    const listing = newListing(newHandle(), { sdk: "Kotlin" as Sdk });
     const before = await readAllRows(env.DB);
 
     await expect(
@@ -165,11 +165,7 @@ describe("recording a publication", () => {
     // Publishing never leaves a listing with no version. It makes the listing insert fail.
     const seeded = await seedAccount(env.DB);
     const listing = newListing(seeded.handle);
-    await seedListing(env.DB, {
-      handle: seeded.handle,
-      name: listing.name,
-      description: "Left behind",
-    });
+    await seedListing(env.DB, { handle: seeded.handle, name: listing.name });
     const before = await readAllRows(env.DB);
 
     const result = await storage().createPublication({ listing });

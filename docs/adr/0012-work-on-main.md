@@ -1,6 +1,6 @@
 # ADR 0012: Work on `main` now the site is live
 
-**Status:** accepted, 2026-11-12. **Decided by:** David Dieruf. Supersedes the branch rule in [ADR 0001](0001-fresh-start.md).
+**Status:** accepted, 2026-11-12. **Decided by:** David Dieruf. Supersedes the branch rule in [ADR 0001](0001-fresh-start.md). The branch rule is superseded by [ADR 0014](0014-release-branches.md): work now collects on a release branch before it reaches `main`.
 
 ## Decision
 
