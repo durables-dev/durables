@@ -50,7 +50,7 @@ export function SiteHeader({
           {showsSignIn ? (
             <Link
               to={signInPagePath(`${location.pathname}${location.search}`)}
-              className={styles["sign-in"]}
+              className={styles["signIn"]}
             >
               Sign in
             </Link>

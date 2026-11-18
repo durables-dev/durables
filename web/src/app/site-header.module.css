@@ -61,3 +61,11 @@
 .sign-in:hover {
   background: var(--selected);
 }
+
+/* The mark, wordmark, Sign in and Contribute need 350px. On a screen narrower than 360px the mark
+   alone leads home, so they still fit. The link keeps its accessible name, "Durables home". */
+@media (width < 360px) {
+  .wordmark {
+    display: none;
+  }
+}
