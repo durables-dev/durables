@@ -13,7 +13,7 @@ import { useSaveDescription } from "./use-save-description";
 
 export interface UpdateFormProps {
   address: ListingAddress;
-  /** The listing's saved description, which the field starts with. */
+  /** The viewed version's saved description, which the field starts with. */
   description: string;
   /** Closes the dialog without saving. */
   onCancel: () => void;

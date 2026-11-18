@@ -54,3 +54,36 @@ export function RemovedNotice() {
     </div>
   );
 }
+
+export interface OlderVersionNoticeProps {
+  address: ListingAddress;
+  /** The latest version, which the notice links to. */
+  latest: string;
+}
+
+// The notice everyone sees on a version older than the latest, unless that version is
+// deprecated, which has its own notice.
+export function OlderVersionNotice({
+  address,
+  latest,
+}: OlderVersionNoticeProps) {
+  return (
+    <div role="status" className={`${styles["notice"]} ${styles["older"]}`}>
+      <p className={styles["text"]}>
+        <span>
+          You&apos;re viewing{" "}
+          <span className={`${styles["version"]} ${styles["lead"]}`}>
+            {address.version}
+          </span>
+          , an older version. It stays available at its own address, unchanged.
+        </span>
+      </p>
+      <Link
+        to={listingPath({ ...address, version: latest })}
+        className={styles["use"]}
+      >
+        View the latest, {latest}
+      </Link>
+    </div>
+  );
+}

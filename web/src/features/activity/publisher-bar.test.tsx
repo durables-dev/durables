@@ -17,7 +17,7 @@ const description = "Charges a card with Stripe and returns the charge ID.";
 
 const barText = "You published this activity. Only you see these controls.";
 const intro =
-  "This changes on every version's page right away. Anything about how the activity behaves needs a new version instead.";
+  "This changes the description of 1.0.0 only. Anything about how the activity behaves needs a new version instead.";
 const fixedNote =
   "Can't change here: the code, its detected facts and its address. Those are fixed when a version is published.";
 
@@ -94,7 +94,7 @@ function updateButton(screen: Screen) {
 }
 
 function dialog(screen: Screen) {
-  return screen.getByRole("dialog", { name: "Update listing" });
+  return screen.getByRole("dialog", { name: "Update 1.0.0" });
 }
 
 async function openOwnListing(path?: string) {
@@ -239,7 +239,7 @@ describe("the Update dialog", () => {
       .element(
         dialog(screen).getByRole("heading", {
           level: 2,
-          name: "Update listing",
+          name: "Update 1.0.0",
         }),
       )
       .toBeVisible();

@@ -4,7 +4,7 @@ import { fieldMessage, problemFrom } from "@/lib/problem";
 // are told apart by their status, never by their title or detail (web/CONVENTIONS.md, Data).
 
 /** Shown above the buttons for a refusal with no answer of its own, or a network failure. */
-export const saveFailedMessage = "Your description wasn't saved. Try again.";
+export const saveFailedMessage = "That didn't save. Try again.";
 
 /** What the Update dialog does after a save was refused. The typed text is kept either way. */
 export type SaveRefusal =
