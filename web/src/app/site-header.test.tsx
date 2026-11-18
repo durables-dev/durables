@@ -3,7 +3,7 @@ import "@/styles/global.css";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, test } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { worker } from "../../test/worker";
 import { TestProviders } from "../../test/test-providers";
@@ -294,6 +294,17 @@ describe("the Sign in link", () => {
     await expect.element(contributeLink(screen)).toBeVisible();
     await expect.poll(() => reads.count).toBe(1);
     await expect.element(signInLink(screen)).not.toBeInTheDocument();
+  });
+
+  test("is drawn as a pill, the height of Contribute", async () => {
+    const screen = await renderHeader();
+
+    const link = signInLink(screen);
+    await expect.element(link).toBeVisible();
+    expect(link.element().getBoundingClientRect().height).toBe(
+      contributeLink(screen).element().getBoundingClientRect().height,
+    );
+    expect(getComputedStyle(link.element()).borderRadius).not.toBe("0px");
   });
 
   test("signed in, it is not shown", async () => {
@@ -605,5 +616,52 @@ describe("on the Contribute pages", () => {
     expect(
       screen.getByRole("link", { name: /contribute/i }).elements(),
     ).toHaveLength(0);
+  });
+});
+
+describe("on a narrow screen", () => {
+  // Restores the viewport the test started with.
+  async function atWidth(width: number, run: () => Promise<void>) {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 640);
+    try {
+      await run();
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  }
+
+  function wordmark(screen: Screen) {
+    return screen.getByRole("banner").getByText("Durables", { exact: true });
+  }
+
+  test("at 320px, signed out, the header fits with Sign in and Contribute, and the mark alone leads home", async () => {
+    await atWidth(320, async () => {
+      const screen = await renderHeader();
+
+      await expect.element(signInLink(screen)).toBeVisible();
+      await expect.element(contributeLink(screen)).toBeVisible();
+      await expect.element(wordmark(screen)).not.toBeVisible();
+      await expect
+        .element(screen.getByRole("link", { name: "Durables home" }))
+        .toBeVisible();
+      const header = screen.getByRole("banner").element();
+      expect(header.scrollWidth).toBeLessThanOrEqual(320);
+      expect(
+        contributeLink(screen).element().getBoundingClientRect().right,
+      ).toBeLessThanOrEqual(320);
+    });
+  });
+
+  test("at 360px, the wordmark still shows beside the mark, and the header fits", async () => {
+    await atWidth(360, async () => {
+      const screen = await renderHeader();
+
+      await expect.element(wordmark(screen)).toBeVisible();
+      await expect.element(contributeLink(screen)).toBeVisible();
+      expect(
+        screen.getByRole("banner").element().scrollWidth,
+      ).toBeLessThanOrEqual(360);
+    });
   });
 });
