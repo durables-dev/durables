@@ -1,4 +1,4 @@
-/* Dark red, never Ember (DUR-2). */
+/* The deprecated and removed notices are dark red, never Ember (DUR-2). */
 .notice {
   margin-bottom: 18px;
   padding: 14px 16px;
@@ -42,4 +42,10 @@
   text-decoration: none;
   display: flex;
   align-items: center;
+}
+
+/* The older-version notice is Gold tint, not red: nothing is wrong with the version. */
+.older {
+  border-color: var(--border);
+  background: var(--notice);
 }

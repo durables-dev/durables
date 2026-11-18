@@ -3,8 +3,9 @@ import { worker } from "../../../test/worker";
 import { python } from "./test-versions";
 
 // A fake listing API for ddieruf/charge-card that keeps its state between requests, for the
-// publisher bar's deprecate and remove tests. It answers the version read at any of the
-// listing's versions, and the listing read, deprecation and removal routes as the API does.
+// publisher bar's and the Versions section's tests. It answers the version read at any of the
+// listing's versions, and the listing read, description save, deprecation and removal routes
+// as the API does.
 
 const versionPath = "/api/activities/:handle/:name/versions/:version";
 const listingPath = "/api/activities/:handle/:name";
@@ -19,11 +20,21 @@ export interface TestDeprecation {
   replacement: string | null;
 }
 
+/** What the listing read says about one version, beyond its number and deprecation. */
+export interface TestVersionDetails {
+  whatChanged?: string;
+  basedOn?: string;
+  description?: string;
+  publishedAt?: string;
+}
+
 export interface TestListingState {
   removedBy: "publisher" | "durables" | null;
   /** Newest first. */
   versions: string[];
   deprecations: Record<string, TestDeprecation>;
+  /** Each version's note, base, description and date. Unset fields take the defaults. */
+  details: Record<string, TestVersionDetails>;
 }
 
 /** A write the fake API received, with its method, route and body. */
@@ -78,6 +89,7 @@ export function serveChargeCard(initial: Partial<TestListingState> = {}) {
     removedBy: null,
     versions: ["1.0.0"],
     deprecations: {},
+    details: {},
     ...initial,
   };
   const writes: TestWrite[] = [];
@@ -86,14 +98,17 @@ export function serveChargeCard(initial: Partial<TestListingState> = {}) {
     handle: "ddieruf",
     name: "charge-card",
     removedBy: state.removedBy,
-    versions: state.versions.map((version) => ({
-      version,
-      publishedAt: new Date().toISOString(),
-      whatChanged: null,
-      basedOn: null,
-      deprecation: state.deprecations[version] ?? null,
-      description: chargeCardDescription,
-    })),
+    versions: state.versions.map((version) => {
+      const details = state.details[version] ?? {};
+      return {
+        version,
+        publishedAt: details.publishedAt ?? new Date().toISOString(),
+        whatChanged: details.whatChanged ?? null,
+        basedOn: details.basedOn ?? null,
+        deprecation: state.deprecations[version] ?? null,
+        description: details.description ?? chargeCardDescription,
+      };
+    }),
   });
 
   worker.use(
@@ -104,6 +119,19 @@ export function serveChargeCard(initial: Partial<TestListingState> = {}) {
         : problem(404);
     }),
     http.get(listingPath, () => HttpResponse.json(listing())),
+    http.patch(listingPath, async ({ request }) => {
+      const body = (await request.json()) as {
+        version: string;
+        description: string;
+      };
+      writes.push({ method: "PATCH", path: "description", body });
+      if (!state.versions.includes(body.version)) return problem(404);
+      state.details[body.version] = {
+        ...state.details[body.version],
+        description: body.description,
+      };
+      return HttpResponse.json(listing());
+    }),
     http.put(deprecationPath, async ({ request, params }) => {
       const body = (await request.json()) as TestDeprecation;
       writes.push({ method: "PUT", path: "deprecation", body });
@@ -144,4 +172,9 @@ export function refuse(
 ) {
   const path = route === "deprecation" ? deprecationPath : removalPath;
   worker.use(http[method](path, () => problem(status)));
+}
+
+/** Makes the description save refuse every request with the given status. */
+export function refuseDescription(status: number) {
+  worker.use(http.patch(listingPath, () => problem(status)));
 }

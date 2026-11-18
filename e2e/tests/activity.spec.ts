@@ -69,8 +69,9 @@ function publisherBar(page: Page) {
   return main(page).getByRole("region", { name: "Your listing controls" });
 }
 
+/** The Update dialog, named for the version it changes, such as "Update 1.0.0". */
 function updateDialog(page: Page) {
-  return page.getByRole("dialog", { name: "Update listing" });
+  return page.getByRole("dialog", { name: /^Update \d+\.\d+\.\d+$/ });
 }
 
 function descriptionField(page: Page) {

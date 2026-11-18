@@ -551,7 +551,7 @@ test('a copy the clipboard refuses does not show "Copied" and says it failed', a
   await expect.element(status).not.toHaveTextContent("Copied");
 });
 
-test("the section bar links to the Implement, Configure and Source anchors, and there is no Quickstart", async () => {
+test("the section bar links to the Implement, Configure, Source and Versions anchors, and there is no Quickstart", async () => {
   publishChargeCard();
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
@@ -564,13 +564,15 @@ test("the section bar links to the Implement, Configure and Source anchors, and 
     "Implement",
     "Configure",
     "Source",
+    "Versions",
   ]);
   expect(links.map((link) => link.getAttribute("href"))).toEqual([
     "#implement",
     "#configure",
     "#source",
+    "#versions",
   ]);
-  for (const id of ["implement", "configure", "source"]) {
+  for (const id of ["implement", "configure", "source", "versions"]) {
     expect(document.getElementById(id)?.tagName).toBe("SECTION");
   }
   await expect

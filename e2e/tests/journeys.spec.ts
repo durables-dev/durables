@@ -516,7 +516,8 @@ test(
     const main = page.getByRole("main");
     const resultCard = main.getByRole("article", { name: title, exact: true });
     const bar = main.getByRole("region", { name: "Your listing controls" });
-    const dialog = page.getByRole("dialog", { name: "Update listing" });
+    // The publisher updates 1.1.0, the version they land on.
+    const dialog = page.getByRole("dialog", { name: "Update 1.1.0" });
     const field = dialog.getByLabel("One-line description", { exact: true });
     const fixedNote = dialog.getByText(
       "Can't change here: the code, its detected facts and its address. Those are fixed when a version is published.",
@@ -560,10 +561,10 @@ test(
 
       await expect(dialog).toBeVisible();
       await expect(
-        dialog.getByRole("heading", { level: 2, name: "Update listing" }),
+        dialog.getByRole("heading", { level: 2, name: "Update 1.1.0" }),
       ).toBeVisible();
       await expect(dialog).toHaveAccessibleDescription(
-        "This changes on every version's page right away. Anything about how the activity behaves needs a new version instead.",
+        "This changes the description of 1.1.0 only. Anything about how the activity behaves needs a new version instead.",
       );
       await expect(field).toHaveValue(before);
       await expect(

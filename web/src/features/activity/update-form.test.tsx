@@ -17,7 +17,7 @@ const problemHeaders = { "Content-Type": "application/problem+json" };
 const saved = "Charges a card with Stripe and returns the charge ID.";
 const edited = "Charges a card with Stripe and returns the charge and receipt.";
 
-const failedMessage = "Your description wasn't saved. Try again.";
+const failedMessage = "That didn't save. Try again.";
 const signInEndedMessage = "Your sign-in has ended. Sign in again, then save.";
 
 const owner: SessionUser = {
@@ -154,7 +154,7 @@ async function openOwnListing(...paths: string[]) {
 type Opened = Awaited<ReturnType<typeof openOwnListing>>;
 
 function dialog({ screen }: Opened) {
-  return screen.getByRole("dialog", { name: "Update listing" });
+  return screen.getByRole("dialog", { name: "Update 1.0.0" });
 }
 
 function field(opened: Opened) {

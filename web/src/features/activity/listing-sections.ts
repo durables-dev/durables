@@ -3,6 +3,7 @@ export const listingSections = [
   { id: "implement", label: "Implement" },
   { id: "configure", label: "Configure" },
   { id: "source", label: "Source" },
+  { id: "versions", label: "Versions" },
 ] as const;
 
 export type ListingSectionId = (typeof listingSections)[number]["id"];
