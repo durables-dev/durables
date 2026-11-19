@@ -130,13 +130,16 @@ export const dotnetEnvironmentRead: Pattern = {
     /(?<![\w.])(?:System\s*\.\s*)?Environment\s*\.\s*GetEnvironmentVariable\s*\(\s*@?"([A-Za-z_]\w*)"/,
 };
 
-/** A `using` directive. Group 1 is the root of the namespace it imports. */
+/**
+ * A `using` directive. Group 1 is the root of the namespace it imports, and group 2 its second
+ * part, when it has one.
+ */
 export const dotnetUsingDirective: Pattern = {
   name: "dotnet-using-directive",
   description:
-    "A using directive, such as using Stripe;, global using Amazon.S3;, using static Polly.Policy; or using Json = Newtonsoft.Json;. The dependency is the first part of the namespace. using statements and declarations, such as using var client = ..., are not directives.",
+    "A using directive, such as using Stripe;, global using Amazon.S3;, using static Polly.Policy; or using Json = Newtonsoft.Json;. The dependency is the first part of the namespace, or its first two parts under the AWS SDK's Amazon namespace, such as Amazon.S3. using statements and declarations, such as using var client = ..., are not directives.",
   regex: new RegExp(
-    String.raw`${usingDirectiveStart}([A-Za-z_]\w*)(?:[ \t]*\.[ \t]*[A-Za-z_]\w*)*[ \t]*(?:<[^;\n]*>)?[ \t]*;`,
+    String.raw`${usingDirectiveStart}([A-Za-z_]\w*)(?:[ \t]*\.[ \t]*([A-Za-z_]\w*))?(?:[ \t]*\.[ \t]*[A-Za-z_]\w*)*[ \t]*(?:<[^;\n]*>)?[ \t]*;`,
     "m",
   ),
 };
@@ -177,6 +180,12 @@ const frameworkNamespaces: ReadonlySet<string> = new Set([
 /** Whether a `using` directive's root namespace is .NET's or Microsoft's own. */
 export const isDotnetFrameworkNamespace = (root: string) =>
   frameworkNamespaces.has(root);
+
+/**
+ * The AWS SDK for .NET's root namespace. Each AWS service's client has its own namespace under
+ * it, such as `Amazon.S3`, so a dependency under it is named by its first two parts.
+ */
+const awsSdkNamespace = "Amazon";
 
 /** The root namespace of the Temporal .NET SDK, which Dependencies leaves out. */
 const temporalSdkNamespace = "Temporalio";
@@ -590,12 +599,19 @@ export const dotnetDetector: Detector = {
     );
     const dependencies = firstByName(
       found(dotnetUsingDirective).flatMap((match) => {
-        const root = match[1];
-        return root === undefined ||
+        const [, root, second] = match;
+        if (
+          root === undefined ||
           root === temporalSdkNamespace ||
           isStandardLibrary(root)
-          ? []
-          : [{ name: root, line: lineOf(match.index) }];
+        ) {
+          return [];
+        }
+        const name =
+          root === awsSdkNamespace && second !== undefined
+            ? `${root}.${second}`
+            : root;
+        return [{ name, line: lineOf(match.index) }];
       }),
     );
     const heartbeats: LineRef[] = found(dotnetHeartbeatCall).map((match) => ({

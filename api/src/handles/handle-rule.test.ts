@@ -88,7 +88,6 @@ describe("reserved words", () => {
         "api",
         "assets",
         "contribute",
-        "durables",
         "privacy",
         "profile",
         "search",

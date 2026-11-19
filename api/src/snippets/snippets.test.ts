@@ -1665,7 +1665,9 @@ describe("generateSnippets", () => {
       expect(snippet(snippets, "workflows.ts")).toContain(
         "export async function chargeCardWorkflow(input: ChargeRequest): Promise<string> {",
       );
-      expect(snippet(snippets, "workflows.ts")).not.toMatch(/heartbeat/i);
+      expect(snippet(snippets, "workflows.ts")).toContain(
+        'heartbeatTimeout: "10 seconds",',
+      );
       expect(snippet(snippets, runLabel)).toContain(
         "export STRIPE_API_KEY=...",
       );
@@ -1705,7 +1707,9 @@ describe("generateSnippets", () => {
       expect(snippet(snippets, runLabel)).toContain(
         "export STRIPE_API_KEY=...",
       );
-      expect(snippet(snippets, "workflow.go")).not.toMatch(/heartbeat/i);
+      expect(snippet(snippets, "workflow.go")).toContain(
+        "HeartbeatTimeout: 10 * time.Second,",
+      );
     });
 
     it("generates from a detected .NET activity", () => {
@@ -1735,7 +1739,7 @@ describe("generateSnippets", () => {
     });
   });
 
-  describe("the workflow sets only the start-to-close timeout", () => {
+  describe("the workflow sets the start-to-close timeout, and a heartbeat timeout only when the activity heartbeats", () => {
     const timeoutLines: Record<AcceptedSdk, string> = {
       Go: "workflow.ActivityOptions{\n        // Temporal requires a start-to-close timeout. Set it for your activity.\n        StartToCloseTimeout: 30 * time.Second,\n    })",
       Java: "            ActivityOptions.newBuilder()\n                    // Temporal requires a start-to-close timeout. Set it for your activity.\n                    .setStartToCloseTimeout(Duration.ofSeconds(30))\n                    .build());",
@@ -1783,8 +1787,41 @@ describe("generateSnippets", () => {
       }
     });
 
+    const heartbeatComment =
+      "The activity heartbeats. Temporal fails an attempt that sends no heartbeat within this timeout.";
+    const heartbeatLines: Record<AcceptedSdk, string> = {
+      Go: `        // ${heartbeatComment}
+        HeartbeatTimeout: 10 * time.Second,
+        // Temporal requires a start-to-close timeout.`,
+      Java: `                    // ${heartbeatComment}
+                    .setHeartbeatTimeout(Duration.ofSeconds(10))
+                    // Temporal requires a start-to-close timeout.`,
+      Python: `            # ${heartbeatComment}
+            heartbeat_timeout=timedelta(seconds=10),
+            # Temporal requires a start-to-close timeout.`,
+      TypeScript: `    // ${heartbeatComment}
+    heartbeatTimeout: "10 seconds",
+    // Temporal requires a start-to-close timeout.`,
+      ".NET": `                // ${heartbeatComment}
+                HeartbeatTimeout = TimeSpan.FromSeconds(10),
+                // Temporal requires a start-to-close timeout.`,
+      Ruby: `            # ${heartbeatComment}
+            heartbeat_timeout: 10,
+            # Temporal requires a start-to-close timeout.`,
+      PHP: `            ActivityOptions::new()
+                ->withStartToCloseTimeout(30)
+                // ${heartbeatComment}
+                ->withHeartbeatTimeout(10),
+        );`,
+      Rust: `                ActivityOptions::with_start_to_close_timeout(Duration::from_secs(30))
+                    // ${heartbeatComment}
+                    .heartbeat_timeout(Duration::from_secs(10))
+                    .build(),
+            )`,
+    };
+
     it.each(sdks)(
-      "sets no heartbeat timeout when the %s activity heartbeats",
+      "sets a 10-second heartbeat timeout, with the comment, when the %s activity heartbeats",
       (sdk) => {
         for (const input of ["ChargeRequest", null]) {
           expect(
@@ -1792,21 +1829,38 @@ describe("generateSnippets", () => {
               input,
               heartbeats: [{ line: 9 }, { line: 12 }],
             }),
-          ).not.toMatch(/heartbeat/i);
+          ).toContain(heartbeatLines[sdk]);
         }
       },
     );
 
     it.each(sdks)(
-      "gives a %s activity that heartbeats the same files as one that doesn't",
+      "sets no heartbeat timeout when the %s activity never heartbeats",
       (sdk) => {
         for (const input of ["ChargeRequest", null]) {
+          expect(workflowFile(sdk, { input, heartbeats: [] })).not.toMatch(
+            /heartbeat/i,
+          );
+        }
+      },
+    );
+
+    it.each(sdks)(
+      "changes only the workflow file when a %s activity heartbeats",
+      (sdk) => {
+        for (const input of ["ChargeRequest", null]) {
+          const withHeartbeats = generateSnippets(
+            factsFor(sdk, { input, heartbeats: [{ line: 9 }] }),
+            address,
+          );
+          const without = generateSnippets(
+            factsFor(sdk, { input, heartbeats: [] }),
+            address,
+          );
+          const workflowLabel = fileLabels(sdk)[0];
           expect(
-            generateSnippets(
-              factsFor(sdk, { input, heartbeats: [{ line: 9 }] }),
-              address,
-            ),
-          ).toEqual(generateSnippets(factsFor(sdk, { input }), address));
+            withHeartbeats.filter(({ label }) => label !== workflowLabel),
+          ).toEqual(without.filter(({ label }) => label !== workflowLabel));
         }
       },
     );

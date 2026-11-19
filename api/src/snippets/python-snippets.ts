@@ -1,5 +1,6 @@
 import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
+import { heartbeatTimeoutLines } from "./heartbeat-timeout";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
 import { environmentLines } from "./shell";
@@ -81,6 +82,11 @@ export const pythonSnippets = (
   // installing one by its import name can fetch someone else's package.
   const modules = facts.dependencies.map(({ name }) => name);
   const values = {
+    heartbeatTimeout: heartbeatTimeoutLines(
+      facts,
+      "#",
+      "heartbeat_timeout=timedelta(seconds=10),",
+    ),
     activity,
     workflowClass,
     inputType: facts.input ?? "",
