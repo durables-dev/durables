@@ -1,5 +1,6 @@
 import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
+import { heartbeatTimeoutLines } from "./heartbeat-timeout";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
 import { environmentLines, shellWord } from "./shell";
@@ -41,6 +42,11 @@ export const dotnetSnippets = (
   const hasOutput = facts.output !== null;
   const namespaces = facts.dependencies.map(({ name }) => name);
   const values = {
+    heartbeatTimeout: heartbeatTimeoutLines(
+      facts,
+      "//",
+      "HeartbeatTimeout = TimeSpan.FromSeconds(10),",
+    ),
     activity,
     workflowClass,
     inputType: facts.input ?? "",

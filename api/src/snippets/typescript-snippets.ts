@@ -1,5 +1,6 @@
 import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
+import { heartbeatTimeoutLines } from "./heartbeat-timeout";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
 import { environmentLines, shellWord } from "./shell";
@@ -88,6 +89,11 @@ export const typescriptSnippets = (
       : `import type { ${sortedNames(names).join(", ")} } from "./activities";`;
   const known = facts.input !== null;
   const values = {
+    heartbeatTimeout: heartbeatTimeoutLines(
+      facts,
+      "//",
+      'heartbeatTimeout: "10 seconds",',
+    ),
     activity,
     workflowFunction: `${activity}Workflow`,
     inputType: facts.input ?? "",

@@ -1,5 +1,6 @@
 import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
+import { heartbeatTimeoutComment, heartbeats } from "./heartbeat-timeout";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
 import { environmentLines } from "./shell";
@@ -56,6 +57,14 @@ export const phpSnippets = (facts: FactValues, address: Address): Snippet[] => {
   const hasOutput = facts.output !== null;
   const namespaces = facts.dependencies.map(({ name }) => name);
   const values = {
+    activityOptions: heartbeats(facts)
+      ? [
+          "ActivityOptions::new()",
+          "    ->withStartToCloseTimeout(30)",
+          `    ${heartbeatTimeoutComment("//")}`,
+          "    ->withHeartbeatTimeout(10),",
+        ].join("\n")
+      : "ActivityOptions::new()->withStartToCloseTimeout(30),",
     activity,
     workflowClass,
     workflowFile,

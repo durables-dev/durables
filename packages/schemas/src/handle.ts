@@ -6,7 +6,6 @@ import { z } from "zod";
 // official account. Every entry fits the format rule.
 export const reservedHandles = new Set([
   "admin",
-  "durables",
   "temporal",
   "api",
   "assets",

@@ -1,5 +1,6 @@
 import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
+import { heartbeatTimeoutLines } from "./heartbeat-timeout";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
 import { environmentLines, shellWord } from "./shell";
@@ -132,6 +133,11 @@ export const goSnippets = (facts: FactValues, address: Address): Snippet[] => {
   const packages = otherPackages([input, output]);
   const modules = facts.dependencies.map(({ name }) => shellWord(name));
   const values = {
+    heartbeatTimeout: heartbeatTimeoutLines(
+      facts,
+      "//",
+      "HeartbeatTimeout: 10 * time.Second,",
+    ),
     activity,
     workflowName,
     inputType: input ?? "",

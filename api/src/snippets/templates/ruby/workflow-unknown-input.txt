@@ -9,6 +9,7 @@ class {{workflowClass}} < Temporalio::Workflow::Definition
         Temporalio::Workflow.execute_activity(
             {{activity}},
             *args,
+            {{heartbeatTimeout}}
             # Temporal requires a start-to-close timeout. Set it for your activity.
             start_to_close_timeout: 30
         )

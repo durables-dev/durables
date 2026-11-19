@@ -9,6 +9,7 @@ import (
 {{packagesNote}}
 func {{workflowName}}(ctx workflow.Context, input {{inputType}}) {{workflowResults}} {
     ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+        {{heartbeatTimeout}}
         // Temporal requires a start-to-close timeout. Set it for your activity.
         StartToCloseTimeout: 30 * time.Second,
     })

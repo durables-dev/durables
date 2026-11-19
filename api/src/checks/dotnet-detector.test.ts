@@ -510,7 +510,7 @@ describe("dotnetDetector", () => {
       ]);
     });
 
-    it("resolves using static and alias forms to the namespace root, in order", () => {
+    it("resolves using static and alias forms to the namespace root, in order, and the AWS SDK's to its service", () => {
       const code = lines(
         "using static Polly.Policy;",
         "using Json = Newtonsoft.Json;",
@@ -528,7 +528,31 @@ describe("dotnetDetector", () => {
       expect(onlyActivity(code).dependencies).toEqual([
         { name: "Polly", line: 1 },
         { name: "Newtonsoft", line: 2 },
-        { name: "Amazon", line: 3 },
+        { name: "Amazon.S3", line: 3 },
+      ]);
+    });
+
+    it("names an AWS SDK dependency by its service, and every other by its root", () => {
+      const code = lines(
+        "using Amazon.S3.Model;",
+        "using static Amazon.DynamoDBv2.DocumentModel.Document;",
+        "using Amazon.Runtime;",
+        "using Amazon;",
+        "using AmazonExtras.S3;",
+        "using Temporalio.Activities;",
+        "",
+        "public class Activities",
+        "{",
+        "    [Activity]",
+        "    public Task<Out> Act(In input) => Run(input);",
+        "}",
+      );
+      expect(onlyActivity(code).dependencies).toEqual([
+        { name: "Amazon.S3", line: 1 },
+        { name: "Amazon.DynamoDBv2", line: 2 },
+        { name: "Amazon.Runtime", line: 3 },
+        { name: "Amazon", line: 4 },
+        { name: "AmazonExtras", line: 5 },
       ]);
     });
 

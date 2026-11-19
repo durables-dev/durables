@@ -18,7 +18,7 @@ class {{workflowClass}}
         $activities = Workflow::newActivityStub(
             Activities::class,
             // Temporal requires a start-to-close timeout. Set it for your activity.
-            ActivityOptions::new()->withStartToCloseTimeout(30),
+            {{activityOptions}}
         );
 
         // Detection couldn't read what {{activity}} takes. Change mixed to its input
