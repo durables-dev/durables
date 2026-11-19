@@ -18,6 +18,7 @@ class {{workflowClass}}Impl implements {{workflowClass}} {
     private final Activities activities = Workflow.newActivityStub(
             Activities.class,
             ActivityOptions.newBuilder()
+                    {{heartbeatTimeout}}
                     // Temporal requires a start-to-close timeout. Set it for your activity.
                     .setStartToCloseTimeout(Duration.ofSeconds(30))
                     .build());

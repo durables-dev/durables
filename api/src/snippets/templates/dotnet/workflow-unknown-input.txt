@@ -14,6 +14,7 @@ public class {{workflowClass}}
             (Activities activities) => activities.{{activity}}(input),
             new ActivityOptions
             {
+                {{heartbeatTimeout}}
                 // Temporal requires a start-to-close timeout. Set it for your activity.
                 StartToCloseTimeout = TimeSpan.FromSeconds(30),
             });

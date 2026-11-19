@@ -164,8 +164,8 @@ describe("a suggestion that cannot be had", () => {
   });
 
   test("is still returned when the username cleans to a reserved word", () => {
-    expect(suggestHandle({ provider: "github", username: "Durables" })).toBe(
-      "durables",
+    expect(suggestHandle({ provider: "github", username: "Temporal" })).toBe(
+      "temporal",
     );
   });
 });

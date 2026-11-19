@@ -304,9 +304,28 @@ describe("integrations from detected code", () => {
     expect(integrationsIn(code)).toEqual(["Amazon S3"]);
   });
 
-  it("reads no integration from a .NET Amazon.S3 using", () => {
+  it("reads Amazon S3 from a .NET using of the AWS SDK's S3 namespace", () => {
     const code = [
       "using Amazon.S3;",
+      "using Amazon.S3.Model;",
+      "using Temporalio.Activities;",
+      "",
+      "public class Reports",
+      "{",
+      "    [Activity]",
+      "    public async Task<string> UploadReportAsync(string key)",
+      "    {",
+      "        return key;",
+      "    }",
+      "}",
+    ].join("\n");
+    expect(integrationsIn(code)).toEqual(["Amazon S3"]);
+  });
+
+  it("reads no integration from a .NET using of another AWS SDK namespace", () => {
+    const code = [
+      "using Amazon;",
+      "using Amazon.Runtime;",
       "using Temporalio.Activities;",
       "",
       "public class Reports",

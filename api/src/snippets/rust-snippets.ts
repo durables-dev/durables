@@ -1,5 +1,6 @@
 import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
+import { heartbeatTimeoutComment, heartbeats } from "./heartbeat-timeout";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
 import { environmentLines } from "./shell";
@@ -155,6 +156,14 @@ export const rustSnippets = (
     .filter((name) => !fragmentCrates.has(name))
     .map((name) => cargoNames.get(name) ?? name);
   const values = {
+    activityOptions: heartbeats(facts)
+      ? [
+          "ActivityOptions::with_start_to_close_timeout(Duration::from_secs(30))",
+          `    ${heartbeatTimeoutComment("//")}`,
+          "    .heartbeat_timeout(Duration::from_secs(10))",
+          "    .build(),",
+        ].join("\n")
+      : "ActivityOptions::start_to_close_timeout(Duration::from_secs(30)),",
     activity,
     workflowClass: workflowStruct,
     inputType: facts.input ?? "",

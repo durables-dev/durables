@@ -11,7 +11,8 @@ interface IntegrationPackages {
   readonly integration: Integration;
   /**
    * The integration keys of this integration's client libraries: package names for Python and
-   * TypeScript, the namespace root of a `using` for .NET, the import path before any
+   * TypeScript, the namespace root of a `using` for .NET (its first two parts under the AWS SDK's
+   * `Amazon`, such as `Amazon.S3`), the import path before any
    * major-version suffix for Go, a package's organisation or AWS service for Java, the
    * package-level namespace for PHP, such as `Aws\S3`, gem names for Ruby and crate names for
    * Rust. A dependency implies the integration when its SDK's normaliser gives it the same key
@@ -34,6 +35,7 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "github.com/aws/aws-sdk-go/service/s3",
       "software.amazon.awssdk.services.s3",
       "com.amazonaws.services.s3",
+      "Amazon.S3",
       "Aws\\S3",
       "aws-sdk-s3",
       "rusoto_s3",

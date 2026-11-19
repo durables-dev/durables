@@ -1,5 +1,6 @@
 import type { FactValues } from "../checks/facts";
 import type { Address, Snippet } from "../storage/version-document";
+import { heartbeatTimeoutLines } from "./heartbeat-timeout";
 import { installLabel, runLabel } from "./labels";
 import { render } from "./render";
 import { environmentLines } from "./shell";
@@ -64,6 +65,11 @@ export const javaSnippets = (
   const packages = facts.dependencies.map(({ name }) => name);
   const output = facts.output;
   const values = {
+    heartbeatTimeout: heartbeatTimeoutLines(
+      facts,
+      "//",
+      ".setHeartbeatTimeout(Duration.ofSeconds(10))",
+    ),
     activity,
     workflowClass,
     workerClass,

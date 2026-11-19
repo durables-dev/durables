@@ -16,6 +16,7 @@ class {{workflowClass}}:
         return await workflow.execute_activity(
             {{activity}},
             args=args,
+            {{heartbeatTimeout}}
             # Temporal requires a start-to-close timeout. Set it for your activity.
             start_to_close_timeout=timedelta(seconds=30),
         )
