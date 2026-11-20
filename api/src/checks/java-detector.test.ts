@@ -487,6 +487,50 @@ describe("the Java detector", () => {
     it("reads every activity as synchronous", () => {
       expect(onlyActivity(activityWith()).runsAs).toBe("sync");
     });
+
+    it("names a type nested in the activity's interface through the interface", () => {
+      const code = lines(
+        "import io.temporal.activity.ActivityInterface;",
+        "import java.util.List;",
+        "",
+        "@ActivityInterface",
+        "public interface Payments {",
+        "    record ChargeRequest(long amount) {}",
+        "    record Receipt(String id) {}",
+        "",
+        "    List<Receipt> charge(ChargeRequest request);",
+        "",
+        "    class Impl implements Payments {",
+        "        public List<Receipt> charge(ChargeRequest request) { return List.of(); }",
+        "    }",
+        "}",
+      );
+      const facts = onlyActivity(code);
+      expect({ input: facts.input, output: facts.output }).toEqual({
+        input: "Payments.ChargeRequest",
+        output: "List<Payments.Receipt>",
+      });
+    });
+
+    it("leaves top-level and already-qualified types as written", () => {
+      const code = lines(
+        "import io.temporal.activity.ActivityInterface;",
+        "",
+        "record ChargeRequest(long amount) {}",
+        "",
+        "@ActivityInterface",
+        "public interface Payments {",
+        "    record Receipt(String id) {}",
+        "",
+        "    Payments.Receipt charge(ChargeRequest request);",
+        "}",
+      );
+      const facts = onlyActivity(code);
+      expect({ input: facts.input, output: facts.output }).toEqual({
+        input: "ChargeRequest",
+        output: "Payments.Receipt",
+      });
+    });
   });
 
   describe("non-retryable errors", () => {

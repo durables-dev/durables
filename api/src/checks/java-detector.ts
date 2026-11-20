@@ -450,20 +450,47 @@ const membersByBody = (code: string) => {
   return (open: number): readonly Member[] => members.get(open) ?? [];
 };
 
+/**
+ * The interface that declares an activity: its name, and the names of the types declared
+ * directly in its body, such as a nested input record.
+ */
+interface Owner {
+  readonly name: string;
+  readonly nestedTypes: ReadonlySet<string>;
+}
+
+/**
+ * The type with each name the owner declares written as `Owner.Name`. A type nested in the
+ * activity's interface can only be named that way from outside the file, as the generated
+ * workflow and starter do. A name already qualified, after a dot, is left alone.
+ */
+const qualified = (type: string | null, owner: Owner | undefined) =>
+  type === null || owner === undefined || owner.nestedTypes.size === 0
+    ? type
+    : type.replace(/(?<![\w$.])[A-Za-z_$][\w$]*/g, (name) =>
+        owner.nestedTypes.has(name) ? `${owner.name}.${name}` : name,
+      );
+
 /** The activity, its input and output, and how it runs, read from its method. */
 const signatureOf = (
-  member: Member,
+  { member, owner }: ActivityMember,
   lineOf: LineOf,
 ): Pick<ActivityFacts, "activity" | "input" | "output" | "runsAs"> => {
   const returnType = typeName(member.returnType);
   return {
     activity: { name: member.name, line: lineOf(member.nameAt) },
-    input: readInput(member.parameters),
-    output: returnType === "void" ? null : returnType,
+    input: qualified(readInput(member.parameters), owner),
+    output: returnType === "void" ? null : qualified(returnType, owner),
     // The Java SDK calls an activity method on a worker thread and waits for it to return.
     runsAs: "sync",
   };
 };
+
+/** An activity method, and the @ActivityInterface that declares it when there is one. */
+interface ActivityMember {
+  readonly member: Member;
+  readonly owner: Owner | undefined;
+}
 
 /** Whether a member's modifiers hold the modifier. */
 const hasModifier = ({ modifiers }: Member, modifier: string) =>
@@ -474,34 +501,47 @@ const hasModifier = ({ modifiers }: Member, modifier: string) =>
  * of each annotated interface. Without one, they are the public instance methods of each class
  * that implements an interface, leaving out the methods every class has from Object.
  */
-const activityMembers = (code: string): Member[] => {
+const activityMembers = (code: string): ActivityMember[] => {
   const membersOf = membersByBody(code);
-  const interfaces = allMatches(javaActivityInterfaceAnnotation, code).flatMap(
-    (annotation) => {
-      const after = annotation.index + annotation[0].length;
-      const declaration = javaTypeDeclaration.regex.exec(code.slice(after));
-      if (declaration?.[1] !== "interface") {
-        return [];
-      }
-      const open = code.indexOf("{", after + declaration.index);
-      return open === -1 ? [] : [open];
-    },
-  );
-  if (interfaces.length > 0) {
-    return [...new Set(interfaces)].flatMap((open) =>
-      membersOf(open).filter(
-        (member) => member.abstract && !hasModifier(member, "static"),
-      ),
-    );
+  const interfaces = new Map<number, string>();
+  for (const annotation of allMatches(javaActivityInterfaceAnnotation, code)) {
+    const after = annotation.index + annotation[0].length;
+    const declaration = javaTypeDeclaration.regex.exec(code.slice(after));
+    if (declaration?.[1] !== "interface" || declaration[2] === undefined) {
+      continue;
+    }
+    const open = code.indexOf("{", after + declaration.index);
+    if (open !== -1) {
+      interfaces.set(open, declaration[2]);
+    }
+  }
+  if (interfaces.size > 0) {
+    const enclosing = enclosingBrackets(code, []);
+    const declarations = allMatches(javaTypeDeclaration, code);
+    return [...interfaces].flatMap(([open, name]) => {
+      const owner: Owner = {
+        name,
+        nestedTypes: new Set(
+          declarations
+            .filter((declaration) => enclosing[declaration.index] === open)
+            .flatMap((declaration) => declaration[2] ?? []),
+        ),
+      };
+      return membersOf(open)
+        .filter((member) => member.abstract && !hasModifier(member, "static"))
+        .map((member) => ({ member, owner }));
+    });
   }
   return allMatches(javaImplementingClass, code).flatMap((declaration) =>
-    membersOf(declaration.index + declaration[0].length - 1).filter(
-      (member) =>
-        !member.abstract &&
-        hasModifier(member, "public") &&
-        !hasModifier(member, "static") &&
-        !objectMethods.has(member.name),
-    ),
+    membersOf(declaration.index + declaration[0].length - 1)
+      .filter(
+        (member) =>
+          !member.abstract &&
+          hasModifier(member, "public") &&
+          !hasModifier(member, "static") &&
+          !objectMethods.has(member.name),
+      )
+      .map((member) => ({ member, owner: undefined })),
   );
 };
 

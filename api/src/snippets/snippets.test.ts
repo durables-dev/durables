@@ -653,6 +653,7 @@ const expectedSnippets: Record<AcceptedSdk, Snippet[]> = {
     {
       label: "Install",
       code: [
+        "# The Temporal Rust SDK needs protoc to build: install the Protocol Buffers compiler first.",
         "[dependencies]",
         'futures = "0.3"',
         'serde = { version = "1", features = ["derive"] }',
@@ -757,7 +758,7 @@ const expectedSnippets: Record<AcceptedSdk, Snippet[]> = {
         "use std::time::{SystemTime, UNIX_EPOCH};",
         "",
         "use temporalio_client::{",
-        "    Client, ClientOptions, Connection, GetWorkflowResultOptions, WorkflowOptions,",
+        "    Client, ClientOptions, Connection, WorkflowGetResultOptions, WorkflowStartOptions,",
         "    envconfig::LoadClientConfigProfileOptions,",
         "};",
         "",
@@ -779,10 +780,10 @@ const expectedSnippets: Record<AcceptedSdk, Snippet[]> = {
         "        .start_workflow(",
         "            ChargeCardWorkflow::run,",
         "            input,",
-        '            WorkflowOptions::new("charge-card", format!("charge-card-{}", started)).build(),',
+        '            WorkflowStartOptions::new("charge-card", format!("charge-card-{}", started)).build(),',
         "        )",
         "        .await?;",
-        "    let result = handle.get_result(GetWorkflowResultOptions::default()).await?;",
+        "    let result = handle.get_result(WorkflowGetResultOptions::default()).await?;",
         '    println!("{result:?}");',
         "    Ok(())",
         "}",
@@ -1712,6 +1713,30 @@ describe("generateSnippets", () => {
       );
     });
 
+    it("names a Java activity's nested types through its interface in the workflow and starter", () => {
+      const code = [
+        "import io.temporal.activity.ActivityInterface;",
+        "",
+        "@ActivityInterface",
+        "public interface Payments {",
+        "    record ChargeRequest(long amount) {}",
+        "    record ChargeResult(String id) {}",
+        "",
+        "    ChargeResult chargeCard(ChargeRequest request);",
+        "}",
+      ].join("\n");
+      const snippets = generateSnippets(
+        checkCode(code, registeredSdks),
+        address,
+      );
+      expect(snippet(snippets, "ChargeCardWorkflow.java")).toContain(
+        "Payments.ChargeResult run(Payments.ChargeRequest input)",
+      );
+      expect(snippet(snippets, "Starter.java")).toContain(
+        "Payments.ChargeRequest input = null;",
+      );
+    });
+
     it("generates from a detected .NET activity", () => {
       const code = [
         "using Stripe;",
@@ -1908,7 +1933,7 @@ describe("generateSnippets", () => {
       ],
       [
         "Rust",
-        '[dependencies]\nfutures = "0.3"\nserde = { version = "1", features = ["derive"] }\ntemporalio-client = "1.0.0"\ntemporalio-common = "1.0.0"\ntemporalio-macros = "1.0.0"\ntemporalio-sdk = "1.0.0"\ntemporalio-workflow = "1.0.0"\ntokio = { version = "1", features = ["full"] }',
+        '# The Temporal Rust SDK needs protoc to build: install the Protocol Buffers compiler first.\n[dependencies]\nfutures = "0.3"\nserde = { version = "1", features = ["derive"] }\ntemporalio-client = "1.0.0"\ntemporalio-common = "1.0.0"\ntemporalio-macros = "1.0.0"\ntemporalio-sdk = "1.0.0"\ntemporalio-workflow = "1.0.0"\ntokio = { version = "1", features = ["full"] }',
       ],
       [
         "PHP",
@@ -1981,7 +2006,8 @@ describe("generateSnippets", () => {
         }),
         installLabel,
       );
-      expect(install.split("\n")[0]).toBe("[dependencies]");
+      expect(install.split("\n")[0]).toMatch(/^# .*protoc/);
+      expect(install.split("\n")[1]).toBe("[dependencies]");
       expect(install).toContain('temporalio-sdk = "1.0.0"');
       expect(install).not.toMatch(/cargo add/);
       // serde and tokio are already in the fragment, so the note leaves them out.
@@ -2061,7 +2087,7 @@ describe("generateSnippets", () => {
       );
       const starter = snippet(snippets, "starter.rs");
       expect(starter).toContain(
-        "    handle.get_result(GetWorkflowResultOptions::default()).await?;\n    Ok(())",
+        "    handle.get_result(WorkflowGetResultOptions::default()).await?;\n    Ok(())",
       );
       expect(starter).not.toContain("println!");
     });

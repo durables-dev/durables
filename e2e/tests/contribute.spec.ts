@@ -240,14 +240,15 @@ const accepted: AcceptedSample[] = [
   },
   {
     // The interface carries the activity, so the SDK is detected. Runs as is the Java SDK's
-    // wording from the SDK catalog.
+    // wording from the SDK catalog. SmsRequest is declared inside SmsActivities, so it is
+    // named through the interface.
     sdk: "Java",
     code: java,
     activity: "sendSms",
     facts: [
       "Java",
       "sendSms",
-      "SmsRequest → String",
+      "SmsActivities.SmsRequest → String",
       "Synchronous: the Java SDK runs it for you",
       "None raised",
       `TWILIO_ACCOUNT_SID (line ${String(lineOf(java, 'System.getenv("TWILIO_ACCOUNT_SID")'))}), TWILIO_AUTH_TOKEN (line ${String(lineOf(java, 'System.getenv("TWILIO_AUTH_TOKEN")'))}), TWILIO_FROM_NUMBER (line ${String(lineOf(java, 'System.getenv("TWILIO_FROM_NUMBER")'))})`,

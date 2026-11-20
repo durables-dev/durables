@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use temporalio_client::{
-    Client, ClientOptions, Connection, GetWorkflowResultOptions, WorkflowOptions,
+    Client, ClientOptions, Connection, WorkflowGetResultOptions, WorkflowStartOptions,
     envconfig::LoadClientConfigProfileOptions,
 };
 
@@ -22,10 +22,10 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .start_workflow(
             {{workflowClass}}::run,
             input,
-            WorkflowOptions::new({{taskQueue}}, format!({{workflowIdFormat}}, started)).build(),
+            WorkflowStartOptions::new({{taskQueue}}, format!({{workflowIdFormat}}, started)).build(),
         )
         .await?;
-    {{resultBinding}}handle.get_result(GetWorkflowResultOptions::default()).await?;
+    {{resultBinding}}handle.get_result(WorkflowGetResultOptions::default()).await?;
     {{printResult}}
     Ok(())
 }
