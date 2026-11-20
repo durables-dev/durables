@@ -20,6 +20,8 @@ describe("the shared integration list", () => {
       "Anthropic Claude",
       "Google Gemini",
       "Amazon Bedrock",
+      "Redis",
+      "Amazon SQS",
     ]);
   });
 
@@ -128,7 +130,7 @@ describe.each(lowerCasingSdks)("integrations from %s imports", (sdk) => {
     expect(
       integrationsFor(
         sdk,
-        imports("stripe-mock", "pgvector", "@aws-sdk/client-sqs"),
+        imports("stripe-mock", "pgvector", "@aws-sdk/client-dynamodb"),
       ),
     ).toEqual([]);
   });
@@ -176,7 +178,7 @@ describe("integrations from Ruby requires", () => {
   it.each([
     "faraday",
     "httparty",
-    "aws-sdk-sqs",
+    "aws-sdk-dynamodb",
     "stripe-ruby-mock",
     "pg_search",
     "slack-notifier",

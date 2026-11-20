@@ -203,6 +203,37 @@ describe("the AI provider chips, from each SDK's client", () => {
     },
   );
 
+  it.each<[Sdk, string, string]>([
+    ["Python", "import redis.asyncio as redis", "Redis"],
+    ["TypeScript", 'import { createClient } from "redis";', "Redis"],
+    ["TypeScript", 'import Redis from "ioredis";', "Redis"],
+    ["Go", '"github.com/redis/go-redis/v9"', "Redis"],
+    ["Java", "import redis.clients.jedis.UnifiedJedis;", "Redis"],
+    ["Java", "import io.lettuce.core.RedisClient;", "Redis"],
+    [".NET", "using StackExchange.Redis;", "Redis"],
+    ["PHP", "use Predis\\Client;", "Redis"],
+    ["Ruby", 'require "redis"', "Redis"],
+    ["Rust", "use redis::AsyncCommands;", "Redis"],
+    ["Python", "from aws_sdk_sqs.client import SQSClient", "Amazon SQS"],
+    [
+      "TypeScript",
+      'import { SQSClient } from "@aws-sdk/client-sqs";',
+      "Amazon SQS",
+    ],
+    ["Go", '"github.com/aws/aws-sdk-go-v2/service/sqs"', "Amazon SQS"],
+    [
+      "Java",
+      "import software.amazon.awssdk.services.sqs.SqsClient;",
+      "Amazon SQS",
+    ],
+    [".NET", "using Amazon.SQS;", "Amazon SQS"],
+    ["PHP", "use Aws\\Sqs\\SqsClient;", "Amazon SQS"],
+    ["Ruby", 'require "aws-sdk-sqs"', "Amazon SQS"],
+    ["Rust", "use aws_sdk_sqs::Client;", "Amazon SQS"],
+  ])("reads %s %s as %s", (sdk, importLine, integration) => {
+    expect(integrationsOf(sdk, importLine)).toEqual([integration]);
+  });
+
   it("keeps boto3 on Amazon S3 only, so a Python Bedrock listing needs AWS's Bedrock client", () => {
     expect(integrationsOf("Python", "import boto3")).toEqual(["Amazon S3"]);
   });

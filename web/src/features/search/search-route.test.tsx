@@ -197,6 +197,8 @@ test("filters carried in from the address show as selected chips", async () => {
     ["Anthropic Claude", false],
     ["Google Gemini", false],
     ["Amazon Bedrock", false],
+    ["Redis", false],
+    ["Amazon SQS", false],
   ]);
 });
 
