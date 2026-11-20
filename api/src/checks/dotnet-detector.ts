@@ -137,7 +137,7 @@ export const dotnetEnvironmentRead: Pattern = {
 export const dotnetUsingDirective: Pattern = {
   name: "dotnet-using-directive",
   description:
-    "A using directive, such as using Stripe;, global using Amazon.S3;, using static Polly.Policy; or using Json = Newtonsoft.Json;. The dependency is the first part of the namespace, or its first two parts under the Amazon and Google namespaces, such as Amazon.S3 or Google.GenAI. using statements and declarations, such as using var client = ..., are not directives.",
+    "A using directive, such as using Stripe;, global using Amazon.S3;, using static Polly.Policy; or using Json = Newtonsoft.Json;. The dependency is the first part of the namespace, or its first two parts under the Amazon, Google and StackExchange namespaces, such as Amazon.S3, Google.GenAI or StackExchange.Redis. using statements and declarations, such as using var client = ..., are not directives.",
   regex: new RegExp(
     String.raw`${usingDirectiveStart}([A-Za-z_]\w*)(?:[ \t]*\.[ \t]*([A-Za-z_]\w*))?(?:[ \t]*\.[ \t]*[A-Za-z_]\w*)*[ \t]*(?:<[^;\n]*>)?[ \t]*;`,
     "m",
@@ -186,7 +186,11 @@ export const isDotnetFrameworkNamespace = (root: string) =>
  * `Amazon.BedrockRuntime`) and Google's (`Google.GenAI`, `Google.Cloud`). A dependency under one
  * is named by its first two parts, because the root alone says nothing about the product.
  */
-const sharedRootNamespaces: ReadonlySet<string> = new Set(["Amazon", "Google"]);
+const sharedRootNamespaces: ReadonlySet<string> = new Set([
+  "Amazon",
+  "Google",
+  "StackExchange",
+]);
 
 /** The root namespace of the Temporal .NET SDK, which Dependencies leaves out. */
 const temporalSdkNamespace = "Temporalio";

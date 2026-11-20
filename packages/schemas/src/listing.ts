@@ -13,6 +13,8 @@ export const integrations = [
   "Anthropic Claude",
   "Google Gemini",
   "Amazon Bedrock",
+  "Redis",
+  "Amazon SQS",
 ] as const;
 
 export const integrationSchema = z.enum(integrations);

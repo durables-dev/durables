@@ -352,7 +352,7 @@ test("the Filters button shows how many filters are on, and no count when none a
 
 // The chips
 
-test("the panel shows the SDK chips with Any on, and the eight integration chips", async () => {
+test("the panel shows the SDK chips with Any on, and the ten integration chips", async () => {
   const opened = await openHome();
   await openFilters(opened);
 
@@ -380,6 +380,8 @@ test("the panel shows the SDK chips with Any on, and the eight integration chips
     ["Anthropic Claude", false],
     ["Google Gemini", false],
     ["Amazon Bedrock", false],
+    ["Redis", false],
+    ["Amazon SQS", false],
   ]);
   await expect
     .element(opened.screen.getByRole("button", { name: /More/ }))
@@ -422,7 +424,7 @@ test("when the catalog cannot be read, Home still renders and the only SDK chip 
     .element(opened.screen.getByText("What runtime are you using?"))
     .toBeVisible();
   expect(pressedIn(opened, "Temporal SDK")).toEqual([["Any", true]]);
-  expect(pressedIn(opened, "Integrates with")).toHaveLength(8);
+  expect(pressedIn(opened, "Integrates with")).toHaveLength(10);
   await expect.element(searchBox(opened)).toBeVisible();
 });
 
@@ -482,6 +484,8 @@ test("several integrations can be on together", async () => {
     ["Anthropic Claude", false],
     ["Google Gemini", false],
     ["Amazon Bedrock", false],
+    ["Redis", false],
+    ["Amazon SQS", false],
   ]);
 });
 

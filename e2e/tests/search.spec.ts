@@ -207,6 +207,8 @@ test.describe("as an anonymous visitor", () => {
           "Anthropic Claude",
           "Google Gemini",
           "Amazon Bedrock",
+          "Redis",
+          "Amazon SQS",
         ]);
 
         await chip(page, "Temporal SDK", "TypeScript").click();

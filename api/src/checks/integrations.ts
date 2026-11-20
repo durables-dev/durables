@@ -136,6 +136,34 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "aws-sdk-bedrockruntime",
     ],
   },
+  // Redis clients: redis (Python, npm's node-redis, the Ruby gem, the Rust crate), ioredis,
+  // go-redis, Jedis and Lettuce (Java), StackExchange.Redis (.NET) and Predis (PHP).
+  {
+    integration: "Redis",
+    packages: [
+      "redis",
+      "ioredis",
+      "github.com/redis/go-redis",
+      "redis.clients",
+      "io.lettuce",
+      "StackExchange.Redis",
+      "Predis",
+    ],
+  },
+  // The AWS SDKs' SQS clients. As with Bedrock, boto3 is not listed: it already implies S3.
+  // Python's SQS-only client is AWS's aws-sdk-sqs, imported as aws_sdk_sqs.
+  {
+    integration: "Amazon SQS",
+    packages: [
+      "aws_sdk_sqs",
+      "@aws-sdk/client-sqs",
+      "github.com/aws/aws-sdk-go-v2/service/sqs",
+      "software.amazon.awssdk.services.sqs",
+      "Amazon.SQS",
+      "Aws\\Sqs",
+      "aws-sdk-sqs",
+    ],
+  },
 ];
 
 /** A PHP namespace's separator. No other SDK's integration keys contain it. */
