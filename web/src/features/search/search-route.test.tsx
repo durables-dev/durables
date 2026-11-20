@@ -193,6 +193,10 @@ test("filters carried in from the address show as selected chips", async () => {
     ["Amazon S3", true],
     ["Postgres", false],
     ["Slack", false],
+    ["OpenAI", false],
+    ["Anthropic Claude", false],
+    ["Google Gemini", false],
+    ["Amazon Bedrock", false],
   ]);
 });
 

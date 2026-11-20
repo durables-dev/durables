@@ -198,7 +198,16 @@ test.describe("as an anonymous visitor", () => {
           page
             .getByRole("group", { name: "Integrates with" })
             .getByRole("button"),
-        ).toHaveText(["Stripe", "Amazon S3", "Postgres", "Slack"]);
+        ).toHaveText([
+          "Stripe",
+          "Amazon S3",
+          "Postgres",
+          "Slack",
+          "OpenAI",
+          "Anthropic Claude",
+          "Google Gemini",
+          "Amazon Bedrock",
+        ]);
 
         await chip(page, "Temporal SDK", "TypeScript").click();
         await chip(page, "Integrates with", "Amazon S3").click();

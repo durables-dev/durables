@@ -137,7 +137,7 @@ export const dotnetEnvironmentRead: Pattern = {
 export const dotnetUsingDirective: Pattern = {
   name: "dotnet-using-directive",
   description:
-    "A using directive, such as using Stripe;, global using Amazon.S3;, using static Polly.Policy; or using Json = Newtonsoft.Json;. The dependency is the first part of the namespace, or its first two parts under the AWS SDK's Amazon namespace, such as Amazon.S3. using statements and declarations, such as using var client = ..., are not directives.",
+    "A using directive, such as using Stripe;, global using Amazon.S3;, using static Polly.Policy; or using Json = Newtonsoft.Json;. The dependency is the first part of the namespace, or its first two parts under the Amazon and Google namespaces, such as Amazon.S3 or Google.GenAI. using statements and declarations, such as using var client = ..., are not directives.",
   regex: new RegExp(
     String.raw`${usingDirectiveStart}([A-Za-z_]\w*)(?:[ \t]*\.[ \t]*([A-Za-z_]\w*))?(?:[ \t]*\.[ \t]*[A-Za-z_]\w*)*[ \t]*(?:<[^;\n]*>)?[ \t]*;`,
     "m",
@@ -182,10 +182,11 @@ export const isDotnetFrameworkNamespace = (root: string) =>
   frameworkNamespaces.has(root);
 
 /**
- * The AWS SDK for .NET's root namespace. Each AWS service's client has its own namespace under
- * it, such as `Amazon.S3`, so a dependency under it is named by its first two parts.
+ * Root namespaces that many unrelated products share: the AWS SDK's `Amazon` (`Amazon.S3`,
+ * `Amazon.BedrockRuntime`) and Google's (`Google.GenAI`, `Google.Cloud`). A dependency under one
+ * is named by its first two parts, because the root alone says nothing about the product.
  */
-const awsSdkNamespace = "Amazon";
+const sharedRootNamespaces: ReadonlySet<string> = new Set(["Amazon", "Google"]);
 
 /** The root namespace of the Temporal .NET SDK, which Dependencies leaves out. */
 const temporalSdkNamespace = "Temporalio";
@@ -608,7 +609,7 @@ export const dotnetDetector: Detector = {
           return [];
         }
         const name =
-          root === awsSdkNamespace && second !== undefined
+          sharedRootNamespaces.has(root) && second !== undefined
             ? `${root}.${second}`
             : root;
         return [{ name, line: lineOf(match.index) }];

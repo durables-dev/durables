@@ -9,6 +9,10 @@ export const integrations = [
   "Amazon S3",
   "Postgres",
   "Slack",
+  "OpenAI",
+  "Anthropic Claude",
+  "Google Gemini",
+  "Amazon Bedrock",
 ] as const;
 
 export const integrationSchema = z.enum(integrations);

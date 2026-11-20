@@ -456,7 +456,7 @@ describe("pythonDetector", () => {
       ]);
     });
 
-    it("resolves submodules, aliases and lists to the top-level package, in order", () => {
+    it("resolves submodules, aliases and lists to the top-level package, in order, and google's to two parts", () => {
       const code = lines(
         "from temporalio import activity",
         "import google.cloud.storage as gcs, boto3",
@@ -468,10 +468,27 @@ describe("pythonDetector", () => {
         "    ...",
       );
       expect(onlyActivity(code).dependencies).toEqual([
-        { name: "google", line: 2 },
+        { name: "google.cloud", line: 2 },
         { name: "boto3", line: 2 },
         { name: "slack_sdk", line: 3 },
         { name: "redis", line: 7 },
+      ]);
+    });
+
+    it("names a package under the shared google namespace by its first two parts, however it is imported", () => {
+      const code = lines(
+        "from temporalio import activity",
+        "from google import genai",
+        "from google.genai import types",
+        "from google.protobuf import json_format",
+        "",
+        "@activity.defn",
+        "async def act(input: In) -> Out:",
+        "    ...",
+      );
+      expect(onlyActivity(code).dependencies).toEqual([
+        { name: "google.genai", line: 2 },
+        { name: "google.protobuf", line: 4 },
       ]);
     });
 
