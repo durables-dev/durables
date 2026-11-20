@@ -111,23 +111,29 @@ export const pythonImportStatement: Pattern = {
   regex: /(?:^|;)[ \t]*import[ \t]+([^\n#;]+)/m,
 };
 
-/** One module in an `import` statement's list. Group 1 is its top-level package. */
+/**
+ * One module in an `import` statement's list. Group 1 is its top-level package and group 2 its
+ * second part, when it has one.
+ */
 export const pythonImportedModule: Pattern = {
   name: "python-imported-module",
   description:
-    "One module named in an import statement, such as httpx, a.b or httpx as h. The package is the first part of the name.",
-  regex: /^\s*([A-Za-z_]\w*)(?:\s*\.\s*\w+)*(?:\s+as\s+\w+)?\s*$/,
+    "One module named in an import statement, such as httpx, a.b or httpx as h. The package is the first part of the name, or the first two under the shared google namespace, such as google.genai.",
+  regex:
+    /^\s*([A-Za-z_]\w*)(?:\s*\.\s*(\w+))?(?:\s*\.\s*\w+)*(?:\s+as\s+\w+)?\s*$/,
 };
 
 /**
- * A `from … import` statement with an absolute module. Group 1 is its top-level package.
- * Relative imports, such as `from . import models`, do not match.
+ * A `from … import` statement with an absolute module. Group 1 is its top-level package, group 2
+ * the module's second part when it has one, and group 3 the first name imported. Relative
+ * imports, such as `from . import models`, do not match.
  */
 export const pythonFromImport: Pattern = {
   name: "python-from-import",
   description:
-    "A from … import statement, such as from httpx import Client or from a.b import c. The package is the first part of the module. Relative imports such as from .models import X are not dependencies.",
-  regex: /(?:^|;)[ \t]*from[ \t]+([A-Za-z_]\w*)[\w.]*[ \t]+import\b/m,
+    "A from … import statement, such as from httpx import Client or from a.b import c. The package is the first part of the module, or the first two under the shared google namespace: from google.genai import types and from google import genai are both google.genai. Relative imports such as from .models import X are not dependencies.",
+  regex:
+    /(?:^|;)[ \t]*from[ \t]+([A-Za-z_]\w*)(?:\.(\w+))?[\w.]*[ \t]+import\b[ \t]*\(?\s*(\w+)?/m,
 };
 
 /** A heartbeat call, such as `activity.heartbeat()`. */
@@ -182,6 +188,19 @@ export const pythonPatterns: readonly Pattern[] = [
 
 /** The Temporal SDK's own package, which Dependencies leaves out. */
 const temporalSdkPackage = "temporalio";
+
+/**
+ * Namespace packages that many unrelated libraries share. A dependency under one is named by
+ * its first two parts, such as google.genai, because the namespace alone says nothing about
+ * the library.
+ */
+const sharedNamespacePackages: ReadonlySet<string> = new Set(["google"]);
+
+/** The package, or the package and its second part under a shared namespace. */
+const dependencyName = (root: string, second: string | undefined) =>
+  sharedNamespacePackages.has(root) && second !== undefined
+    ? `${root}.${second}`
+    : root;
 
 /** Every match of a pattern in the text, in order. */
 const allMatches = (pattern: Pattern, text: string) => [
@@ -447,14 +466,24 @@ const readDependencies = (
     .filter(inCode)
     .flatMap((match) =>
       (match[1] ?? "").split(",").flatMap((module) => {
-        const name = pythonImportedModule.regex.exec(module)?.[1];
-        return name === undefined ? [] : [{ name, offset: match.index }];
+        const parts = pythonImportedModule.regex.exec(module);
+        const root = parts?.[1];
+        return root === undefined
+          ? []
+          : [{ name: dependencyName(root, parts?.[2]), offset: match.index }];
       }),
     );
   const fromImports = allMatches(pythonFromImport, source.text)
     .filter(inCode)
     .flatMap((match) =>
-      match[1] === undefined ? [] : [{ name: match[1], offset: match.index }],
+      match[1] === undefined
+        ? []
+        : [
+            {
+              name: dependencyName(match[1], match[2] ?? match[3]),
+              offset: match.index,
+            },
+          ],
     );
   const thirdParty = [...imports, ...fromImports]
     .filter(

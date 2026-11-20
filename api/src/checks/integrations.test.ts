@@ -10,8 +10,17 @@ const imports = (...names: string[]) =>
   names.map((name, index) => ({ name, line: index + 1 }));
 
 describe("the shared integration list", () => {
-  it("holds exactly Stripe, Amazon S3, Postgres and Slack", () => {
-    expect(integrations).toEqual(["Stripe", "Amazon S3", "Postgres", "Slack"]);
+  it("holds the four service chips, then the four AI provider chips", () => {
+    expect(integrations).toEqual([
+      "Stripe",
+      "Amazon S3",
+      "Postgres",
+      "Slack",
+      "OpenAI",
+      "Anthropic Claude",
+      "Google Gemini",
+      "Amazon Bedrock",
+    ]);
   });
 
   it("is what detection can report, each integration once", () => {

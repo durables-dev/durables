@@ -80,6 +80,62 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "async-stripe",
     ],
   },
+  // AI model providers: a chip names the provider whose client is imported. "openai" is the
+  // Python, npm and Ruby package, the .NET namespace root and openai-php's namespace;
+  // async-openai is Rust's most used OpenAI crate (there is no official one).
+  {
+    integration: "OpenAI",
+    packages: [
+      "openai",
+      "github.com/openai/openai-go",
+      "com.openai",
+      "async-openai",
+    ],
+  },
+  // "anthropic" is the Python package, Ruby gem, .NET namespace root and the PHP SDK's
+  // namespace. Rust has no official crate; misanthropic and clust are community clients.
+  {
+    integration: "Anthropic Claude",
+    packages: [
+      "anthropic",
+      "@anthropic-ai/sdk",
+      "github.com/anthropics/anthropic-sdk-go",
+      "com.anthropic",
+      "misanthropic",
+      "clust",
+    ],
+  },
+  // The Google Gen AI SDKs, as Python (google.genai), npm, Go, Java (com.google.genai) and .NET
+  // (Google.GenAI) name them. PHP, Ruby and Rust have no official client: google-gemini-php's
+  // namespace Gemini, the gemini-ai gem and the gemini-rust crate are community ones.
+  {
+    integration: "Google Gemini",
+    packages: [
+      "google.genai",
+      "@google/genai",
+      "google.golang.org/genai",
+      "com.google.genai",
+      "Google.GenAI",
+      "Gemini",
+      "gemini-ai",
+      "gemini-rust",
+    ],
+  },
+  // The AWS SDKs' Bedrock runtime clients. boto3 is not listed: it is the AWS SDK for every
+  // service, and it already implies Amazon S3. Python's Bedrock-only client is AWS's
+  // aws-sdk-bedrock-runtime, imported as aws_sdk_bedrock_runtime.
+  {
+    integration: "Amazon Bedrock",
+    packages: [
+      "aws_sdk_bedrock_runtime",
+      "@aws-sdk/client-bedrock-runtime",
+      "github.com/aws/aws-sdk-go-v2/service/bedrockruntime",
+      "software.amazon.awssdk.services.bedrockruntime",
+      "Amazon.BedrockRuntime",
+      "Aws\\BedrockRuntime",
+      "aws-sdk-bedrockruntime",
+    ],
+  },
 ];
 
 /** A PHP namespace's separator. No other SDK's integration keys contain it. */

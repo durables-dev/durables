@@ -197,13 +197,24 @@ export const javaAwsServicePackage: Pattern = {
 };
 
 /**
+ * A package of one Google product, such as `com.google.genai` from `com.google.genai.types`.
+ * Group 1 is the package up to and including the product.
+ */
+export const javaGoogleProductPackage: Pattern = {
+  name: "java-google-product-package",
+  description:
+    "A package of one Google product, such as com.google.genai from com.google.genai.types. Google publishes many unrelated libraries under com.google, so its integration key is the package up to the product's name.",
+  regex: /^(com\.google\.[a-z0-9_$]+)(?:\.|$)/,
+};
+
+/**
  * The organisation part of a package: its first two parts, the reverse domain name, such as
  * `com.stripe`. Group 1 is that part.
  */
 export const javaOrganisationPackage: Pattern = {
   name: "java-organisation-package",
   description:
-    "The first two parts of a package, the reverse domain name of the organisation that publishes it, such as com.stripe from com.stripe.model or org.postgresql from org.postgresql.ds. It is the integration key of every package but an AWS service's.",
+    "The first two parts of a package, the reverse domain name of the organisation that publishes it, such as com.stripe from com.stripe.model or org.postgresql from org.postgresql.ds. It is the integration key of every package but an AWS service's or a Google product's.",
   regex: /^([a-z_$][\w$]*\.[a-z_$][\w$]*)(?:\.|$)/,
 };
 
@@ -225,6 +236,7 @@ export const javaPatterns: readonly Pattern[] = [
   javaPackageDeclaration,
   javaHeartbeatCall,
   javaAwsServicePackage,
+  javaGoogleProductPackage,
   javaOrganisationPackage,
 ];
 
@@ -260,7 +272,8 @@ const temporalSdkPackage = "io.temporal";
 
 /**
  * The integration key of a Java dependency, which is a package. An AWS service's package keeps
- * the service, so S3 is told apart from other services. Any other package is keyed by its
+ * the service, so S3 is told apart from other services, and a Google product's keeps the
+ * product, so Gen AI is told apart from Guava. Any other package is keyed by its
  * organisation, so `com.stripe.model` and `com.stripe` are both `com.stripe`.
  */
 export const normaliseJavaDependency = (pkg: string) => {
@@ -268,6 +281,10 @@ export const normaliseJavaDependency = (pkg: string) => {
   const aws = javaAwsServicePackage.regex.exec(lower)?.[1];
   if (aws !== undefined) {
     return aws;
+  }
+  const google = javaGoogleProductPackage.regex.exec(lower)?.[1];
+  if (google !== undefined) {
+    return google;
   }
   return javaOrganisationPackage.regex.exec(lower)?.[1] ?? lower;
 };
