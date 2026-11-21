@@ -235,6 +235,14 @@ describe("the AI provider chips, from each SDK's client", () => {
   });
 
   it.each<[Sdk, string, string]>([
+    ["Python", "from claude_agent_sdk import query", "Anthropic Claude"],
+    [
+      "TypeScript",
+      'import { query } from "@anthropic-ai/claude-agent-sdk";',
+      "Anthropic Claude",
+    ],
+    ["Python", "from openai_codex import Codex", "OpenAI"],
+    ["TypeScript", 'import { Codex } from "@openai/codex-sdk";', "OpenAI"],
     ["Python", "import ollama", "Ollama"],
     ["TypeScript", 'import { Ollama } from "ollama";', "Ollama"],
     ["Go", '"github.com/ollama/ollama/api"', "Ollama"],

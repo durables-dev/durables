@@ -87,23 +87,30 @@ export const integrationPackages: readonly IntegrationPackages[] = [
   },
   // AI model providers: a chip names the provider whose client is imported. "openai" is the
   // Python, npm and Ruby package, the .NET namespace root and openai-php's namespace;
-  // async-openai is Rust's most used OpenAI crate (there is no official one).
+  // async-openai is Rust's most used OpenAI crate (there is no official one). The Codex SDK
+  // (openai-codex, imported as openai_codex, and @openai/codex-sdk) runs only OpenAI's Codex.
   {
     integration: "OpenAI",
     packages: [
       "openai",
+      "openai_codex",
+      "@openai/codex-sdk",
       "github.com/openai/openai-go",
       "com.openai",
       "async-openai",
     ],
   },
   // "anthropic" is the Python package, Ruby gem, .NET namespace root and the PHP SDK's
-  // namespace. Rust has no official crate; misanthropic and clust are community clients.
+  // namespace. Rust has no official crate; misanthropic and clust are community clients. The
+  // Claude Agent SDK (claude-agent-sdk, imported as claude_agent_sdk, and
+  // @anthropic-ai/claude-agent-sdk) runs only Claude.
   {
     integration: "Anthropic Claude",
     packages: [
       "anthropic",
       "@anthropic-ai/sdk",
+      "claude_agent_sdk",
+      "@anthropic-ai/claude-agent-sdk",
       "github.com/anthropics/anthropic-sdk-go",
       "com.anthropic",
       "misanthropic",
