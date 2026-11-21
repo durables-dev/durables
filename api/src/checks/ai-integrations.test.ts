@@ -234,6 +234,50 @@ describe("the AI provider chips, from each SDK's client", () => {
     expect(integrationsOf(sdk, importLine)).toEqual([integration]);
   });
 
+  it.each<[Sdk, string, string]>([
+    ["Python", "import ollama", "Ollama"],
+    ["TypeScript", 'import { Ollama } from "ollama";', "Ollama"],
+    ["Go", '"github.com/ollama/ollama/api"', "Ollama"],
+    ["Java", "import io.github.ollama4j.Ollama;", "Ollama"],
+    [".NET", "using OllamaSharp;", "Ollama"],
+    [".NET", "using Ollama;", "Ollama"],
+    ["PHP", "use ArdaGnsrn\\Ollama\\Ollama;", "Ollama"],
+    ["Ruby", 'require "ollama"', "Ollama"],
+    ["Rust", "use ollama_rs::Ollama;", "Ollama"],
+    ["Python", "import cohere", "Cohere"],
+    ["TypeScript", 'import { CohereClientV2 } from "cohere-ai";', "Cohere"],
+    ["Go", '"github.com/cohere-ai/cohere-go/v2/client"', "Cohere"],
+    ["Java", "import com.cohere.api.Cohere;", "Cohere"],
+    [".NET", "using Cohere;", "Cohere"],
+    ["Ruby", 'require "cohere"', "Cohere"],
+    ["Python", "from groq import AsyncGroq", "Groq"],
+    ["TypeScript", 'import Groq from "groq-sdk";', "Groq"],
+    [".NET", "using GroqApiLibrary;", "Groq"],
+    [".NET", "using Groq;", "Groq"],
+    ["PHP", "use LucianoTonet\\GroqPHP\\Groq;", "Groq"],
+    ["Rust", "use groq_api_rust::AsyncGroqClient;", "Groq"],
+    ["Python", "from xai_sdk import AsyncClient", "xAI Grok"],
+    ["TypeScript", 'import { SpaceXSI } from "@xai-official/sdk";', "xAI Grok"],
+    ["TypeScript", 'import { SpaceXSI } from "@grok/sdk";', "xAI Grok"],
+    ["Go", '"github.com/ZaguanLabs/xai-sdk-go/xai"', "xAI Grok"],
+    [".NET", "using xAI;", "xAI Grok"],
+    ["Rust", "use xai_grpc_client::GrokClient;", "xAI Grok"],
+    ["Rust", "use xai_sdk::Client;", "xAI Grok"],
+  ])("reads %s %s as %s", (sdk, importLine, integration) => {
+    expect(integrationsOf(sdk, importLine)).toEqual([integration]);
+  });
+
+  it.each<[Sdk, string]>([
+    ["TypeScript", 'import groq from "groq";'],
+    ["Python", "import xai"],
+    ["Java", "import io.github.classgraph.ClassGraph;"],
+  ])(
+    "reads no provider chip from %s %s, another library with a provider's name",
+    (sdk, importLine) => {
+      expect(integrationsOf(sdk, importLine)).toEqual([]);
+    },
+  );
+
   it("keeps boto3 on Amazon S3 only, so a Python Bedrock listing needs AWS's Bedrock client", () => {
     expect(integrationsOf("Python", "import boto3")).toEqual(["Amazon S3"]);
   });

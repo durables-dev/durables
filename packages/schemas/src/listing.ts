@@ -15,6 +15,10 @@ export const integrations = [
   "Amazon Bedrock",
   "Redis",
   "Amazon SQS",
+  "Ollama",
+  "Cohere",
+  "Groq",
+  "xAI Grok",
 ] as const;
 
 export const integrationSchema = z.enum(integrations);

@@ -207,6 +207,13 @@ export const javaGoogleProductPackage: Pattern = {
   regex: /^(com\.google\.[a-z0-9_$]+)(?:\.|$)/,
 };
 
+export const javaGitHubProjectPackage: Pattern = {
+  name: "java-github-project-package",
+  description:
+    "A package published under a GitHub account's io.github namespace, such as io.github.ollama4j from io.github.ollama4j.models. io.github is shared by every project published from GitHub, so its integration key is the package up to the account's name.",
+  regex: /^(io\.github\.[a-z0-9_$]+)(?:\.|$)/,
+};
+
 /**
  * The organisation part of a package: its first two parts, the reverse domain name, such as
  * `com.stripe`. Group 1 is that part.
@@ -237,6 +244,7 @@ export const javaPatterns: readonly Pattern[] = [
   javaHeartbeatCall,
   javaAwsServicePackage,
   javaGoogleProductPackage,
+  javaGitHubProjectPackage,
   javaOrganisationPackage,
 ];
 
@@ -273,7 +281,8 @@ const temporalSdkPackage = "io.temporal";
 /**
  * The integration key of a Java dependency, which is a package. An AWS service's package keeps
  * the service, so S3 is told apart from other services, and a Google product's keeps the
- * product, so Gen AI is told apart from Guava. Any other package is keyed by its
+ * product, so Gen AI is told apart from Guava, and an io.github package keeps its account, so
+ * one GitHub-published project is told apart from another. Any other package is keyed by its
  * organisation, so `com.stripe.model` and `com.stripe` are both `com.stripe`.
  */
 export const normaliseJavaDependency = (pkg: string) => {
@@ -285,6 +294,10 @@ export const normaliseJavaDependency = (pkg: string) => {
   const google = javaGoogleProductPackage.regex.exec(lower)?.[1];
   if (google !== undefined) {
     return google;
+  }
+  const github = javaGitHubProjectPackage.regex.exec(lower)?.[1];
+  if (github !== undefined) {
+    return github;
   }
   return javaOrganisationPackage.regex.exec(lower)?.[1] ?? lower;
 };

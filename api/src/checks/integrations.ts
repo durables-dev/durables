@@ -19,6 +19,11 @@ interface IntegrationPackages {
    * as one of these, or, for a PHP namespace, a namespace inside one of them.
    */
   readonly packages: readonly string[];
+  /**
+   * Integration keys that imply the integration in one SDK only, because the same name in
+   * another SDK is a different library: npm's `groq` is Sanity's query language, not Groq.
+   */
+  readonly sdkPackages?: Partial<Record<Sdk, readonly string[]>>;
 }
 
 /**
@@ -164,6 +169,59 @@ export const integrationPackages: readonly IntegrationPackages[] = [
       "aws-sdk-sqs",
     ],
   },
+  // Ollama clients: ollama (Python, npm, and the ollama-ruby gem's require), the Go client
+  // inside Ollama's own module, ollama4j, OllamaSharp, tryAGI's Ollama (.NET), ollama-php's
+  // ArdaGnsrn\Ollama and ollama-rs.
+  {
+    integration: "Ollama",
+    packages: [
+      "ollama",
+      "github.com/ollama/ollama/api",
+      "io.github.ollama4j",
+      "OllamaSharp",
+      "ArdaGnsrn\\Ollama",
+      "ollama-rs",
+    ],
+  },
+  // Cohere's own clients (Python, npm, Go, Java), tryAGI's Cohere (.NET) and the cohere-ruby
+  // gem, required as "cohere".
+  {
+    integration: "Cohere",
+    packages: [
+      "cohere",
+      "cohere-ai",
+      "github.com/cohere-ai/cohere-go",
+      "com.cohere",
+    ],
+  },
+  // Groq's own clients are groq (Python) and groq-sdk (npm). npm's groq is Sanity's GROQ query
+  // language, so groq implies Groq in Python only, as does tryAGI's Groq namespace in .NET.
+  {
+    integration: "Groq",
+    packages: [
+      "groq-sdk",
+      "GroqApiLibrary",
+      "LucianoTonet\\GroqPHP",
+      "groq-api-rust",
+    ],
+    sdkPackages: { Python: ["groq"], ".NET": ["Groq"] },
+  },
+  // xAI's own clients are xai-sdk (Python, imported as xai_sdk) and @xai-official/sdk, also
+  // published as @grok/sdk. Go, .NET and Rust clients are community ones. PyPI's xai is an
+  // explainable-AI library, so the xAI namespace implies xAI Grok in .NET only. grok is never
+  // a key: it is a log-parsing library in most registries.
+  {
+    integration: "xAI Grok",
+    packages: [
+      "xai_sdk",
+      "xai-sdk",
+      "@xai-official/sdk",
+      "@grok/sdk",
+      "github.com/ZaguanLabs/xai-sdk-go/xai",
+      "xai-grpc-client",
+    ],
+    sdkPackages: { ".NET": ["xAI"] },
+  },
 ];
 
 /** A PHP namespace's separator. No other SDK's integration keys contain it. */
@@ -189,8 +247,8 @@ export const integrationsFor = (
   const { normaliseDependency } = sdkRegistry[sdk];
   const imported = dependencies.map(({ name }) => normaliseDependency(name));
   return integrationPackages
-    .filter(({ packages }) =>
-      packages.some((name) =>
+    .filter(({ packages, sdkPackages }) =>
+      [...packages, ...(sdkPackages?.[sdk] ?? [])].some((name) =>
         imported.some((key) => isWithin(key, normaliseDependency(name))),
       ),
     )

@@ -265,6 +265,12 @@ export const phpPatterns: readonly Pattern[] = [
 /** The root namespace of the Temporal PHP SDK, which Dependencies leaves out. */
 const temporalSdkNamespace = "temporal";
 
+/**
+ * Root namespaces, lower-cased, whose namespaces are separate products: the AWS SDK's Aws, where
+ * Aws\S3 and Aws\BedrockRuntime are different services. Nothing is folded into one of these.
+ */
+const sharedRootNamespaces: ReadonlySet<string> = new Set(["aws"]);
+
 /** A pattern made sticky, so it is read exactly where `lastIndex` is placed. */
 const stickyCopy = (pattern: Pattern) =>
   new RegExp(pattern.regex.source, `${pattern.regex.flags}y`);
@@ -465,10 +471,15 @@ const readDependencies = (
       ),
   );
   // A namespace inside another one imported, such as Stripe\Exception beside Stripe, is the
-  // same package.
+  // same package. A shared root such as the AWS SDK's Aws holds a separate product in each of
+  // its namespaces, so Aws\S3 beside Aws (from a name such as Aws\Result) is kept.
   const lowered = imported.map(({ name }) => name.toLowerCase());
   return imported.filter((_, index) =>
-    lowered.every((other) => !(lowered[index] ?? "").startsWith(`${other}\\`)),
+    lowered.every(
+      (other) =>
+        sharedRootNamespaces.has(other) ||
+        !(lowered[index] ?? "").startsWith(`${other}\\`),
+    ),
   );
 };
 
