@@ -22,6 +22,10 @@ describe("the shared integration list", () => {
       "Amazon Bedrock",
       "Redis",
       "Amazon SQS",
+      "Ollama",
+      "Cohere",
+      "Groq",
+      "xAI Grok",
     ]);
   });
 

@@ -199,6 +199,10 @@ test("filters carried in from the address show as selected chips", async () => {
     ["Amazon Bedrock", false],
     ["Redis", false],
     ["Amazon SQS", false],
+    ["Ollama", false],
+    ["Cohere", false],
+    ["Groq", false],
+    ["xAI Grok", false],
   ]);
 });
 

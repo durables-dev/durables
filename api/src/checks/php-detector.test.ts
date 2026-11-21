@@ -568,6 +568,27 @@ describe("phpDetector", () => {
         { name: "Stripe", line: 3 },
       ]);
     });
+
+    it("keeps each AWS service beside a name imported straight from Aws, such as Aws\\Result", () => {
+      const code = lines(
+        "<?php",
+        "use Aws\\S3\\S3Client;",
+        "use Aws\\Result;",
+        "use Aws\\BedrockRuntime\\BedrockRuntimeClient;",
+        "#[ActivityInterface]",
+        "interface Storage { public function copy(); }",
+      );
+      const { dependencies } = onlyActivity(code);
+      expect(dependencies).toEqual([
+        { name: "Aws\\S3", line: 2 },
+        { name: "Aws", line: 3 },
+        { name: "Aws\\BedrockRuntime", line: 4 },
+      ]);
+      expect(integrationsFor("PHP", dependencies)).toEqual([
+        "Amazon S3",
+        "Amazon Bedrock",
+      ]);
+    });
   });
 
   describe("configuration and heartbeats", () => {
