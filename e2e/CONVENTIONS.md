@@ -4,7 +4,7 @@ The rules for working in `e2e/`: the Playwright flow tests that drive the real s
 
 ## Status
 
-- Branch from `main` and open pull requests into `main`. Merging into `main` deploys to production (ADR 0012).
+- Branch from the current release branch and open pull requests into it. Only the release pull request into `main` deploys (ADR 0014).
 - `tests/smoke.spec.ts` is bootstrap: two checks that the stack is up. Nothing in it is the shape of a real test.
 - `playwright.config.ts` and `fixtures.ts` are real. The `webServer` block is how the stack starts, and every fixture starts here.
 

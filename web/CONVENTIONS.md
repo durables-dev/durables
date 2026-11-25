@@ -4,7 +4,7 @@ The rules for working in `web/`: the React site, built with Vite to static asset
 
 ## Status
 
-- Branch from `main` and open pull requests into `main`. Merging into `main` deploys to production (ADR 0012).
+- Branch from the current release branch and open pull requests into it. Only the release pull request into `main` deploys (ADR 0014).
 - `src/` is bootstrap code. `main.tsx`, `app/`, `lib/api-client.ts` and `styles/` show the wiring and are real; the home feature is a placeholder with nothing to copy.
 - The tooling configuration is real: `vite.config.ts`, `vitest.config.ts`, `tsconfig.json`, `test/`, and the `web` block in the root `eslint.config.mjs`.
 
