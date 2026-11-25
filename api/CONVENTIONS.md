@@ -4,7 +4,7 @@ The rules for working in `api/`: the Hono API on Cloudflare Workers, with D1 and
 
 ## Status
 
-- Branch from `main` and open pull requests into `main`. Merging into `main` deploys to production (ADR 0012).
+- Branch from the current release branch and open pull requests into it. Only the release pull request into `main` deploys (ADR 0014).
 - `src/index.ts` and `src/dev.ts` are bootstrap code. Only the `/api/health` route is real. Nothing else in `src/` is precedent to copy.
 - The tooling configuration is real: `tsconfig*.json`, `vitest.config.ts`, `wrangler.toml`, and the root `eslint.config.mjs`, `.prettierrc.json` and `tsconfig.base.json`.
 
