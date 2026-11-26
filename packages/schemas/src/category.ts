@@ -69,19 +69,19 @@ export const chipNames: readonly Chip[] = categories.flatMap(
   ({ chips }) => chips,
 );
 
-/** Folds a name for comparison, so names that differ only by case match. */
-const fold = (name: string) => name.toLowerCase();
+/** Folds a name for comparison, so names that differ only by case or surrounding whitespace match. */
+const fold = (name: string) => name.trim().toLowerCase();
 
 /**
- * The listed chip whose name matches `name` ignoring case, so "stripe" finds Stripe.
- * Undefined when no chip has that name. Whitespace is not trimmed.
+ * The listed chip whose name matches `name` ignoring case and surrounding whitespace,
+ * so "stripe" and " stripe" find Stripe. Undefined when no chip has that name.
  */
 export const findChip = (name: string): Chip | undefined =>
   chipNames.find((chip) => fold(chip) === fold(name));
 
 /**
- * The listed category whose name matches `name` ignoring case, so "payments" finds Payments.
- * Undefined when no category has that name. Whitespace is not trimmed.
+ * The listed category whose name matches `name` ignoring case and surrounding whitespace,
+ * so "payments" and "payments " find Payments. Undefined when no category has that name.
  */
 export const findCategory = (
   name: string,
@@ -89,8 +89,8 @@ export const findCategory = (
   categories.find((category) => fold(category.name) === fold(name));
 
 /**
- * The one category the chip named `chip` belongs to, matching the name ignoring case.
- * Undefined when no chip has that name.
+ * The one category the chip named `chip` belongs to, matching the name ignoring case and
+ * surrounding whitespace, so " stripe " is in Payments. Undefined when no chip has that name.
  */
 export const categoryOfChip = (
   chip: string,

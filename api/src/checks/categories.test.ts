@@ -99,7 +99,11 @@ describe("the category of a chip", () => {
     expect(categoryOfChip("POLLING")?.name).toBe("Workflow patterns");
   });
 
-  it.each(["Kafka", "", "All", "Payments"])(
+  it("is found whatever whitespace surrounds the chip name", () => {
+    expect(categoryOfChip(" stripe ")?.name).toBe("Payments");
+  });
+
+  it.each(["Kafka", "", "   ", "All", "Payments"])(
     "is nothing for the unknown chip %j",
     (chip) => {
       expect(() => categoryOfChip(chip)).not.toThrow();
@@ -116,11 +120,12 @@ describe("looking up a chip", () => {
     ["XAI GROK", "xAI Grok"],
     ["saga", "Saga"],
     ["Postgres", "Postgres"],
+    [" stripe", "Stripe"],
   ])("finds %j as %j", (name, chip) => {
     expect(findChip(name)).toBe(chip);
   });
 
-  it.each(["Kafka", "", " stripe", "Payments", "AmazonS3"])(
+  it.each(["Kafka", "", "   ", "Payments", "AmazonS3"])(
     "finds nothing for the unknown name %j",
     (name) => {
       expect(() => findChip(name)).not.toThrow();
@@ -137,6 +142,7 @@ describe("looking up a category", () => {
     ["Data And Storage", "Data and storage"],
     ["workflow patterns", "Workflow patterns"],
     ["Messaging", "Messaging"],
+    ["payments ", "Payments"],
   ])("finds %j as %j", (name, category) => {
     expect(findCategory(name)?.name).toBe(category);
   });
@@ -145,7 +151,7 @@ describe("looking up a category", () => {
     expect(findCategory("payments")).toBe(categories[3]);
   });
 
-  it.each(["Databases", "", "Category", "Stripe", "payments "])(
+  it.each(["Databases", "", "   ", "Category", "Stripe"])(
     "finds nothing for the unknown name %j",
     (name) => {
       expect(() => findCategory(name)).not.toThrow();
