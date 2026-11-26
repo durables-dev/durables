@@ -86,13 +86,30 @@ export const seedRetiredHandle = async (
 
 /**
  * Adds a listing with no version under it. Publishing never leaves one, so tests use it to make
- * the database step of a publish fail after its document is written.
+ * the database step of a publish fail after its document is written, or add versions with
+ * seedVersion. Its chips default to none.
  */
 export const seedListing = async (
   database: D1Database,
-  listing: { handle: string; name: string },
+  listing: { handle: string; name: string; chips?: string[] },
 ): Promise<void> => {
   await drizzle(database).insert(listings).values(listing);
+};
+
+/**
+ * Sets a listing's chips directly, as an operator's migration does. Publishing gives a listing
+ * none, so a test that browses by chip sets them here.
+ */
+export const seedChips = async (
+  database: D1Database,
+  listing: { handle: string; name: string; chips: string[] },
+): Promise<void> => {
+  await drizzle(database)
+    .update(listings)
+    .set({ chips: listing.chips })
+    .where(
+      and(eq(listings.handle, listing.handle), eq(listings.name, listing.name)),
+    );
 };
 
 /**
