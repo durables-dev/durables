@@ -170,6 +170,15 @@ interface Fixtures {
    */
   seedVersion: (listing: PublishedListing, version: string) => Promise<string>;
   /**
+   * Gives a listing its chips in local D1, replacing any it had, the way an operator's migration
+   * does. Publishing gives a listing no chips, so a test that expects a chip on a result card or
+   * filters results by one sets them here after publishing.
+   */
+  setChips: (
+    listing: { handle: string; name: string },
+    chips: readonly string[],
+  ) => Promise<void>;
+  /**
    * Publishes several activities through the API, in the order given, as one new publisher of
    * its own, the way publishListing publishes one. At most ten, the publish rate limit.
    */
@@ -248,8 +257,8 @@ async function publishAs(
 }
 
 // Seeding writes to the same local D1 and R2 the running Worker reads (ADR 0004). There is no
-// API that creates an account until publishing exists, and none that publishes a later version,
-// so rows and documents are written with Wrangler.
+// API that creates an account until publishing exists, none that publishes a later version, and
+// none that gives a listing chips, so rows and documents are written with Wrangler.
 const apiDirectory = fileURLToPath(new URL("../api", import.meta.url));
 const run = promisify(execFile);
 
@@ -298,6 +307,19 @@ function sqlValue(value: string): string {
     throw new Error(`Refusing to seed an unexpected value: ${value}`);
   }
   return `'${value}'`;
+}
+
+/**
+ * A list of chip names as a SQL string holding their JSON array. Only known-shaped names reach
+ * the SQL, and this guards that they stay plain: letters, digits, spaces, dots and hyphens.
+ */
+function sqlChips(chips: readonly string[]): string {
+  for (const chip of chips) {
+    if (!/^[a-z0-9 .-]+$/i.test(chip)) {
+      throw new Error(`Refusing to seed an unexpected chip: ${chip}`);
+    }
+  }
+  return `'${JSON.stringify(chips)}'`;
 }
 
 export const test = base.extend<Fixtures, WorkerFixtures>({
@@ -521,6 +543,15 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         `INSERT INTO versions (handle, name, version, title, sdk, integrations, description) SELECT handle, name, ${sqlValue(version)}, title, sdk, integrations, description FROM versions WHERE handle = ${sqlValue(handle)} AND name = ${sqlValue(name)} AND version = ${sqlValue(first)};`,
       );
       return later;
+    });
+  },
+
+  // eslint-disable-next-line no-empty-pattern -- Playwright reads the fixtures a fixture needs from this pattern; this one needs none.
+  setChips: async ({}, use) => {
+    await use(async ({ handle, name }, chips) => {
+      await executeSql(
+        `UPDATE listings SET chips = ${sqlChips(chips)} WHERE handle = ${sqlValue(handle)} AND name = ${sqlValue(name)};`,
+      );
     });
   },
 

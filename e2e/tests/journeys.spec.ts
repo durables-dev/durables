@@ -206,7 +206,13 @@ test.describe("as an anonymous visitor", () => {
   test(
     "an activity consumer opens a result's activity page and follows its integration and publisher links back into results",
     { tag: "@journey" },
-    async ({ page, expectAccessible, publishListing, uniqueWord }) => {
+    async ({
+      page,
+      expectAccessible,
+      publishListing,
+      setChips,
+      uniqueWord,
+    }) => {
       const title = `Upload report ${uniqueWord()}`;
       const listing = await publishListing({
         code: sample("typescript"),
@@ -214,6 +220,8 @@ test.describe("as an anonymous visitor", () => {
         name: "report-upload",
         description: "Uploads a CSV report to S3 and returns where it is.",
       });
+      // Publishing gives a listing no chips; an operator's migration gives it Amazon S3.
+      await setChips(listing, ["Amazon S3"]);
       const main = page.getByRole("main");
       const result = main.getByRole("article", { name: title, exact: true });
       const about = page.getByRole("region", { name: "About" });
@@ -773,6 +781,7 @@ for (const journey of sdkJourneys) {
       page,
       expectAccessible,
       signIn,
+      setChips,
       uniqueHandle,
       uniqueWord,
       paste,
@@ -876,6 +885,14 @@ for (const journey of sdkJourneys) {
             .getByText(/is live\./),
         ).toContainText(`${address} is live.`);
       });
+
+      if (journey.integration !== undefined) {
+        const { integration } = journey;
+        await test.step(`a release gives the listing its ${integration} chip`, async () => {
+          // Publishing gives a listing no chips; an operator's migration gives them.
+          await setChips({ handle, name: journey.name }, [integration]);
+        });
+      }
 
       await test.step(`choose the ${journey.sdk} chip in search and see the activity listed`, async () => {
         await page.goto(`/search?q=${word}`);

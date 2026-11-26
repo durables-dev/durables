@@ -269,10 +269,11 @@ describe("migration 0004, storage for managing published activities", () => {
 
       await migrate();
 
-      const { accounts } = await readAllRows(env.DB);
+      // Read with plain SQL: later migrations change tables the storage schema reads.
+      const { accounts } = await readTables("accounts");
       expect(accounts).toHaveLength(2);
       for (const account of accounts ?? []) {
-        expect(account).toMatchObject({ deletionRequestedAt: null });
+        expect(account).toMatchObject({ deletion_requested_at: null });
       }
     });
 
