@@ -2,7 +2,8 @@ import { z } from "zod";
 
 /**
  * The integrations a listing can show, named as listings store them, in the order the filter
- * chips show them. "Amazon S3" is the one name used everywhere.
+ * chips show them. "Amazon S3" is the one name used everywhere. Each one is a chip under exactly
+ * one of the categories in `categories`.
  */
 export const integrations = [
   "Stripe",

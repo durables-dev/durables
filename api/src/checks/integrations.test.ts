@@ -1,4 +1,4 @@
-import { integrations } from "@durables/schemas";
+import { integrationSchema, integrations, patterns } from "@durables/schemas";
 import { describe, expect, it } from "vitest";
 import { registeredSdks } from "../sdks/registry";
 import { sdks } from "../sdks/sdk-list";
@@ -39,6 +39,44 @@ describe("the shared integration list", () => {
 
   it("names S3 only as Amazon S3", () => {
     expect(integrations).not.toContain("AWS S3");
+  });
+
+  it("detects no workflow pattern", () => {
+    const detectable: readonly string[] = integrationPackages.map(
+      ({ integration }) => integration,
+    );
+    for (const pattern of patterns) {
+      expect(detectable).not.toContain(pattern);
+    }
+  });
+});
+
+describe.each(sdks)("everything detection reports from %s imports", (sdk) => {
+  // Every package that implies an integration in this SDK, and packages named after each pattern.
+  const everyPackage = [
+    ...integrationPackages.flatMap(({ packages, sdkPackages }) => [
+      ...packages,
+      ...(sdkPackages?.[sdk] ?? []),
+    ]),
+    ...patterns,
+    ...patterns.map((pattern) => pattern.toLowerCase()),
+  ];
+  const detected: readonly string[] = integrationsFor(
+    sdk,
+    imports(...everyPackage),
+  );
+
+  it("is a valid Integration", () => {
+    expect(detected.length).toBeGreaterThan(0);
+    for (const integration of detected) {
+      expect(integrationSchema.safeParse(integration).success).toBe(true);
+    }
+  });
+
+  it("is never a workflow pattern", () => {
+    for (const pattern of patterns) {
+      expect(detected).not.toContain(pattern);
+    }
   });
 });
 
