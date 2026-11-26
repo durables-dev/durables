@@ -120,6 +120,14 @@ export const listings = sqliteTable(
     name: text("name").notNull(),
     /** Who took the listing out of search. Null while it is listed. */
     removedBy: text("removed_by", { enum: removalSources }),
+    /**
+     * The listing's chips, as a JSON array of names. They apply to every version of the listing.
+     * Only migrations write them; publishing leaves a new listing with none.
+     */
+    chips: text("chips", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'`),
   },
   (table) => [
     primaryKey({ columns: [table.handle, table.name] }),

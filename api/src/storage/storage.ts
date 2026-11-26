@@ -202,8 +202,9 @@ export interface BrowsePosition {
 /**
  * What browse narrows by and where it starts. A listing removed from search never matches,
  * whoever removed it (ADR 0015). An empty or absent list does not filter. Several SDKs match
- * any one of them, as do several integrations. The publisher matches the handle. Every word
- * must appear in the title, description, address, SDK or one of the integrations.
+ * any one of them, as do several integrations, which match the listing's chips. The publisher
+ * matches the handle. Every word must appear in the title, description, address, SDK or one of
+ * the listing's chips.
  */
 export interface BrowseFilter {
   /** The search words. Empty or absent means no words. */
@@ -218,7 +219,8 @@ export interface BrowseFilter {
 }
 
 /**
- * A browse result: a listing and its relevance score, at its highest version. Each word in that
+ * A browse result: a listing and its relevance score, at its highest version. Its integrations
+ * are the listing's chips, not the version's detected integrations. Each word in that
  * version's title scores 3 and each word in that version's description scores 1. The score is 0
  * when there are no words.
  */
@@ -828,10 +830,10 @@ export class Storage {
 
   /**
    * One batch of browse results and the count of every match. Each listing appears once, as its
-   * highest version number, and the filters and words apply to that version. Cards are highest
-   * score first, then newest first by that version's published date, then by handle and name, so
-   * every card has one place in the order and a batch can start after any of them. With no
-   * words every score is 0, so cards are newest first.
+   * highest version number, and the filters and words apply to that version and to the listing's
+   * chips. Cards are highest score first, then newest first by that version's published date,
+   * then by handle and name, so every card has one place in the order and a batch can start
+   * after any of them. With no words every score is 0, so cards are newest first.
    */
   async browseListings({
     words = [],
@@ -863,7 +865,8 @@ export class Storage {
           title: versions.title,
           description: versions.description,
           sdk: versions.sdk,
-          integrations: versions.integrations,
+          // A listing's chips belong to the listing and apply to every version (DUR-120).
+          integrations: listings.chips,
           publishedAt: versions.publishedAt,
           score: score.as("score"),
           rank: sql<number>`row_number() over (partition by ${versions.handle}, ${versions.name} order by ${highestVersionFirst()})`.as(
@@ -898,7 +901,7 @@ export class Storage {
       );
     }
     if (integrations.length > 0) {
-      // Integrations are stored as a JSON array in text, so each listing's are read with json_each.
+      // A listing's chips are stored as a JSON array in text, so they are read with json_each.
       filters.push(
         sql`exists (select 1 from json_each(${ranked.integrations}) as integration where integration.value in (select value from json_each(${JSON.stringify(integrations)})))`,
       );

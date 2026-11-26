@@ -4,10 +4,10 @@ import {
   insertEarlyListing,
   insertEarlyVersion,
   migration,
+  readTables,
   rebuildDatabaseBefore,
   runMigration,
 } from "./migration-testing";
-import { readAllRows } from "./seed";
 import { Storage } from "./storage";
 
 // Migration 0005 gives every version with an empty description its listing's description, and
@@ -58,6 +58,27 @@ const writeVersionDescription = (
   )
     .bind(description, handle, name, version)
     .run();
+
+/**
+ * Every row of every table with plain SQL, and each listing's handle, name and removal state,
+ * which are the listing columns that migration 0006 keeps. Later migrations add listing columns
+ * the storage schema reads, so the rows are not read through it.
+ */
+const readRowsKeptByDrop = async () => ({
+  ...(await readTables(
+    "accounts",
+    "provider_accounts",
+    "handles",
+    "retired_handles",
+    "versions",
+    "version_deprecations",
+  )),
+  listings: (
+    await env.DB.prepare(
+      "select handle, name, removed_by from listings order by handle, name",
+    ).all()
+  ).results,
+});
 
 describe("migration 0005, copying listing descriptions to empty versions", () => {
   beforeEach(async () => {
@@ -169,11 +190,11 @@ describe("migration 0006, removing the listing's description", () => {
     await insertEarlyListing();
     await insertEarlyListing();
     await runMigration(copy);
-    const before = await readAllRows(env.DB);
+    const before = await readRowsKeptByDrop();
 
     await runMigration(drop);
 
-    expect(await readAllRows(env.DB)).toEqual(before);
+    expect(await readRowsKeptByDrop()).toEqual(before);
     expect(
       (await env.DB.prepare("pragma foreign_key_check").all()).results,
     ).toEqual([]);

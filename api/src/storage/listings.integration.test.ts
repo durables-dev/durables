@@ -54,7 +54,7 @@ describe("creating a listing", () => {
     expect(found?.publishedAt.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
-  test("stores the description on the first version, not the listing", async () => {
+  test("stores the description on the first version, not the listing, and gives the listing no chips", async () => {
     const listing = await newListing();
 
     await storage().createListing(listing);
@@ -65,7 +65,12 @@ describe("creating a listing", () => {
       return handle === listing.handle && name === listing.name;
     };
     expect(listings?.filter(isListing)).toEqual([
-      { handle: listing.handle, name: listing.name, removedBy: null },
+      {
+        handle: listing.handle,
+        name: listing.name,
+        removedBy: null,
+        chips: [],
+      },
     ]);
     expect(versions?.filter(isListing)).toEqual([
       expect.objectContaining({
@@ -563,7 +568,12 @@ describe("the migrations", () => {
         ).all<{ name: string }>()
       ).results.map(({ name }) => name);
 
-    expect(await columns("listings")).toEqual(["handle", "name", "removed_by"]);
+    expect(await columns("listings")).toEqual([
+      "handle",
+      "name",
+      "removed_by",
+      "chips",
+    ]);
     expect(await columns("versions")).toEqual([
       "handle",
       "name",

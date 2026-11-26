@@ -1,5 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, sample, test, type PublishDetails } from "../fixtures";
+import {
+  expect,
+  sample,
+  test,
+  type PublishDetails,
+  type PublishedListing,
+} from "../fixtures";
 
 const python = sample("python");
 const typescript = sample("typescript");
@@ -34,6 +40,25 @@ function threeListings(word: string) {
       description: "Refunds a Stripe payment and returns the refund.",
     },
   } satisfies Record<string, PublishDetails>;
+}
+
+/**
+ * Gives threeListings' TypeScript and .NET listings the chips their imports imply, as an
+ * operator's migration does. Publishing gives a listing none. The Python one stays without.
+ */
+async function setThreeListingsChips(
+  setChips: (
+    listing: { handle: string; name: string },
+    chips: readonly string[],
+  ) => Promise<void>,
+  typescript: PublishedListing | undefined,
+  dotnet: PublishedListing | undefined,
+) {
+  if (typescript === undefined || dotnet === undefined) {
+    throw new Error("The TypeScript and .NET listings were not published.");
+  }
+  await setChips(typescript, ["Amazon S3"]);
+  await setChips(dotnet, ["Stripe"]);
 }
 
 const anyCountSortedByNewest = /^[\d,]+ activit(y|ies) · sorted by newest$/;
@@ -166,13 +191,20 @@ test.describe("as an anonymous visitor", () => {
   test(
     "an activity consumer picks an SDK and an integration on home, presses Search and sees only matching cards",
     { tag: "@journey" },
-    async ({ page, expectAccessible, publishListings, uniqueWord }) => {
+    async ({
+      page,
+      expectAccessible,
+      publishListings,
+      setChips,
+      uniqueWord,
+    }) => {
       const listings = threeListings(uniqueWord());
-      await publishListings([
+      const [, typescriptListing, dotnetListing] = await publishListings([
         listings.python,
         listings.typescript,
         listings.dotnet,
       ]);
+      await setThreeListingsChips(setChips, typescriptListing, dotnetListing);
       const filtersButton = page.getByRole("button", { name: /^Filters/ });
 
       await test.step("open Filters and pick TypeScript and Amazon S3", async () => {
@@ -337,15 +369,17 @@ test.describe("as an anonymous visitor", () => {
     page,
     expectAccessible,
     publishListings,
+    setChips,
     uniqueWord,
   }) => {
     const word = uniqueWord();
     const listings = threeListings(word);
-    await publishListings([
+    const [, typescriptListing, dotnetListing] = await publishListings([
       listings.python,
       listings.typescript,
       listings.dotnet,
     ]);
+    await setThreeListingsChips(setChips, typescriptListing, dotnetListing);
 
     await test.step("search from the results page's box", async () => {
       await page.goto("/search");
@@ -613,16 +647,18 @@ test.describe("as an anonymous visitor", () => {
       expectAccessible,
       publishListing,
       publishListings,
+      setChips,
       uniqueWord,
     }) => {
       const word = uniqueWord();
       const listings = threeListings(word);
-      const [pythonListing] = await publishListings([
+      const [pythonListing, typescriptListing] = await publishListings([
         listings.python,
         listings.typescript,
       ]);
       const handle = pythonListing?.handle ?? "";
-      await publishListing(listings.dotnet);
+      const dotnetListing = await publishListing(listings.dotnet);
+      await setThreeListingsChips(setChips, typescriptListing, dotnetListing);
 
       await test.step("search for the word and see each card's details", async () => {
         await page.goto(`/search?q=${word}`);
@@ -726,6 +762,51 @@ test.describe("as an anonymous visitor", () => {
       await expectAccessible();
     },
   );
+
+  test("a newly published activity's card shows no integrations until a release gives the listing its chips", async ({
+    page,
+    expectAccessible,
+    publishListing,
+    setChips,
+    uniqueWord,
+  }) => {
+    const details: PublishDetails = {
+      code: dotnet,
+      title: `Refund payment ${uniqueWord()}`,
+      name: "payment-refund",
+      description: "Refunds a Stripe payment and returns the refund.",
+    };
+    const listing = await publishListing(details);
+    const found = card(page, details.title);
+
+    await test.step("the card shows no integrations, though the code imports Stripe", async () => {
+      await page.goto(`/search?q=${details.title.replaceAll(" ", "+")}`);
+      await expect(found).toContainText(listing.address);
+      await expect(found.getByText("Integrates with")).toHaveCount(0);
+    });
+
+    await test.step("after the chips are set, the card shows them and the filter finds it", async () => {
+      await setChips(listing, ["Stripe", "Amazon S3"]);
+      await page.reload();
+
+      await expect(found.getByText("Integrates with")).toBeVisible();
+      await expect(
+        found.getByRole("link", { name: "Stripe", exact: true }),
+      ).toBeVisible();
+      await expect(
+        found.getByRole("link", { name: "Amazon S3", exact: true }),
+      ).toBeVisible();
+      await expectAccessible();
+
+      await page.goto(
+        `/search?q=${details.title.replaceAll(" ", "+")}&integration=Amazon+S3`,
+      );
+      await expect(countLine(page)).toHaveText(
+        "1 activity · sorted by relevance",
+      );
+      await expect(found).toBeVisible();
+    });
+  });
 });
 
 /** Every SDK Temporal officially supports, in Temporal's order (docs.temporal.io, temporal-sdks). */
