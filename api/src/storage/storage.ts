@@ -1,3 +1,4 @@
+import { chipNames, findChip } from "@durables/schemas";
 import {
   and,
   count,
@@ -210,7 +211,11 @@ export interface BrowseFilter {
   /** The search words. Empty or absent means no words. */
   words?: readonly string[] | undefined;
   sdks?: readonly Sdk[] | undefined;
-  integrations?: readonly string[] | undefined;
+  /**
+   * The chip groups a listing must match: any one chip of each group. Each name is a chip on
+   * the shared list. Empty or absent means no chip filter.
+   */
+  chipGroups?: readonly (readonly string[])[] | undefined;
   publisher?: string | undefined;
   /** Start after this card. Absent for the first batch. */
   after?: BrowsePosition | undefined;
@@ -220,9 +225,9 @@ export interface BrowseFilter {
 
 /**
  * A browse result: a listing and its relevance score, at its highest version. Its integrations
- * are the listing's chips, not the version's detected integrations. Each word in that
- * version's title scores 3 and each word in that version's description scores 1. The score is 0
- * when there are no words.
+ * are the listing's chips, not the version's detected integrations, keeping only the names on
+ * the shared list, as that list writes them. Each word in that version's title scores 3 and
+ * each word in that version's description scores 1. The score is 0 when there are no words.
  */
 export interface BrowseListing extends Listing {
   score: number;
@@ -322,6 +327,27 @@ const highestVersionFirst = () => {
   const afterMinor = sql`substr(${afterMajor}, instr(${afterMajor}, '.') + 1)`;
   return sql`cast(${versions.version} as integer) desc, cast(${afterMajor} as integer) desc, cast(${afterMinor} as integer) desc, ${versions.version} desc`;
 };
+
+/**
+ * Whether the chip read as `chip.value` from json_each is one of `names`, ignoring case and
+ * surrounding whitespace, as the shared list's lookups do. The names go to D1 as one JSON
+ * parameter. SQLite's lower() folds ASCII letters only, which every chip name is written in.
+ */
+const isListedChip = (names: readonly string[]): SQL =>
+  sql`lower(trim(chip.value)) in (select value from json_each(${JSON.stringify(names.map((name) => name.toLowerCase()))}))`;
+
+/**
+ * A listing's stored chips, keeping only those on the shared list, each written as the list
+ * writes it and once.
+ */
+const listedChips = (stored: readonly string[]): string[] => [
+  ...new Set(
+    stored.flatMap((name) => {
+      const chip = findChip(name);
+      return chip === undefined ? [] : [chip];
+    }),
+  ),
+];
 
 /**
  * The storage interface (ADR 0005). It is the only code that sees D1, R2 and Drizzle.
@@ -838,7 +864,7 @@ export class Storage {
   async browseListings({
     words = [],
     sdks = [],
-    integrations = [],
+    chipGroups = [],
     publisher,
     after,
     limit,
@@ -889,9 +915,10 @@ export class Storage {
     if (words.length > 0) {
       // Every word appears in at least one field. The address is matched as the site shows it.
       const address = sql`${ranked.handle} || '/' || ${ranked.name} || '@' || ${ranked.version}`;
-      const inIntegrations = sql`exists (select 1 from json_each(${ranked.integrations}) as integration where ${like(sql.raw("integration.value"), word)})`;
+      // Only a chip on the shared list is matched; category names never are.
+      const inChips = sql`exists (select 1 from json_each(${ranked.integrations}) as chip where ${isListedChip(chipNames)} and ${like(sql.raw("chip.value"), word)})`;
       filters.push(
-        sql`not exists (select 1 from ${eachWord} where not (${like(ranked.title, word)} or ${like(ranked.description, word)} or ${like(address, word)} or ${like(ranked.sdk, word)} or ${inIntegrations}))`,
+        sql`not exists (select 1 from ${eachWord} where not (${like(ranked.title, word)} or ${like(ranked.description, word)} or ${like(address, word)} or ${like(ranked.sdk, word)} or ${inChips}))`,
       );
     }
     if (sdks.length > 0) {
@@ -900,10 +927,11 @@ export class Storage {
         sql`${ranked.sdk} in (select value from json_each(${JSON.stringify(sdks)}))`,
       );
     }
-    if (integrations.length > 0) {
+    for (const group of chipGroups) {
       // A listing's chips are stored as a JSON array in text, so they are read with json_each.
+      // Any chip of a group matches; every group must match.
       filters.push(
-        sql`exists (select 1 from json_each(${ranked.integrations}) as integration where integration.value in (select value from json_each(${JSON.stringify(integrations)})))`,
+        sql`exists (select 1 from json_each(${ranked.integrations}) as chip where ${isListedChip(group)})`,
       );
     }
     if (publisher !== undefined) {
@@ -964,7 +992,13 @@ export class Storage {
         .from(ranked)
         .where(matches),
     ]);
-    return { listings: rows, count: total?.count ?? 0 };
+    return {
+      listings: rows.map((row) => ({
+        ...row,
+        integrations: listedChips(row.integrations),
+      })),
+      count: total?.count ?? 0,
+    };
   }
 
   /**

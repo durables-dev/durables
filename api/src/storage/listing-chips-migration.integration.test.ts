@@ -162,7 +162,7 @@ describe("migration 0008, copying the highest version's integrations to the list
 
     const browsed = await storage().browseListings({
       publisher: listing.handle,
-      integrations: ["Slack"],
+      chipGroups: [["Slack"]],
       limit: 10,
     });
     expect(browsed.listings).toMatchObject([

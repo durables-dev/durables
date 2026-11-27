@@ -67,7 +67,7 @@ function callFrom(request: Request): BrowseCall {
   return {
     q: params.get("q"),
     sdks: params.getAll("sdk"),
-    integrations: params.getAll("integration"),
+    integrations: params.getAll("chip"),
     publisher: params.get("publisher"),
     cursor: params.get("cursor"),
   };

@@ -21,7 +21,7 @@ export function browseQuery({ words, sdks, integrations, publisher }: Search) {
             query: {
               q: words === "" ? undefined : words,
               sdk: [...sdks],
-              integration: [...integrations],
+              chip: [...integrations],
               publisher,
               cursor: pageParam ?? undefined,
             },
