@@ -261,11 +261,14 @@ test("opening the same address again, as a refresh does, shows the same search",
   await expect
     .element(sdkChip(second, ".NET"))
     .toHaveAttribute("aria-pressed", "true");
-  expect(calls[0]).toMatchObject({
-    q: "charge & refund café",
-    sdks: ["Python", ".NET"],
-    integrations: ["Stripe", "Amazon S3"],
-  });
+  // The box and chips come from the address before the browse request goes out, so wait for it.
+  await expect
+    .poll(() => calls[0])
+    .toMatchObject({
+      q: "charge & refund café",
+      sdks: ["Python", ".NET"],
+      integrations: ["Stripe", "Amazon S3"],
+    });
 });
 
 test("Back returns to the previous search's words and filters", async () => {
