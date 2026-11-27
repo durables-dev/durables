@@ -5,6 +5,7 @@ import {
   BROWSE_BATCH_SIZE,
   browseQuery,
   browseSort,
+  chipGroups,
   cursorMessage,
   MAX_WORDS_LENGTH,
   publisherMessage,
@@ -72,13 +73,23 @@ describe("the browse query", () => {
     });
   });
 
-  test("reads one integration as a list of one, and several as a list", () => {
-    expect(browseQuery.parse({ integration: "Amazon S3" })).toEqual({
-      integration: ["Amazon S3"],
+  test("reads one chip as a list of one, and several as a list", () => {
+    expect(browseQuery.parse({ chip: "Amazon S3" })).toEqual({
+      chip: ["Amazon S3"],
     });
-    expect(browseQuery.parse({ integration: ["Stripe", "Slack"] })).toEqual({
-      integration: ["Stripe", "Slack"],
+    expect(browseQuery.parse({ chip: ["Stripe", "Slack"] })).toEqual({
+      chip: ["Stripe", "Slack"],
     });
+  });
+
+  test("reads one category as given", () => {
+    expect(browseQuery.parse({ category: "Payments" })).toEqual({
+      category: "Payments",
+    });
+  });
+
+  test("no longer reads the integration parameter", () => {
+    expect(browseQuery.parse({ integration: "Stripe" })).toEqual({});
   });
 
   test("reads the publisher handle as given", () => {
@@ -217,4 +228,63 @@ describe("browseSort", () => {
 
 test("a batch holds at most 50 cards", () => {
   expect(BROWSE_BATCH_SIZE).toBe(50);
+});
+
+describe("chipGroups", () => {
+  test("is empty with no chip and no category", () => {
+    expect(chipGroups()).toEqual([]);
+  });
+
+  test("puts two chips under one category in one group, so either matches", () => {
+    expect(chipGroups(["OpenAI", "Anthropic Claude"])).toEqual([
+      ["OpenAI", "Anthropic Claude"],
+    ]);
+  });
+
+  test("puts chips under two categories in two groups, so each must match", () => {
+    expect(chipGroups(["Slack", "Polling"])).toEqual([["Slack"], ["Polling"]]);
+  });
+
+  test("groups chips by category in the order the categories are first chosen", () => {
+    expect(chipGroups(["Saga", "OpenAI", "Approval", "Groq"])).toEqual([
+      ["Saga", "Approval"],
+      ["OpenAI", "Groq"],
+    ]);
+  });
+
+  test("gives a category alone one group of every chip under it", () => {
+    expect(chipGroups([], "Workflow patterns")).toEqual([
+      ["Approval", "Polling", "Batching", "Saga"],
+    ]);
+  });
+
+  test("ignores the category when a chip is chosen", () => {
+    expect(chipGroups(["Slack"], "Payments")).toEqual([["Slack"]]);
+  });
+
+  test("ignores an unknown chip, so one alone gives no groups", () => {
+    expect(chipGroups(["Twilio"])).toEqual([]);
+    expect(chipGroups(["Twilio", "Stripe"])).toEqual([["Stripe"]]);
+  });
+
+  test("lets the category apply when every chosen chip is unknown", () => {
+    expect(chipGroups(["Twilio"], "Payments")).toEqual([["Stripe"]]);
+  });
+
+  test("ignores an unknown category, so one alone gives no groups", () => {
+    expect(chipGroups([], "Telephony")).toEqual([]);
+  });
+
+  test("matches chip and category names ignoring case, as the list writes them", () => {
+    expect(chipGroups(["stripe", "SLACK"])).toEqual([["Stripe"], ["Slack"]]);
+    expect(chipGroups([], "pAYMENTS")).toEqual([["Stripe"]]);
+  });
+
+  test("counts a chip chosen twice once", () => {
+    expect(chipGroups(["Stripe", "stripe"])).toEqual([["Stripe"]]);
+  });
+
+  test("never reads a category name as a chip", () => {
+    expect(chipGroups(["Payments"])).toEqual([]);
+  });
 });
