@@ -47,7 +47,7 @@ function serveNoResults(): BrowseCall[] {
       calls.push({
         q,
         sdks: params.getAll("sdk"),
-        integrations: params.getAll("integration"),
+        integrations: params.getAll("chip"),
         publisher: params.get("publisher"),
       });
       return HttpResponse.json({

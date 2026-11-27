@@ -248,6 +248,28 @@ test("unknown SDK and integration values in the address are ignored", async () =
     .toHaveAttribute("aria-pressed", "true");
 });
 
+test("the chosen filters go to the api as chip, never as integration", async () => {
+  const sent: URLSearchParams[] = [];
+  worker.use(
+    http.get("/api/activities", ({ request }) => {
+      sent.push(new URL(request.url).searchParams);
+      return HttpResponse.json({
+        activities: [testCard(1)],
+        count: 1,
+        sort: "newest",
+        nextCursor: null,
+      });
+    }),
+  );
+  const opened = await openAt("/search?integration=Stripe&integration=Slack");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(sent.map((params) => params.getAll("chip"))).toEqual([
+    ["Stripe", "Slack"],
+  ]);
+  expect(sent.map((params) => params.has("integration"))).toEqual([false]);
+});
+
 test("opening the same address again, as a refresh does, shows the same search", async () => {
   serveBrowse(testCards(1));
   const first = await openAt(chargeSearch);
@@ -261,11 +283,14 @@ test("opening the same address again, as a refresh does, shows the same search",
   await expect
     .element(sdkChip(second, ".NET"))
     .toHaveAttribute("aria-pressed", "true");
-  expect(calls[0]).toMatchObject({
-    q: "charge & refund café",
-    sdks: ["Python", ".NET"],
-    integrations: ["Stripe", "Amazon S3"],
-  });
+  // The box and chips come from the address before the browse request goes out, so wait for it.
+  await expect
+    .poll(() => calls[0])
+    .toMatchObject({
+      q: "charge & refund café",
+      sdks: ["Python", ".NET"],
+      integrations: ["Stripe", "Amazon S3"],
+    });
 });
 
 test("Back returns to the previous search's words and filters", async () => {

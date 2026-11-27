@@ -128,7 +128,7 @@ describe("migration 0009, dropping the versions' integrations", () => {
     ).toMatchObject({ ...listing, version: "1.0.0", sdk: "Python" });
     const browsed = await storage().browseListings({
       publisher: listing.handle,
-      integrations: ["Stripe"],
+      chipGroups: [["Stripe"]],
       limit: 10,
     });
     expect(browsed.listings).toMatchObject([
