@@ -18,6 +18,10 @@ jobs:
       - uses: devcontainers/ci@v0.3
         with:
           push: never
+          # The container sees only the variables listed here. CI puts Playwright in its CI
+          # settings: one worker, two retries (e2e/CONVENTIONS.md).
+          env: |
+            CI
           runCmd: |
             set -eu
             npm run format:check
@@ -27,6 +31,8 @@ jobs:
             npm test
             npm run build
             npm run e2e
+        env:
+          CI: true
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
