@@ -28,9 +28,9 @@ The chips come from two lists:
 
 ### Names the site doesn't know
 
-The site ignores a chip or category name that is not in this list. That holds for names stored on a listing and for names in a search address. A link with an unknown category shows every activity.
+The site matches a chip or category name to this list ignoring case and surrounding whitespace, so "stripe" and " Stripe " find Stripe. A name that matches nothing in the list is ignored. That holds for names stored on a listing and for names in a search address. A link with an unknown category shows every activity.
 
-Nothing checks names before release. A misspelt chip in a migration is stored, then ignored, with no error. Spell every name exactly as this list does.
+Nothing checks names before release. A misspelt chip in a migration is stored, then ignored, with no error. Migrations store names as written and compare them exactly, so the rename SQL below skips a listing holding "old name" when it looks for "Old name". Spell every name exactly as this list does.
 
 Category names are never stored on a listing. Listings store chip names only.
 
