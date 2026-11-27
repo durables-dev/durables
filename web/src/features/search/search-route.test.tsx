@@ -103,7 +103,8 @@ function pressedIn(opened: Opened, group: string) {
 const firstCall: BrowseCall = {
   q: null,
   sdks: [],
-  integrations: [],
+  chips: [],
+  category: null,
   publisher: null,
   cursor: null,
 };
@@ -111,13 +112,13 @@ const firstCall: BrowseCall = {
 const chargeSearch = searchAddress({
   words: "charge & refund café",
   sdks: ["Python", ".NET"],
-  integrations: ["Stripe", "Amazon S3"],
+  chips: ["Stripe", "Amazon S3"],
 });
 
 const slackSearch = searchAddress({
   words: "post message",
   sdks: ["TypeScript"],
-  integrations: ["Slack"],
+  chips: ["Slack"],
 });
 
 /** Lets any request the page was about to send go out. */
@@ -161,7 +162,8 @@ test("opening /search with words and filters asks for them and shows them", asyn
     {
       q: "charge & refund café",
       sdks: ["Python", ".NET"],
-      integrations: ["Stripe", "Amazon S3"],
+      chips: ["Stripe", "Amazon S3"],
+      category: null,
       publisher: null,
       cursor: null,
     },
@@ -232,14 +234,12 @@ test("a publisher in the address is asked for", async () => {
   expect(calls).toEqual([{ ...firstCall, publisher: "ddieruf" }]);
 });
 
-test("unknown SDK and integration values in the address are ignored", async () => {
+test("unknown SDK and chip values in the address are ignored", async () => {
   const calls = serveBrowse(testCards(1));
-  const opened = await openAt(
-    "/search?sdk=Java&integration=Twilio&integration=Slack",
-  );
+  const opened = await openAt("/search?sdk=Java&chip=Twilio&chip=Slack");
 
   await expect.poll(() => cardCount(opened)).toBe(1);
-  expect(calls).toEqual([{ ...firstCall, integrations: ["Slack"] }]);
+  expect(calls).toEqual([{ ...firstCall, chips: ["Slack"] }]);
   await expect
     .element(sdkChip(opened, "Any"))
     .toHaveAttribute("aria-pressed", "true");
@@ -261,13 +261,125 @@ test("the chosen filters go to the api as chip, never as integration", async () 
       });
     }),
   );
-  const opened = await openAt("/search?integration=Stripe&integration=Slack");
+  const opened = await openAt("/search?chip=Stripe&chip=Slack");
 
   await expect.poll(() => cardCount(opened)).toBe(1);
   expect(sent.map((params) => params.getAll("chip"))).toEqual([
     ["Stripe", "Slack"],
   ]);
   expect(sent.map((params) => params.has("integration"))).toEqual([false]);
+});
+
+// Chips and the category in the address
+
+test("a chip in the address is read ignoring case and shows as on", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?chip=stripe&chip=SLACK");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([{ ...firstCall, chips: ["Stripe", "Slack"] }]);
+  await expect
+    .element(integrationChip(opened, "Stripe"))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect
+    .element(integrationChip(opened, "Slack"))
+    .toHaveAttribute("aria-pressed", "true");
+});
+
+test("an SDK in the address is read ignoring case", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?sdk=python");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([{ ...firstCall, sdks: ["Python"] }]);
+  await expect
+    .element(sdkChip(opened, "Python"))
+    .toHaveAttribute("aria-pressed", "true");
+});
+
+test("a category in the address is asked for and turns no chip on", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=payments");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([{ ...firstCall, category: "Payments" }]);
+  expect(
+    pressedIn(opened, "Integrates with").filter(([, pressed]) => pressed),
+  ).toEqual([]);
+  expect(currentSearch(opened)).toEqual({
+    words: "",
+    sdks: [],
+    chips: [],
+    category: "Payments",
+  });
+});
+
+test("of several categories in the address, the api is sent the first alone", async () => {
+  const sent: URLSearchParams[] = [];
+  worker.use(
+    http.get("/api/activities", ({ request }) => {
+      sent.push(new URL(request.url).searchParams);
+      return HttpResponse.json({
+        activities: [testCard(1)],
+        count: 1,
+        sort: "newest",
+        nextCursor: null,
+      });
+    }),
+  );
+  const opened = await openAt(
+    "/search?category=Payments&category=Messaging&chip=Stripe",
+  );
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(sent.map((params) => params.getAll("category"))).toEqual([
+    ["Payments"],
+  ]);
+  expect(sent.map((params) => params.getAll("chip"))).toEqual([["Stripe"]]);
+});
+
+test("an unknown chip and an unknown category in the address are dropped", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?chip=Nonsense&category=Shipping");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([firstCall]);
+  expect(currentSearch(opened)).toEqual({ words: "", sdks: [], chips: [] });
+});
+
+test("the old integration parameter turns nothing on", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?integration=Stripe");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([firstCall]);
+  await expect
+    .element(integrationChip(opened, "Stripe"))
+    .toHaveAttribute("aria-pressed", "false");
+});
+
+test("turning a chip on keeps the category in the address, and turning it off leaves the category", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
+  await integrationChip(opened, "Stripe").click();
+
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?chip=Stripe&category=Payments");
+  await expect
+    .poll(() => calls.at(-1))
+    .toEqual({ ...firstCall, chips: ["Stripe"], category: "Payments" });
+
+  await integrationChip(opened, "Stripe").click();
+
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?category=Payments");
+  await expect
+    .poll(() => calls.at(-1))
+    .toEqual({ ...firstCall, category: "Payments" });
 });
 
 test("opening the same address again, as a refresh does, shows the same search", async () => {
@@ -289,7 +401,7 @@ test("opening the same address again, as a refresh does, shows the same search",
     .toMatchObject({
       q: "charge & refund café",
       sdks: ["Python", ".NET"],
-      integrations: ["Stripe", "Amazon S3"],
+      chips: ["Stripe", "Amazon S3"],
     });
 });
 
@@ -327,7 +439,7 @@ test("pressing Enter submits the words, puts them in the address and sorts by re
   expect(currentSearch(opened)).toEqual({
     words: "charge card",
     sdks: ["Python"],
-    integrations: [],
+    chips: [],
   });
   expect(calls.at(-1)).toEqual({
     ...firstCall,
@@ -393,12 +505,12 @@ test("a chip click carries the words in the address, not words typed but not sub
   expect(calls[1]).toEqual({
     ...firstCall,
     q: "charge",
-    integrations: ["Stripe"],
+    chips: ["Stripe"],
   });
   expect(currentSearch(opened)).toEqual({
     words: "charge",
     sdks: [],
-    integrations: ["Stripe"],
+    chips: ["Stripe"],
   });
 });
 
@@ -459,10 +571,8 @@ test("several integrations can be picked together", async () => {
   await expect
     .element(integrationChip(opened, "Stripe"))
     .toHaveAttribute("aria-pressed", "true");
-  expect(currentSearch(opened).integrations).toEqual(["Stripe", "Slack"]);
-  await expect
-    .poll(() => calls.at(-1)?.integrations)
-    .toEqual(["Stripe", "Slack"]);
+  expect(currentSearch(opened).chips).toEqual(["Stripe", "Slack"]);
+  await expect.poll(() => calls.at(-1)?.chips).toEqual(["Stripe", "Slack"]);
 });
 
 // Clear (n)
@@ -483,7 +593,7 @@ test("Clear (n) counts the filters that are on and clears them all, keeping the 
     searchAddress({
       words: "charge",
       sdks: ["Python", "TypeScript"],
-      integrations: ["Stripe"],
+      chips: ["Stripe"],
     }),
   );
   const clear = sidebar(opened).getByRole("button", { name: "Clear (3)" });
@@ -497,7 +607,7 @@ test("Clear (n) counts the filters that are on and clears them all, keeping the 
   expect(currentSearch(opened)).toEqual({
     words: "charge",
     sdks: [],
-    integrations: [],
+    chips: [],
   });
   await expect.poll(() => calls.at(-1)).toEqual({ ...firstCall, q: "charge" });
   await expect.element(searchBox(opened)).toHaveValue("charge");
@@ -511,7 +621,7 @@ test("a publisher counts as a filter and Clear (n) clears it", async () => {
 
   await expect
     .poll(() => currentSearch(opened))
-    .toEqual({ words: "", sdks: [], integrations: [] });
+    .toEqual({ words: "", sdks: [], chips: [] });
 });
 
 // Count line (criteria 2 and 9) and the grid
@@ -678,7 +788,7 @@ test("changing a filter starts again from the first batch", async () => {
 
   await expect
     .poll(() => calls.at(-1))
-    .toEqual({ ...firstCall, integrations: ["Postgres"] });
+    .toEqual({ ...firstCall, chips: ["Postgres"] });
   await expect
     .element(integrationChip(opened, "Postgres"))
     .toHaveAttribute("aria-pressed", "true");
@@ -746,7 +856,7 @@ test("no matches shows the empty state, and Clear filters clears the words and t
     searchAddress({
       words: "nothing like this",
       sdks: [".NET"],
-      integrations: ["Slack"],
+      chips: ["Slack"],
     }),
   );
 
@@ -775,7 +885,7 @@ test("no matches shows the empty state, and Clear filters clears the words and t
   expect(currentSearch(opened)).toEqual({
     words: "",
     sdks: [],
-    integrations: [],
+    chips: [],
   });
   expect(calls.at(-1)).toEqual(firstCall);
   await expect.element(searchBox(opened)).toHaveValue("");
@@ -976,12 +1086,12 @@ test("while the catalog loads, the page says so and asks for no results yet", as
 test("when the catalog cannot be read, the page still renders with Any as the only SDK chip, and no SDK filter", async () => {
   const failed = failCatalog();
   const calls = serveBrowse(testCards(2));
-  const opened = await openAt("/search?sdk=Python&integration=Stripe");
+  const opened = await openAt("/search?sdk=Python&chip=Stripe");
   await failed;
 
   await expect.poll(() => cardCount(opened)).toBe(2);
   expect(pressedIn(opened, "Temporal SDK")).toEqual([["Any", true]]);
-  expect(calls).toEqual([{ ...firstCall, integrations: ["Stripe"] }]);
+  expect(calls).toEqual([{ ...firstCall, chips: ["Stripe"] }]);
 });
 
 test("every result card's SDK tag looks the same, whatever the SDK", async () => {

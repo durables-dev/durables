@@ -472,7 +472,7 @@ test("the sidebar links the version's integrations and its publisher into search
     const link = about.getByRole("link", { name: integration, exact: true });
     await expect.element(link).toBeVisible();
     expect(link.element().getAttribute("href")).toBe(
-      searchAddress({ integrations: [integration] }),
+      searchAddress({ chips: [integration] }),
     );
   }
   const publisher = screen.getByRole("region", { name: "Publisher" });

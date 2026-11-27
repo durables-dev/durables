@@ -212,7 +212,7 @@ test("each integration links to the results for that integration alone", async (
         .getByRole("link", { name: integration, exact: true })
         .element()
         .getAttribute("href"),
-    ).toBe(searchAddress({ integrations: [integration] }));
+    ).toBe(searchAddress({ chips: [integration] }));
   }
 });
 
@@ -227,7 +227,7 @@ test("clicking an integration opens /search for that integration", async () => {
   expect(await searchOpened(screen)).toEqual({
     words: "",
     sdks: [],
-    integrations: ["Slack"],
+    chips: ["Slack"],
   });
 });
 
@@ -242,7 +242,7 @@ test("an integration name with a space builds an address that reads back unchang
   expect(() => new URL(href, "https://durables.dev")).not.toThrow();
   await link.click();
 
-  expect((await searchOpened(screen)).integrations).toEqual(["Amazon S3"]);
+  expect((await searchOpened(screen)).chips).toEqual(["Amazon S3"]);
 });
 
 test("an integration not on the shared list shows as plain text", async () => {
@@ -377,7 +377,7 @@ test('clicking "Search all activities by" opens /search for that publisher', asy
   expect(await searchOpened(screen)).toEqual({
     words: "",
     sdks: [],
-    integrations: [],
+    chips: [],
     publisher: "ddieruf",
   });
 });
@@ -395,7 +395,7 @@ test("clicking the handle opens the same results as Search all activities by", a
   expect(await searchOpened(screen)).toEqual({
     words: "",
     sdks: [],
-    integrations: [],
+    chips: [],
     publisher: "ddieruf",
   });
   expect(

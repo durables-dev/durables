@@ -1,10 +1,10 @@
-import type { Search } from "./search-address";
+import { searchAddress, type Search } from "./search-address";
 import { describe, expect, test } from "vitest";
 import {
   activeFilterCount,
   everything,
   withAnySdk,
-  withIntegrationToggled,
+  withChipToggled,
   withoutFilters,
   withSdkToggled,
 } from "./search-filters";
@@ -12,7 +12,7 @@ import {
 const search: Search = {
   words: "charge card",
   sdks: ["Python"],
-  integrations: ["Stripe"],
+  chips: ["Stripe"],
 };
 
 describe("the SDK chips", () => {
@@ -35,22 +35,34 @@ describe("the SDK chips", () => {
   });
 });
 
-describe("the integration chips", () => {
-  test("several integrations can be on together", () => {
-    const withSlack = withIntegrationToggled(search, "Slack");
-    expect(withIntegrationToggled(withSlack, "Amazon S3").integrations).toEqual(
-      ["Stripe", "Slack", "Amazon S3"],
-    );
+describe("the chips", () => {
+  test("several chips can be on together, patterns included", () => {
+    const withSlack = withChipToggled(search, "Slack");
+    expect(withChipToggled(withSlack, "Polling").chips).toEqual([
+      "Stripe",
+      "Slack",
+      "Polling",
+    ]);
   });
 
-  test("picking an integration that is already on takes it off", () => {
-    expect(withIntegrationToggled(search, "Stripe").integrations).toEqual([]);
+  test("picking a chip that is already on takes it off", () => {
+    expect(withChipToggled(search, "Stripe").chips).toEqual([]);
   });
 
-  test("toggling an integration leaves the SDKs and words alone", () => {
-    const next = withIntegrationToggled(search, "Postgres");
+  test("toggling a chip leaves the SDKs and words alone", () => {
+    const next = withChipToggled(search, "Postgres");
     expect(next.words).toBe("charge card");
     expect(next.sdks).toEqual(["Python"]);
+  });
+
+  test("a category stays while a chip is on, and still holds once the last chip goes off", () => {
+    const tile: Search = { ...everything, category: "Payments" };
+    const on = withChipToggled(tile, "Stripe");
+    expect(on).toEqual({ ...tile, chips: ["Stripe"] });
+    expect(searchAddress(on)).toBe("/search?chip=Stripe&category=Payments");
+    const off = withChipToggled(on, "Stripe");
+    expect(off).toEqual(tile);
+    expect(searchAddress(off)).toBe("/search?category=Payments");
   });
 });
 
@@ -59,12 +71,12 @@ describe("activeFilterCount", () => {
     expect(activeFilterCount({ ...everything, words: "charge" })).toBe(0);
   });
 
-  test("each SDK and each integration counts once", () => {
+  test("each SDK and each chip counts once", () => {
     expect(
       activeFilterCount({
         words: "",
         sdks: ["Python", ".NET"],
-        integrations: ["Stripe", "Slack", "Postgres"],
+        chips: ["Stripe", "Slack", "Postgres"],
       }),
     ).toBe(5);
   });
@@ -75,15 +87,17 @@ describe("activeFilterCount", () => {
 });
 
 describe("withoutFilters", () => {
-  test("clears the SDKs, the integrations and the publisher, and keeps the words", () => {
-    expect(withoutFilters({ ...search, publisher: "ddieruf" })).toEqual({
+  test("clears the SDKs, the chips, the category and the publisher, and keeps the words", () => {
+    expect(
+      withoutFilters({ ...search, category: "Payments", publisher: "ddieruf" }),
+    ).toEqual({
       words: "charge card",
       sdks: [],
-      integrations: [],
+      chips: [],
     });
   });
 });
 
 test("everything has no words and no filters", () => {
-  expect(everything).toEqual({ words: "", sdks: [], integrations: [] });
+  expect(everything).toEqual({ words: "", sdks: [], chips: [] });
 });

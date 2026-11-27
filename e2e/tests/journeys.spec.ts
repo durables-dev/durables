@@ -266,7 +266,7 @@ test.describe("as an anonymous visitor", () => {
           .getByRole("link", { name: "Amazon S3", exact: true })
           .click();
 
-        await expect(page).toHaveURL("/search?integration=Amazon+S3");
+        await expect(page).toHaveURL("/search?chip=Amazon+S3");
         await expect(
           page
             .getByRole("complementary", { name: "Filters" })

@@ -16,7 +16,7 @@ export function IntegrationLink({ integration }: IntegrationLinkProps) {
   }
   return (
     <Link
-      to={searchAddress({ integrations: [known.data] })}
+      to={searchAddress({ chips: [known.data] })}
       className={styles["integration"]}
     >
       {integration}
