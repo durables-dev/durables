@@ -103,6 +103,10 @@ describe("the version response", () => {
     expect(response).not.toHaveProperty("versions");
   });
 
+  test("leaves out the listing's chips, which can change at a release", () => {
+    expect(versionResponse(version, document)).not.toHaveProperty("chips");
+  });
+
   test("answers an empty integrations list when the version has none", () => {
     const response = versionResponse(version, {
       ...document,
@@ -147,12 +151,13 @@ describe("the version response", () => {
 });
 
 describe("the listing response", () => {
-  test("holds the handle, the name, the removal and every version in the order given, with its current state", () => {
+  test("holds the handle, the name, the removal, the chips and every version in the order given, with its current state", () => {
     expect(
       listingResponse({
         handle: "acme",
         name: "charge-card",
         removedBy: null,
+        chips: ["Stripe", "Saga"],
         versions: [
           {
             version: "1.1.0",
@@ -179,6 +184,7 @@ describe("the listing response", () => {
       handle: "acme",
       name: "charge-card",
       removedBy: null,
+      chips: ["Stripe", "Saga"],
       versions: [
         {
           version: "1.1.0",
@@ -203,12 +209,25 @@ describe("the listing response", () => {
     });
   });
 
+  test("answers an empty chips list when the listing has none", () => {
+    expect(
+      listingResponse({
+        handle: "acme",
+        name: "charge-card",
+        removedBy: null,
+        chips: [],
+        versions: [],
+      }).chips,
+    ).toEqual([]);
+  });
+
   test("answers a deprecation with no replacement as a null replacement", () => {
     expect(
       listingResponse({
         handle: "acme",
         name: "charge-card",
         removedBy: null,
+        chips: [],
         versions: [
           {
             version: "1.0.0",
@@ -236,6 +255,7 @@ describe("the listing response", () => {
           handle: "acme",
           name: "charge-card",
           removedBy,
+          chips: [],
           versions: [],
         }).removedBy,
       ).toBe(shown);

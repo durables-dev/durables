@@ -170,6 +170,7 @@ describe("PATCH /api/activities/:handle/:name", () => {
         handle: address.handle,
         name: address.name,
         removedBy: null,
+        chips: [],
         versions: [
           {
             version: "1.0.0",

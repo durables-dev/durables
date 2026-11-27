@@ -3,6 +3,7 @@ import { describe, expect, inject, test } from "vitest";
 import {
   readAllRows,
   seedAccount,
+  seedChips,
   seedDeprecation,
   seedDescription,
   seedVersion,
@@ -299,6 +300,7 @@ describe("finding a listing's versions", () => {
       handle: listing.handle,
       name: listing.name,
       removedBy: null,
+      chips: [],
       versions: [
         {
           version: "1.10.0",
@@ -342,6 +344,7 @@ describe("finding a listing's versions", () => {
       handle: listing.handle,
       name: listing.name,
       removedBy: null,
+      chips: [],
       versions: [
         {
           version: "1.0.0",
@@ -353,6 +356,21 @@ describe("finding a listing's versions", () => {
         },
       ],
     });
+  });
+
+  test("returns the listing's chips in stored order, leaving out names the shared list does not know", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+    await seedChips(env.DB, {
+      ...listing,
+      chips: ["Slack", "Blockchain", "polling", "Amazon S3", "Slack"],
+    });
+
+    expect((await storage().findListingVersions(listing))?.chips).toEqual([
+      "Slack",
+      "Polling",
+      "Amazon S3",
+    ]);
   });
 
   test("returns a version's new description once it changes", async () => {

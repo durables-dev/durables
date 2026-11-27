@@ -3,8 +3,10 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { generateSnippets } from "../snippets/snippets";
 import {
   seedAccount,
+  seedChips,
   seedDeprecation,
   seedDescription,
+  seedRemoval,
   seedVersion,
 } from "../storage/seed";
 import {
@@ -259,6 +261,7 @@ describe("reading a published activity", () => {
       handle: address.handle,
       name: address.name,
       removedBy: null,
+      chips: [],
       versions: [
         {
           version: "1.0.0",
@@ -312,6 +315,7 @@ describe("reading a published activity", () => {
       handle: address.handle,
       name: address.name,
       removedBy: null,
+      chips: [],
       versions: [
         {
           version: "2.0.0",
@@ -400,6 +404,126 @@ describe("cache rules", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe(shortCache);
+  });
+});
+
+describe("a listing's chips", () => {
+  test("the listing read answers the listing's chips in stored order", async () => {
+    const address = await newAddress();
+    await publish(address);
+    await seedChips(env.DB, {
+      ...address,
+      chips: ["Stripe", "Approval", "Amazon SQS", "OpenAI"],
+    });
+
+    const response = await get(listingPath(address));
+
+    expect(response.status).toBe(200);
+    expect((await response.json<ListingResponse>()).chips).toEqual([
+      "Stripe",
+      "Approval",
+      "Amazon SQS",
+      "OpenAI",
+    ]);
+  });
+
+  test("the listing read answers an empty chips list when the listing has none", async () => {
+    const address = await newAddress();
+    await publish(address);
+
+    const response = await get(listingPath(address));
+
+    expect(response.status).toBe(200);
+    expect((await response.json<ListingResponse>()).chips).toEqual([]);
+  });
+
+  test("the listing read leaves out a chip name the shared list does not know", async () => {
+    const address = await newAddress();
+    await publish(address);
+    await seedChips(env.DB, {
+      ...address,
+      chips: ["Blockchain", "Stripe", "Payments", "Saga"],
+    });
+
+    const response = await get(listingPath(address));
+
+    expect((await response.json<ListingResponse>()).chips).toEqual([
+      "Stripe",
+      "Saga",
+    ]);
+  });
+
+  test("the listing read answers each chip as the shared list writes it, once", async () => {
+    const address = await newAddress();
+    await publish(address);
+    await seedChips(env.DB, {
+      ...address,
+      chips: ["stripe", " Saga ", "Stripe"],
+    });
+
+    const response = await get(listingPath(address));
+
+    expect((await response.json<ListingResponse>()).chips).toEqual([
+      "Stripe",
+      "Saga",
+    ]);
+  });
+
+  test("the listing read keeps the short-cache header when the listing has chips", async () => {
+    const address = await newAddress();
+    await publish(address);
+    await seedChips(env.DB, { ...address, chips: ["Stripe", "Saga"] });
+
+    const response = await get(listingPath(address));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(shortCache);
+  });
+
+  test("the version read carries no chips and keeps the long-cache header", async () => {
+    const address = await newAddress();
+    await publish(address, { integrations: ["Stripe"] });
+    await seedChips(env.DB, { ...address, chips: ["Slack", "Saga"] });
+
+    const response = await get(versionPath(address));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(longCache);
+    const body = await response.json<VersionResponse>();
+    expect(body).not.toHaveProperty("chips");
+    expect(body.integrations).toEqual(["Stripe"]);
+  });
+
+  test("the listing read answers changed chips while the version read stays as published", async () => {
+    const address = await newAddress();
+    await publish(address, { integrations: ["Stripe"] });
+    const before = await (await get(versionPath(address))).json();
+
+    await seedChips(env.DB, { ...address, chips: ["Approval"] });
+
+    expect(
+      (await (await get(listingPath(address))).json<ListingResponse>()).chips,
+    ).toEqual(["Approval"]);
+    expect(await (await get(versionPath(address))).json()).toEqual(before);
+  });
+
+  test("a removed listing's read still answers 200 with its removal, short-cache header and chips", async () => {
+    const address = await newAddress();
+    await publish(address);
+    await seedChips(env.DB, { ...address, chips: ["Stripe"] });
+    await seedRemoval(env.DB, { ...address, removedBy: "publisher" });
+
+    const response = await get(listingPath(address));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(shortCache);
+    expect(await response.json<ListingResponse>()).toMatchObject({
+      handle: address.handle,
+      name: address.name,
+      removedBy: "publisher",
+      chips: ["Stripe"],
+      versions: [{ version: "1.0.0", description }],
+    });
   });
 });
 

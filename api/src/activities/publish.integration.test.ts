@@ -239,6 +239,7 @@ describe("POST /api/activities", () => {
         handle,
         name: body.name,
         removedBy: null,
+        chips: [],
         versions: [
           {
             version: "1.0.0",
