@@ -16,7 +16,6 @@ const seedActivity = async (versions: { version: string; at: string }[]) => {
       version,
       title: "Charge card",
       sdk: "Python",
-      integrations: ["Stripe"],
       publishedAt: new Date(at),
     });
   }

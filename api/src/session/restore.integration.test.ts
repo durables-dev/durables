@@ -75,7 +75,6 @@ const addListing = async (handle: string, name: string) => {
     version: "1.0.0",
     title: "Charge card",
     sdk: "Python",
-    integrations: [],
   });
 };
 

@@ -94,21 +94,20 @@ export interface NewListing extends Address {
   /** The version's one-line description. It belongs to the version and can change later. */
   description: string;
   sdk: Sdk;
-  /** The integrations implied by the code's imports. Empty when there are none. */
-  integrations: readonly string[];
 }
 
-/** A listing at one version's address, with every field search reads. */
+/** A listing at one version's address, with that version's fields and current description. */
 export interface Listing extends NewListing {
-  integrations: string[];
   publishedAt: Date;
 }
 
-/** A published version's own fields. None of them can change after publishing. */
+/**
+ * A published version's own fields. None of them can change after publishing. Its detected
+ * integrations are in its version document.
+ */
 export interface Version extends Address {
   title: string;
   sdk: Sdk;
-  integrations: string[];
   publishedAt: Date;
 }
 
@@ -230,6 +229,8 @@ export interface BrowseFilter {
  * each word in that version's description scores 1. The score is 0 when there are no words.
  */
 export interface BrowseListing extends Listing {
+  /** The listing's chips. */
+  integrations: string[];
   score: number;
 }
 
@@ -314,7 +315,7 @@ const createdListing = (
   if (created === undefined) {
     throw new Error("The version insert returned no row.");
   }
-  return { ...listing, integrations: [...listing.integrations], ...created };
+  return { ...listing, ...created };
 };
 
 /**
@@ -709,7 +710,6 @@ export class Storage {
     { basedOn, whatChanged, deprecateBase }: NextVersion,
   ): Promise<CreatePublicationResult> {
     const { handle, name, version, title, description, sdk } = listing;
-    const integrations = [...listing.integrations];
     const insertVersion = this.#db
       .insert(versions)
       .values({
@@ -718,7 +718,6 @@ export class Storage {
         version,
         title,
         sdk,
-        integrations,
         description,
         whatChanged,
         basedOn,
@@ -798,7 +797,6 @@ export class Storage {
   /** The inserts that create a listing and its first version, which holds the description. */
   #listingInserts(listing: NewListing) {
     const { handle, name, version, title, description, sdk } = listing;
-    const integrations = [...listing.integrations];
     return [
       this.#db.insert(listings).values({ handle, name }),
       this.#db
@@ -809,7 +807,6 @@ export class Storage {
           version,
           title,
           sdk,
-          integrations,
           description,
         })
         .returning({ publishedAt: versions.publishedAt }),
@@ -833,7 +830,6 @@ export class Storage {
         title: versions.title,
         description: versions.description,
         sdk: versions.sdk,
-        integrations: versions.integrations,
         publishedAt: versions.publishedAt,
       })
       .from(versions)
@@ -1143,7 +1139,6 @@ export class Storage {
         version: versions.version,
         title: versions.title,
         sdk: versions.sdk,
-        integrations: versions.integrations,
         publishedAt: versions.publishedAt,
       })
       .from(versions)

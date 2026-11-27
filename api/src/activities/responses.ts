@@ -3,8 +3,8 @@ import { sdkRegistry } from "../sdks/registry";
 import type {
   Snippet,
   Address,
+  BrowseListing,
   Deprecation,
-  Listing,
   ListingVersion,
   ListingVersions,
   RemovalSource,
@@ -196,7 +196,7 @@ export const listingResponse = ({
   versions: versions.map(listingVersionResponse),
 });
 
-/** A browse card, from the listing at its highest version. */
+/** A browse card, from the listing at its highest version, with the listing's chips. */
 export const activityCard = ({
   handle,
   name,
@@ -206,7 +206,7 @@ export const activityCard = ({
   description,
   integrations,
   publishedAt,
-}: Listing): ActivityCard => ({
+}: Omit<BrowseListing, "score">): ActivityCard => ({
   address: formatAddress({ handle, name, version }),
   handle,
   name,

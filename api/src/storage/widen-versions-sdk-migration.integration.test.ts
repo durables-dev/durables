@@ -109,12 +109,10 @@ describe("migration 0003, widen the versions table to every SDK", () => {
     await runMigrationsAfter(widen);
     expect(await storage().findListing(python)).toMatchObject({
       sdk: "Python",
-      integrations: ["Amazon S3", "Postgres"],
       description: python.description,
     });
     expect(await storage().findListing(typescript)).toMatchObject({
       sdk: "TypeScript",
-      integrations: ["Slack"],
     });
   });
 

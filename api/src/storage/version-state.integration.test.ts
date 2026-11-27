@@ -32,7 +32,6 @@ const addVersion = (listing: NewListing, version: string) =>
     version,
     title: listing.title,
     sdk: listing.sdk,
-    integrations: [],
   });
 
 /** A listing with versions 1.0.0 and 1.1.0. */

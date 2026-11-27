@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { Listing, Version, VersionDocument } from "../storage/storage";
+import type {
+  BrowseListing,
+  Version,
+  VersionDocument,
+} from "../storage/storage";
 import {
   activityCard,
   formatAddress,
@@ -16,7 +20,6 @@ const version: Version = {
   version: "1.0.0",
   title: "Charge card",
   sdk: "Python",
-  integrations: ["Stripe"],
   publishedAt: new Date("2026-10-23T12:00:00Z"),
 };
 
@@ -101,10 +104,10 @@ describe("the version response", () => {
   });
 
   test("answers an empty integrations list when the version has none", () => {
-    const response = versionResponse(
-      { ...version, integrations: [] },
-      { ...document, integrations: [] },
-    );
+    const response = versionResponse(version, {
+      ...document,
+      integrations: [],
+    });
 
     expect(response.integrations).toEqual([]);
   });
@@ -266,7 +269,7 @@ describe("the publish response", () => {
 });
 
 describe("a browse card", () => {
-  const listing: Listing = {
+  const listing: Omit<BrowseListing, "score"> = {
     handle: "acme",
     name: "charge-card",
     version: "2.1.0",

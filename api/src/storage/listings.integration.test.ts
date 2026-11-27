@@ -7,6 +7,7 @@ import {
   seedDescription,
   seedVersion,
 } from "./seed";
+import { readChips } from "./migration-testing";
 import { Storage, type NewListing } from "./storage";
 
 const storage = () => new Storage(env.DB, env.DOCUMENTS);
@@ -21,7 +22,6 @@ const newListing = async (
   title: "Post slack message",
   description: "Posts a message to a Slack channel.",
   sdk: "Python",
-  integrations: ["Slack"],
   ...listing,
 });
 
@@ -29,7 +29,6 @@ describe("creating a listing", () => {
   test("reads back by address with every search field", async () => {
     const listing = await newListing({
       sdk: "TypeScript",
-      integrations: ["Stripe", "Postgres"],
     });
     const before = Date.now();
 
@@ -44,7 +43,6 @@ describe("creating a listing", () => {
       title: "Post slack message",
       description: "Posts a message to a Slack channel.",
       sdk: "TypeScript",
-      integrations: ["Stripe", "Postgres"],
       publishedAt: expect.any(Date) as Date,
     });
     // published_at is stored in whole seconds.
@@ -91,12 +89,12 @@ describe("creating a listing", () => {
     });
   });
 
-  test("reads back an empty integrations list as empty", async () => {
-    const listing = await newListing({ integrations: [] });
+  test("gives the listing no chips", async () => {
+    const listing = await newListing();
 
     await storage().createListing(listing);
 
-    expect((await storage().findListing(listing))?.integrations).toEqual([]);
+    expect(await readChips(listing)).toEqual([]);
   });
 
   test("allows the same name under another publisher's handle", async () => {
@@ -136,7 +134,6 @@ describe("creating a listing at an address that exists", () => {
       title: "Another title",
       description: "Another description.",
       sdk: "TypeScript",
-      integrations: [],
     });
 
     expect(result).toEqual({ outcome: "address-taken" });
@@ -197,7 +194,7 @@ describe("finding a listing", () => {
 
 describe("finding a version", () => {
   test("returns the version's own fields, without the description", async () => {
-    const listing = await newListing({ integrations: ["Slack"] });
+    const listing = await newListing();
     await storage().createListing(listing);
 
     expect(await storage().findVersion(listing)).toEqual({
@@ -206,7 +203,6 @@ describe("finding a version", () => {
       version: "1.0.0",
       title: "Post slack message",
       sdk: "Python",
-      integrations: ["Slack"],
       publishedAt: expect.any(Date) as Date,
     });
   });
@@ -266,7 +262,6 @@ const addVersion = (
     version,
     title: listing.title,
     sdk: listing.sdk,
-    integrations: [],
     ...fields,
   });
 
@@ -496,7 +491,6 @@ describe("the listing and version tables", () => {
       version: "1.1.0",
       title: "Post slack message v1.1",
       sdk: "Python",
-      integrations: [],
       description: "Posts a message and returns its timestamp.",
     });
 
@@ -511,7 +505,6 @@ describe("the listing and version tables", () => {
       version: "1.1.0",
       title: "Post slack message v1.1",
       description: "Posts a message and returns its timestamp.",
-      integrations: [],
     });
   });
 
@@ -521,9 +514,9 @@ describe("the listing and version tables", () => {
 
     await expect(
       env.DB.prepare(
-        "insert into versions (handle, name, version, title, sdk, integrations) values (?, ?, ?, ?, ?, ?)",
+        "insert into versions (handle, name, version, title, sdk) values (?, ?, ?, ?, ?)",
       )
-        .bind(listing.handle, listing.name, "9.0.0", "Title", "Kotlin", "[]")
+        .bind(listing.handle, listing.name, "9.0.0", "Title", "Kotlin")
         .run(),
     ).rejects.toThrow(/CHECK constraint failed/);
   });
@@ -538,7 +531,6 @@ describe("the listing and version tables", () => {
         version: "1.0.0",
         title: "Title",
         sdk: "Python",
-        integrations: [],
       }),
     ).rejects.toThrow();
   });
@@ -580,7 +572,6 @@ describe("the migrations", () => {
       "version",
       "title",
       "sdk",
-      "integrations",
       "published_at",
       "description",
       "what_changed",

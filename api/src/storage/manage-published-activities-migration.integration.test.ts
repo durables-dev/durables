@@ -215,7 +215,6 @@ describe("migration 0004, storage for managing published activities", () => {
         version: "1.0.0",
         title: listing.title,
         sdk: "TypeScript",
-        integrations: ["Slack", "Stripe"],
         publishedAt: listing.publishedAt,
       });
     });
