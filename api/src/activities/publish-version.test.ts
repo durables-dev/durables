@@ -18,7 +18,6 @@ const listing: NewListing = {
   title: "Post slack message",
   description: "Posts a message to a Slack channel.",
   sdk: "Python",
-  integrations: ["Slack"],
 };
 
 const document: VersionDocument = {
@@ -75,7 +74,6 @@ const fakeStorage = (state: FakeState = {}) => {
         exists
           ? {
               ...listing,
-              integrations: [...listing.integrations],
               publishedAt: new Date(),
             }
           : undefined,
@@ -109,7 +107,6 @@ const fakeStorage = (state: FakeState = {}) => {
         outcome: "created",
         listing: {
           ...listing,
-          integrations: [...listing.integrations],
           publishedAt: new Date(0),
         },
         accountCreated: publication.newAccount !== undefined,

@@ -64,6 +64,13 @@
       "when": 1795731438072,
       "tag": "0008_copy-version-integrations-to-listing-chips",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795785848580,
+      "tag": "0009_drop-version-integrations",
+      "breakpoints": true
     }
   ]
 }

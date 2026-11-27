@@ -225,11 +225,9 @@ export const readChips = async ({
  */
 export const storedListing = async ({
   sdk = "Python",
-  integrations = [],
   chips,
 }: {
   sdk?: NewListing["sdk"];
-  integrations?: string[];
   chips?: string[];
 } = {}): Promise<NewListing> => {
   const listing: NewListing = {
@@ -239,7 +237,6 @@ export const storedListing = async ({
     title: "Upload report",
     description: "Uploads a CSV report and returns where it is.",
     sdk,
-    integrations,
   };
   await new Storage(env.DB, env.DOCUMENTS).createListing(listing);
   if (chips !== undefined) {

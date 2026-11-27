@@ -74,7 +74,6 @@ const publish = async (
     title: stored.title,
     description,
     sdk: stored.facts.sdk,
-    integrations: stored.integrations,
   });
   return stored;
 };
@@ -285,7 +284,6 @@ describe("reading a published activity", () => {
         version,
         title: "Charge card",
         sdk: "Python",
-        integrations: ["Stripe"],
         ...fields,
       });
     await later("1.1.0", {
@@ -466,7 +464,6 @@ describe("an unknown address", () => {
       title: "Charge card",
       description,
       sdk: "Python",
-      integrations: ["Stripe"],
     });
 
     const response = await get(versionPath(address));

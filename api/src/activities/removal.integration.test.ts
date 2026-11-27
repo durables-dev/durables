@@ -70,7 +70,6 @@ const publish = async (handle: string) => {
     title,
     description: document.description,
     sdk: document.facts.sdk,
-    integrations: document.integrations,
   });
   await addVersion(address, "1.1.0", title);
   return { address, word };
@@ -84,7 +83,6 @@ async function addVersion(address: Address, version: string, title: string) {
     ...later,
     title,
     sdk: document.facts.sdk,
-    integrations: [...document.integrations],
     description: document.description,
     publishedAt: nextDate(),
   });

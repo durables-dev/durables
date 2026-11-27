@@ -219,7 +219,6 @@ export const activities = new Hono<AppEnv>()
             title,
             description,
             sdk: facts.sdk,
-            integrations,
           },
           document: {
             code: body.code,
@@ -304,7 +303,6 @@ export const activities = new Hono<AppEnv>()
             title,
             description,
             sdk: facts.sdk,
-            integrations,
           },
           document: {
             code: body.code,

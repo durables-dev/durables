@@ -58,7 +58,6 @@ const publish = async (handle: string, name = newName()): Promise<Address> => {
     title: document.title,
     description: document.description,
     sdk: document.facts.sdk,
-    integrations: document.integrations,
   });
   return address;
 };
@@ -71,7 +70,6 @@ const addVersion = async (base: Address, version: string): Promise<Address> => {
     ...later,
     title: document.title,
     sdk: document.facts.sdk,
-    integrations: [...document.integrations],
     description: document.description,
     whatChanged: `Changes in ${version}.`,
     basedOn: base.version,

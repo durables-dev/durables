@@ -125,7 +125,6 @@ export const seedVersion = async (
     version: string;
     title: string;
     sdk: Sdk;
-    integrations: string[];
     publishedAt?: Date;
     description?: string;
     whatChanged?: string | null;
