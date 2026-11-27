@@ -430,7 +430,9 @@ test.describe("as an anonymous visitor", () => {
       );
     });
 
-    await test.step("narrow by Stripe or Amazon S3", async () => {
+    // Stripe is under Payments and Amazon S3 under Data and storage. Chips in different
+    // categories narrow, so no listing has both.
+    await test.step("narrow by Stripe, then by Amazon S3 as well", async () => {
       await chip(sidebar(page), "Integrates with", "Stripe").click();
 
       await expect(countLine(page)).toHaveText(
@@ -444,12 +446,9 @@ test.describe("as an anonymous visitor", () => {
         `/search?q=${word}&integration=Stripe&integration=Amazon+S3`,
       );
       await expect(countLine(page)).toHaveText(
-        "2 activities · sorted by relevance",
+        "0 activities · sorted by relevance",
       );
-      await expect(cardTitles(page)).toHaveText([
-        listings.dotnet.title,
-        listings.typescript.title,
-      ]);
+      await expect(cards(page)).toHaveCount(0);
     });
 
     await test.step("Clear removes the filters and keeps the words", async () => {
