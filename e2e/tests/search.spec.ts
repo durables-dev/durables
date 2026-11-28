@@ -538,7 +538,7 @@ test.describe("as an anonymous visitor", () => {
   });
 
   test(
-    "a search with no matches shows the empty state, and Clear filters brings every activity back",
+    "a search with no matches shows the empty state, Clear filters keeps the words, and emptying the box brings every activity back",
     { tag: "@journey" },
     async ({ page, expectAccessible, publishListing, uniqueWord }) => {
       const listing = threeListings(uniqueWord()).python;
@@ -572,17 +572,28 @@ test.describe("as an anonymous visitor", () => {
         await expectAccessible();
       });
 
-      await test.step("Clear filters clears the words and the filters and brings results back", async () => {
+      await test.step("Clear filters clears the filters and keeps the words", async () => {
         await main(page).getByRole("button", { name: "Clear filters" }).click();
 
-        await expect(page).toHaveURL("/search");
-        await expect(searchBox(page)).toHaveValue("");
+        await expect(page).toHaveURL(`/search?q=${nothing}`);
+        await expect(searchBox(page)).toHaveValue(nothing);
         await expect(
           chip(sidebar(page), "Temporal SDK", "Any"),
         ).toHaveAttribute("aria-pressed", "true");
         await expect(
           chip(sidebar(page), "Temporal SDK", ".NET"),
         ).toHaveAttribute("aria-pressed", "false");
+        await expect(
+          main(page).getByRole("heading", { name: "No activities match" }),
+        ).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("emptying the box brings every activity back", async () => {
+        await searchBox(page).fill("");
+        await searchBox(page).press("Enter");
+
+        await expect(page).toHaveURL("/search");
         await expect(
           main(page).getByRole("heading", { name: "No activities match" }),
         ).toHaveCount(0);
