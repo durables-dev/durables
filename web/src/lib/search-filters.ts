@@ -1,6 +1,6 @@
 import type { SdkName } from "./sdk-catalog";
 import type { Search } from "./search-address";
-import type { Chip } from "@durables/schemas";
+import type { CategoryName, Chip } from "@durables/schemas";
 
 /** The search with every SDK cleared, which is what the Any chip means. */
 export function withAnySdk(search: Search): Search {
@@ -31,6 +31,23 @@ export function withChipToggled(search: Search, chip: Chip): Search {
       ? search.chips.filter((picked) => picked !== chip)
       : [...search.chips, chip],
   };
+}
+
+/**
+ * The category that applies to the results: the address's category while no chip is on.
+ * Undefined when there is no category or a chip is on. An SDK, words or a publisher do not stop
+ * it applying.
+ */
+export function appliedCategory(search: Search): CategoryName | undefined {
+  return search.chips.length === 0 ? search.category : undefined;
+}
+
+/** The search with the category removed. The words, SDKs, chips and publisher are kept. */
+export function withoutCategory(search: Search): Search {
+  const { words, sdks, chips, publisher } = search;
+  return publisher === undefined
+    ? { words, sdks, chips }
+    : { words, sdks, chips, publisher };
 }
 
 /** How many filters are on: each SDK, each chip, and a publisher. Words do not count. */

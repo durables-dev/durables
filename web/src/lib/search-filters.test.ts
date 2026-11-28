@@ -2,9 +2,11 @@ import { searchAddress, type Search } from "./search-address";
 import { describe, expect, test } from "vitest";
 import {
   activeFilterCount,
+  appliedCategory,
   everything,
   withAnySdk,
   withChipToggled,
+  withoutCategory,
   withoutFilters,
   withSdkToggled,
 } from "./search-filters";
@@ -63,6 +65,63 @@ describe("the chips", () => {
     const off = withChipToggled(on, "Stripe");
     expect(off).toEqual(tile);
     expect(searchAddress(off)).toBe("/search?category=Payments");
+  });
+});
+
+describe("appliedCategory", () => {
+  test("the category applies while no chip is on", () => {
+    expect(appliedCategory({ ...everything, category: "Payments" })).toBe(
+      "Payments",
+    );
+  });
+
+  test("no category applies while a chip is on", () => {
+    expect(
+      appliedCategory({
+        ...everything,
+        chips: ["Slack"],
+        category: "Payments",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("an SDK, words or a publisher alone do not stop the category applying", () => {
+    expect(
+      appliedCategory({
+        words: "charge",
+        sdks: ["Python"],
+        chips: [],
+        category: "Payments",
+        publisher: "ddieruf",
+      }),
+    ).toBe("Payments");
+  });
+
+  test("the category applies again once the last chip goes off", () => {
+    const on: Search = {
+      ...everything,
+      chips: ["Stripe"],
+      category: "Payments",
+    };
+    expect(appliedCategory(withChipToggled(on, "Stripe"))).toBe("Payments");
+  });
+
+  test("with no category in the search, none applies", () => {
+    expect(appliedCategory(everything)).toBeUndefined();
+  });
+});
+
+describe("withoutCategory", () => {
+  test("removes the category and keeps the words, SDKs, chips and publisher", () => {
+    const removed = withoutCategory({
+      ...search,
+      category: "Payments",
+      publisher: "ddieruf",
+    });
+    expect(removed).toEqual({ ...search, publisher: "ddieruf" });
+    expect(searchAddress(removed)).toBe(
+      "/search?q=charge+card&sdk=Python&chip=Stripe&publisher=ddieruf",
+    );
   });
 });
 
