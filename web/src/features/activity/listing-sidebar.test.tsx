@@ -1,4 +1,5 @@
 import "@/styles/global.css";
+import { categories } from "@durables/schemas";
 import { readSearch, searchAddress } from "@/lib/search-address";
 import { testCatalogSdks } from "../../../test/sdk-catalog";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -27,7 +28,7 @@ const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
 const chargeCard: ListingSidebarProps = {
   sdk: "Python",
-  integrations: ["Stripe"],
+  chips: ["Stripe"],
   dependencies: ["stripe"],
   publishedAt: twoDaysAgo,
   handle: "ddieruf",
@@ -78,7 +79,7 @@ function aboutRows(card: HTMLElement) {
   ]);
 }
 
-test("a version with integrations and dependencies shows all five About rows", async () => {
+test("a listing with chips and a version with dependencies shows all five About rows", async () => {
   const screen = await renderSidebar();
 
   const about = screen.getByRole("region", { name: "About" });
@@ -91,7 +92,7 @@ test("a version with integrations and dependencies shows all five About rows", a
     .poll(() => aboutRows(about.element() as HTMLElement))
     .toEqual([
       ["SDK", "Python, temporalio"],
-      ["Integrates with", "Stripe"],
+      ["Filters", "Stripe"],
       ["Dependencies", "stripe"],
       ["Published", "2 days ago"],
       ["License", "MIT-0"],
@@ -172,22 +173,22 @@ test("when the catalog cannot be read, the SDK row shows the name only and the c
   await expect.element(about).toBeVisible();
   expect(aboutRows(about.element() as HTMLElement)).toEqual([
     ["SDK", "Python"],
-    ["Integrates with", "Stripe"],
+    ["Filters", "Stripe"],
     ["Dependencies", "stripe"],
     ["Published", "2 days ago"],
     ["License", "MIT-0"],
   ]);
 });
 
-test("several integrations and dependencies are listed in order, and each integration is a link", async () => {
+test("several chips and dependencies are listed in order, and each chip is a link", async () => {
   const screen = await renderSidebar({
-    integrations: ["Stripe", "Slack"],
+    chips: ["Stripe", "Slack"],
     dependencies: ["stripe", "slack_sdk"],
   });
 
   const about = screen.getByRole("region", { name: "About" });
   const rows = aboutRows(about.element() as HTMLElement);
-  expect(rows).toContainEqual(["Integrates with", "Stripe, Slack"]);
+  expect(rows).toContainEqual(["Filters", "Stripe, Slack"]);
   expect(rows).toContainEqual(["Dependencies", "stripe, slack_sdk"]);
   expect(
     about
@@ -200,24 +201,24 @@ test("several integrations and dependencies are listed in order, and each integr
     .not.toBeInTheDocument();
 });
 
-test("each integration links to the results for that integration alone", async () => {
+test("each chip links to the results for that chip alone", async () => {
   const screen = await renderSidebar({
-    integrations: ["Stripe", "Amazon S3", "Slack"],
+    chips: ["Stripe", "Amazon S3", "Slack", "Saga"],
   });
 
   const about = screen.getByRole("region", { name: "About" });
-  for (const integration of ["Stripe", "Amazon S3", "Slack"] as const) {
+  for (const chip of ["Stripe", "Amazon S3", "Slack", "Saga"] as const) {
     expect(
       about
-        .getByRole("link", { name: integration, exact: true })
+        .getByRole("link", { name: chip, exact: true })
         .element()
         .getAttribute("href"),
-    ).toBe(searchAddress({ chips: [integration] }));
+    ).toBe(searchAddress({ chips: [chip] }));
   }
 });
 
-test("clicking an integration opens /search for that integration", async () => {
-  const screen = await renderSidebar({ integrations: ["Stripe", "Slack"] });
+test("clicking a chip opens /search for that chip alone", async () => {
+  const screen = await renderSidebar({ chips: ["Stripe", "Slack"] });
 
   await screen
     .getByRole("region", { name: "About" })
@@ -231,8 +232,8 @@ test("clicking an integration opens /search for that integration", async () => {
   });
 });
 
-test("an integration name with a space builds an address that reads back unchanged", async () => {
-  const screen = await renderSidebar({ integrations: ["Amazon S3"] });
+test("a chip name with a space builds an address that reads back unchanged", async () => {
+  const screen = await renderSidebar({ chips: ["Amazon S3"] });
 
   const link = screen
     .getByRole("region", { name: "About" })
@@ -245,12 +246,12 @@ test("an integration name with a space builds an address that reads back unchang
   expect((await searchOpened(screen)).chips).toEqual(["Amazon S3"]);
 });
 
-test("an integration not on the shared list shows as plain text", async () => {
-  const screen = await renderSidebar({ integrations: ["Stripe", "Twilio"] });
+test("a chip not on the shared list shows as plain text", async () => {
+  const screen = await renderSidebar({ chips: ["Stripe", "Twilio"] });
 
   const about = screen.getByRole("region", { name: "About" });
   expect(aboutRows(about.element() as HTMLElement)).toContainEqual([
-    "Integrates with",
+    "Filters",
     "Stripe, Twilio",
   ]);
   await expect
@@ -262,14 +263,67 @@ test("an integration not on the shared list shows as plain text", async () => {
     .not.toBeInTheDocument();
 });
 
-test("a version with no integrations hides the Integrates with row", async () => {
-  const screen = await renderSidebar({ integrations: [] });
+test("pattern chips show in the Filters row beside integrations, each a link", async () => {
+  const screen = await renderSidebar({ chips: ["Stripe", "Saga", "Polling"] });
+
+  const about = screen.getByRole("region", { name: "About" });
+  expect(aboutRows(about.element() as HTMLElement)).toContainEqual([
+    "Filters",
+    "Stripe, Saga, Polling",
+  ]);
+  expect(
+    about
+      .getByRole("link")
+      .elements()
+      .map((link) => link.textContent),
+  ).toEqual(["Stripe", "Saga", "Polling"]);
+});
+
+test("a listing with only pattern chips shows the Filters row with those patterns", async () => {
+  const screen = await renderSidebar({ chips: ["Approval"] });
+
+  const about = screen.getByRole("region", { name: "About" });
+  await expect
+    .poll(() => aboutRows(about.element() as HTMLElement))
+    .toEqual([
+      ["SDK", "Python, temporalio"],
+      ["Filters", "Approval"],
+      ["Dependencies", "stripe"],
+      ["Published", "2 days ago"],
+      ["License", "MIT-0"],
+    ]);
+  expect(
+    about
+      .getByRole("link", { name: "Approval", exact: true })
+      .element()
+      .getAttribute("href"),
+  ).toBe(searchAddress({ chips: ["Approval"] }));
+});
+
+test("the sidebar shows no category: no Category row and no category names", async () => {
+  // Stripe is under Payments and Saga under Workflow patterns.
+  const screen = await renderSidebar({ chips: ["Stripe", "Saga"] });
+
+  const about = screen.getByRole("region", { name: "About" });
+  await expect
+    .element(about.getByRole("link", { name: "Saga", exact: true }))
+    .toBeVisible();
+  const text = (about.element() as HTMLElement).innerText;
+  expect(text).not.toMatch(/categor/i);
+  for (const { name } of categories) {
+    expect(text).not.toContain(name);
+  }
+  expect(
+    aboutRows(about.element() as HTMLElement).map(([term]) => term),
+  ).toEqual(["SDK", "Filters", "Dependencies", "Published", "License"]);
+});
+
+test("a listing with no chips hides the Filters row", async () => {
+  const screen = await renderSidebar({ chips: [] });
 
   const about = screen.getByRole("region", { name: "About" });
   await expect.element(about).toBeVisible();
-  await expect
-    .element(about.getByText("Integrates with"))
-    .not.toBeInTheDocument();
+  await expect.element(about.getByText("Filters")).not.toBeInTheDocument();
   expect(
     aboutRows(about.element() as HTMLElement).map(([term]) => term),
   ).toEqual(["SDK", "Dependencies", "Published", "License"]);
@@ -286,11 +340,11 @@ test('a version with no dependencies says "None beyond the SDK"', async () => {
   ]);
   expect(
     aboutRows(about.element() as HTMLElement).map(([term]) => term),
-  ).toEqual(["SDK", "Integrates with", "Dependencies", "Published", "License"]);
+  ).toEqual(["SDK", "Filters", "Dependencies", "Published", "License"]);
 });
 
-test('with no integrations and no dependencies, the row is hidden and Dependencies says "None beyond the SDK"', async () => {
-  const screen = await renderSidebar({ integrations: [], dependencies: [] });
+test('with no chips and no dependencies, the Filters row is hidden and Dependencies says "None beyond the SDK"', async () => {
+  const screen = await renderSidebar({ chips: [], dependencies: [] });
 
   const about = screen.getByRole("region", { name: "About" });
   await expect.element(about).toBeVisible();

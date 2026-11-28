@@ -434,7 +434,51 @@ test.describe("as an anonymous visitor", () => {
     await expectAccessible();
   });
 
-  test("a listing whose imports imply an integration shows it in the About card", async ({
+  test("a listing a release gave chips shows them, patterns included, in the About card's Filters row", async ({
+    page,
+    expectAccessible,
+    publishListing,
+    setChips,
+    uniqueWord,
+  }) => {
+    const title = `Upload report ${uniqueWord()}`;
+    const listing = await publishListing({
+      code: sample("typescript"),
+      title,
+      name: "upload-report",
+      description: "Uploads a CSV report to S3 and returns where it is.",
+    });
+    // Publishing gives a listing no chips; an operator's migration gives them.
+    await setChips(listing, ["Amazon S3", "Saga"]);
+
+    await page.goto(`/${listing.address}`);
+
+    const about = page.getByRole("region", { name: "About" });
+    await expect(about.getByRole("term")).toHaveText([
+      "SDK",
+      "Filters",
+      "Dependencies",
+      "Published",
+      "License",
+    ]);
+    await expect(about.getByRole("definition").nth(1)).toHaveText(
+      "Amazon S3, Saga",
+    );
+    await expect(about).not.toContainText(/categor|Workflow patterns/i);
+    await expect(
+      main(page).getByRole("tablist", { name: "Files" }).getByRole("tab"),
+    ).toHaveText(["activities.ts", "workflows.ts", "worker.ts", "start.ts"]);
+    await expectAccessible();
+
+    await about.getByRole("link", { name: "Saga", exact: true }).click();
+
+    await expect(page).toHaveURL("/search?chip=Saga");
+    await expect(
+      main(page).getByRole("article", { name: title, exact: true }),
+    ).toBeVisible();
+  });
+
+  test("a listing whose imports imply an integration shows no Filters row until a release gives it chips", async ({
     page,
     expectAccessible,
     publishListing,
@@ -451,15 +495,11 @@ test.describe("as an anonymous visitor", () => {
     const about = page.getByRole("region", { name: "About" });
     await expect(about.getByRole("term")).toHaveText([
       "SDK",
-      "Integrates with",
       "Dependencies",
       "Published",
       "License",
     ]);
-    await expect(about.getByRole("definition").nth(1)).toHaveText("Amazon S3");
-    await expect(
-      main(page).getByRole("tablist", { name: "Files" }).getByRole("tab"),
-    ).toHaveText(["activities.ts", "workflows.ts", "worker.ts", "start.ts"]);
+    await expect(about).not.toContainText("Amazon S3");
     await expectAccessible();
   });
 });

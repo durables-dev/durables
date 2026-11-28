@@ -35,6 +35,8 @@ export interface TestListingState {
   deprecations: Record<string, TestDeprecation>;
   /** Each version's note, base, description and date. Unset fields take the defaults. */
   details: Record<string, TestVersionDetails>;
+  /** The listing's chips, patterns included, as the listing read answers them. */
+  chips: string[];
 }
 
 /** A write the fake API received, with its method, route and body. */
@@ -90,6 +92,7 @@ export function serveChargeCard(initial: Partial<TestListingState> = {}) {
     versions: ["1.0.0"],
     deprecations: {},
     details: {},
+    chips: [],
     ...initial,
   };
   const writes: TestWrite[] = [];
@@ -98,6 +101,7 @@ export function serveChargeCard(initial: Partial<TestListingState> = {}) {
     handle: "ddieruf",
     name: "charge-card",
     removedBy: state.removedBy,
+    chips: state.chips,
     versions: state.versions.map((version) => {
       const details = state.details[version] ?? {};
       return {

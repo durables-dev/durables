@@ -12,10 +12,10 @@ export interface ListingSidebarProps {
   /** The activity's SDK, named as the api names it. */
   sdk: string;
   /**
-   * The integrations implied by the code's imports, each a link to results for it alone.
-   * Empty hides the Integrates with row.
+   * The listing's chips, patterns included, from the listing read. Each links to results for
+   * it alone. Empty hides the Filters row.
    */
-  integrations: readonly string[];
+  chips: readonly string[];
   /** The third-party packages the code imports, beyond the SDK. */
   dependencies: readonly string[];
   /** When the version was published, as an ISO 8601 timestamp. */
@@ -24,13 +24,13 @@ export interface ListingSidebarProps {
 }
 
 // The Activity page's sidebar: the About and Publisher cards, then the note that Durables
-// doesn't review published code. Each integration links to results for that integration,
-// and the handle and "Search all activities by" link to that publisher's activities. The SDK's
-// logo and package come from the SDK catalog; without the catalog's profile, the SDK row is its
-// name.
+// doesn't review published code. The Filters row lists the listing's chips, each a link to
+// results for that chip alone, and shows no category. The handle and "Search all activities
+// by" link to that publisher's activities. The SDK's logo and package come from the SDK
+// catalog; without the catalog's profile, the SDK row is its name.
 export function ListingSidebar({
   sdk,
-  integrations,
+  chips,
   dependencies,
   publishedAt,
   handle,
@@ -49,12 +49,12 @@ export function ListingSidebar({
           <AboutRow term="SDK">
             <SdkAboutValue sdk={sdk} profile={profile} />
           </AboutRow>
-          {integrations.length === 0 ? null : (
-            <AboutRow term="Integrates with">
-              {integrations.map((integration, position) => (
-                <Fragment key={integration}>
+          {chips.length === 0 ? null : (
+            <AboutRow term="Filters">
+              {chips.map((chip, position) => (
+                <Fragment key={chip}>
                   {position === 0 ? null : ", "}
-                  <IntegrationLink integration={integration} />
+                  <IntegrationLink integration={chip} />
                 </Fragment>
               ))}
             </AboutRow>
