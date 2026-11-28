@@ -5,6 +5,27 @@
   min-width: 0;
 }
 
+/* The count line and, beside it, the category pill. The pill sits outside the count's live
+   region, so it is not read out when the results change. */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.pill {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--fg);
+  border-radius: var(--radius-panel);
+  background: var(--fg);
+  color: var(--bg);
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
 .count {
   margin: 0;
   font-size: var(--text-small);

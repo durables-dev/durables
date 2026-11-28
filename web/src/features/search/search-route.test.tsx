@@ -844,6 +844,183 @@ test("an answer that arrives after a newer change is ignored", async () => {
     .toBeVisible();
 });
 
+// The category pill (DUR-133)
+
+/** The pill naming the category that applies, by its accessible name. */
+function categoryPill({ screen }: Opened, category: string) {
+  return screen.getByRole("button", { name: `Remove ${category}` });
+}
+
+/** Any category pill, whatever its category. */
+function anyCategoryPill({ screen }: Opened) {
+  return screen.getByRole("button", { name: /^Remove / });
+}
+
+function countLineOf({ screen }: Opened) {
+  return screen.getByText(/activit(y|ies) · sorted by/);
+}
+
+test("with a category and no chip, the pill reads the category and sits beside the count line", async () => {
+  await page.viewport(1280, 900);
+  serveBrowse(testCards(3));
+  const opened = await openAt("/search?category=payments");
+
+  const pill = categoryPill(opened, "Payments");
+  await expect.element(pill).toBeVisible();
+  await expect.element(pill).toHaveTextContent("Payments ×");
+  await expect
+    .element(countLineOf(opened))
+    .toHaveTextContent("3 activities · sorted by newest");
+
+  const pillBox = pill.element().getBoundingClientRect();
+  const countBox = countLineOf(opened).element().getBoundingClientRect();
+  const firstCard = cards(opened).first().element().getBoundingClientRect();
+  // Same row: the pill starts after the count line ends, and their middles line up.
+  expect(pillBox.left).toBeGreaterThanOrEqual(countBox.right);
+  expect(
+    Math.abs(
+      pillBox.top + pillBox.height / 2 - (countBox.top + countBox.height / 2),
+    ),
+  ).toBeLessThan(4);
+  // Above the results.
+  expect(pillBox.bottom).toBeLessThanOrEqual(firstCard.top);
+});
+
+test("the pill's accessible name says it removes the category", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Messaging");
+
+  await expect
+    .element(categoryPill(opened, "Messaging"))
+    .toHaveAccessibleName("Remove Messaging");
+});
+
+test("the pill sits outside the count line's live region", async () => {
+  serveBrowse(testCards(2));
+  const opened = await openAt("/search?category=Payments");
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+
+  await expect
+    .element(countLineOf(opened))
+    .toHaveAttribute("aria-live", "polite");
+  expect(
+    categoryPill(opened, "Payments").element().closest("[aria-live]"),
+  ).toBeNull();
+});
+
+test("the pill is hidden while a chip is on", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments&chip=Stripe");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+});
+
+test("the pill shows while only an SDK is on", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments&sdk=Python");
+
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+});
+
+test("the pill hides when a chip goes on and returns when the last chip goes off", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments");
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+
+  await integrationChip(opened, "Stripe").click();
+  await integrationChip(opened, "Slack").click();
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?chip=Stripe&chip=Slack&category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+
+  await integrationChip(opened, "Stripe").click();
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?chip=Slack&category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+
+  await integrationChip(opened, "Slack").click();
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?category=Payments");
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+});
+
+test("removing the pill takes the category out of the address and keeps the words, SDKs and publisher", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt(
+    searchAddress({
+      words: "charge",
+      sdks: ["Python"],
+      chips: [],
+      category: "Payments",
+      publisher: "ddieruf",
+    }),
+  );
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+
+  await categoryPill(opened, "Payments").click();
+
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?q=charge&sdk=Python&publisher=ddieruf");
+  expect(currentSearch(opened)).toEqual({
+    words: "charge",
+    sdks: ["Python"],
+    chips: [],
+    publisher: "ddieruf",
+  });
+  await expect
+    .poll(() => calls.at(-1))
+    .toEqual({
+      ...firstCall,
+      q: "charge",
+      sdks: ["Python"],
+      publisher: "ddieruf",
+    });
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+  await expect.element(searchBox(opened)).toHaveValue("charge");
+});
+
+test("removing the pill on a tile's address shows every activity", async () => {
+  const all = testCards(4);
+  const calls = serveBrowse(all, {
+    matching: (call) => (call.category === null ? all : all.slice(0, 1)),
+  });
+  const opened = await openAt("/search?category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
+  await categoryPill(opened, "Payments").click();
+
+  await expect.poll(() => opened.router.state.location.search).toBe("");
+  await expect.poll(() => cardCount(opened)).toBe(4);
+  expect(calls.at(-1)).toEqual(firstCall);
+});
+
+test("an unknown category in the address shows no pill", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Shipping");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+});
+
+test("the pill shows beside the count line in the empty state too", async () => {
+  serveBrowse([testCard(1)], { matching: () => [] });
+  const opened = await openAt("/search?category=Workflow+patterns");
+
+  await expect
+    .element(
+      opened.screen.getByRole("heading", { name: "No activities match" }),
+    )
+    .toBeVisible();
+  await expect.element(categoryPill(opened, "Workflow patterns")).toBeVisible();
+});
+
 // Criterion 6: the empty state
 
 test("no matches shows the empty state, and Clear filters clears the words and the filters", async () => {
