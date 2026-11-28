@@ -145,11 +145,16 @@ export type ListingKey = Omit<Address, "version">;
 
 /**
  * A listing and every one of its versions, from the highest version number down, with who took
- * it out of search.
+ * it out of search and its chips.
  */
 export interface ListingVersions extends ListingKey {
   /** Who took the listing out of search. Null while it is listed. */
   removedBy: RemovalSource | null;
+  /**
+   * The listing's chips in stored order, keeping only the names on the shared list, as that
+   * list writes them. Empty when it has none.
+   */
+  chips: string[];
   versions: ListingVersion[];
 }
 
@@ -1155,7 +1160,8 @@ export class Storage {
   /**
    * The listing at a handle and name with every one of its versions, from the highest version
    * number down, or undefined when there is no listing. The listing carries who removed it from
-   * search, and each version carries its current description and its deprecation. A removed
+   * search and its chips, and each version carries its current description and its deprecation.
+   * A chip name the shared list does not know is left out. A removed
    * listing is found like any other. Handles and names match exactly, so a wrong-case one
    * finds nothing.
    */
@@ -1169,6 +1175,7 @@ export class Storage {
           handle: listings.handle,
           name: listings.name,
           removedBy: listings.removedBy,
+          chips: listings.chips,
         })
         .from(listings)
         .where(and(eq(listings.handle, handle), eq(listings.name, name))),
@@ -1199,6 +1206,7 @@ export class Storage {
     }
     return {
       ...listing,
+      chips: listedChips(listing.chips),
       versions: rows.map(
         ({ deprecationReason, replacement, ...version }): ListingVersion => ({
           ...version,

@@ -71,6 +71,12 @@ export interface ListingResponse {
   name: string;
   /** Who took the listing out of search. Null while it is listed. */
   removedBy: ShownRemoval | null;
+  /**
+   * The listing's chips, patterns included, in stored order. Only names on the shared list are
+   * answered. Empty when it has none. They can change at a release, so the version response
+   * never carries them (ADR 0006).
+   */
+  chips: string[];
   /** Every version, newest first, so the first is the latest. */
   versions: ListingVersionResponse[];
 }
@@ -188,11 +194,13 @@ export const listingResponse = ({
   handle,
   name,
   removedBy,
+  chips,
   versions,
 }: ListingVersions): ListingResponse => ({
   handle,
   name,
   removedBy: shownRemoval(removedBy),
+  chips,
   versions: versions.map(listingVersionResponse),
 });
 

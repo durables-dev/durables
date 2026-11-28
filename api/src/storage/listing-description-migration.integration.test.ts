@@ -7,6 +7,7 @@ import {
   readTables,
   rebuildDatabaseBefore,
   runMigration,
+  runMigrationsAfter,
 } from "./migration-testing";
 import { Storage } from "./storage";
 
@@ -178,6 +179,8 @@ describe("migration 0006, removing the listing's description", () => {
     await runMigration(drop);
 
     expect(await columnNames("listings")).not.toContain("description");
+    // Storage reads the schema of today, so the later migrations run before it reads.
+    await runMigrationsAfter(drop);
     expect(await storage().findListingVersions(listing)).toMatchObject({
       versions: [
         { version: "1.1.0", description: listing.description },
