@@ -50,16 +50,21 @@ export function withoutCategory(search: Search): Search {
     : { words, sdks, chips, publisher };
 }
 
-/** How many filters are on: each SDK, each chip, and a publisher. Words do not count. */
+/**
+ * How many filters are on: each SDK, each chip, the category and the publisher. The category
+ * counts whenever the search holds one, even while a chip stops it applying. Words do not
+ * count.
+ */
 export function activeFilterCount(search: Search): number {
   return (
     search.sdks.length +
     search.chips.length +
+    (search.category === undefined ? 0 : 1) +
     (search.publisher === undefined ? 0 : 1)
   );
 }
 
-/** The search with every filter cleared and the words kept. */
+/** The search with every SDK and chip, the category and the publisher cleared, and the words kept. */
 export function withoutFilters(search: Search): Search {
   return { words: search.words, sdks: [], chips: [] };
 }

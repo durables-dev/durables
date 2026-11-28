@@ -226,29 +226,55 @@ test.describe("as an anonymous visitor", () => {
         await expect(
           page.getByRole("group", { name: "Temporal SDK" }).getByRole("button"),
         ).toHaveText(["Any", ...sdkNames]);
+        // After Temporal SDK, one heading per category, each with its help line and its
+        // filters, in the shared list's order. No single Integrates with list.
+        const headings = [
+          {
+            name: "AI models",
+            help: "Call an AI model",
+            filters: [
+              "OpenAI",
+              "Anthropic Claude",
+              "Google Gemini",
+              "Amazon Bedrock",
+              "Ollama",
+              "Cohere",
+              "Groq",
+              "xAI Grok",
+            ],
+          },
+          {
+            name: "Data and storage",
+            help: "Read or write data",
+            filters: ["Amazon S3", "Postgres", "Redis"],
+          },
+          {
+            name: "Messaging",
+            help: "Send or receive messages",
+            filters: ["Slack", "Amazon SQS"],
+          },
+          {
+            name: "Payments",
+            help: "Take, refund or manage payments",
+            filters: ["Stripe"],
+          },
+          {
+            name: "Workflow patterns",
+            help: "Common workflow steps",
+            filters: ["Approval", "Polling", "Batching", "Saga"],
+          },
+        ];
+        for (const { name, help, filters } of headings) {
+          const group = page.getByRole("group", { name, exact: true });
+          await expect(group).toHaveAccessibleDescription(help);
+          await expect(group.getByRole("button")).toHaveText(filters);
+        }
         await expect(
-          page
-            .getByRole("group", { name: "Integrates with" })
-            .getByRole("button"),
-        ).toHaveText([
-          "Stripe",
-          "Amazon S3",
-          "Postgres",
-          "Slack",
-          "OpenAI",
-          "Anthropic Claude",
-          "Google Gemini",
-          "Amazon Bedrock",
-          "Redis",
-          "Amazon SQS",
-          "Ollama",
-          "Cohere",
-          "Groq",
-          "xAI Grok",
-        ]);
+          page.getByRole("group", { name: "Integrates with" }),
+        ).toHaveCount(0);
 
         await chip(page, "Temporal SDK", "TypeScript").click();
-        await chip(page, "Integrates with", "Amazon S3").click();
+        await chip(page, "Data and storage", "Amazon S3").click();
 
         await expect(chip(page, "Temporal SDK", "TypeScript")).toHaveAttribute(
           "aria-pressed",
@@ -259,7 +285,7 @@ test.describe("as an anonymous visitor", () => {
           "false",
         );
         await expect(
-          chip(page, "Integrates with", "Amazon S3"),
+          chip(page, "Data and storage", "Amazon S3"),
         ).toHaveAttribute("aria-pressed", "true");
         await expect(filtersButton).toHaveAccessibleName("Filters (2 on)");
         await expect(
@@ -277,7 +303,7 @@ test.describe("as an anonymous visitor", () => {
           chip(sidebar(page), "Temporal SDK", "TypeScript"),
         ).toHaveAttribute("aria-pressed", "true");
         await expect(
-          chip(sidebar(page), "Integrates with", "Amazon S3"),
+          chip(sidebar(page), "Data and storage", "Amazon S3"),
         ).toHaveAttribute("aria-pressed", "true");
         await expect(
           sidebar(page).getByRole("button", { name: "Clear (2)" }),
@@ -431,14 +457,14 @@ test.describe("as an anonymous visitor", () => {
     // Stripe is under Payments and Amazon S3 under Data and storage. Chips in different
     // categories narrow, so no listing has both.
     await test.step("narrow by Stripe, then by Amazon S3 as well", async () => {
-      await chip(sidebar(page), "Integrates with", "Stripe").click();
+      await chip(sidebar(page), "Payments", "Stripe").click();
 
       await expect(countLine(page)).toHaveText(
         "1 activity · sorted by relevance",
       );
       await expect(cardTitles(page)).toHaveText([listings.dotnet.title]);
 
-      await chip(sidebar(page), "Integrates with", "Amazon S3").click();
+      await chip(sidebar(page), "Data and storage", "Amazon S3").click();
 
       await expect(page).toHaveURL(
         `/search?q=${word}&chip=Stripe&chip=Amazon+S3`,
@@ -718,9 +744,10 @@ test.describe("as an anonymous visitor", () => {
 
         await expect(page).toHaveURL(`/search?q=${word}&chip=Stripe`);
         await expect(searchBox(page)).toHaveValue(word);
-        await expect(
-          chip(sidebar(page), "Integrates with", "Stripe"),
-        ).toHaveAttribute("aria-pressed", "true");
+        await expect(chip(sidebar(page), "Payments", "Stripe")).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
         await expect(countLine(page)).toHaveText(
           "1 activity · sorted by relevance",
         );

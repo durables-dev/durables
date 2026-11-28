@@ -11,8 +11,8 @@ export interface FilterSidebarProps {
   onChange: (search: Search) => void;
 }
 
-// The results page's filters: Temporal SDK and Integrates with, as chips that apply at once,
-// and "Clear (n)" while any filter is on. The chips are the shared chip group.
+// The results page's filters: Temporal SDK and the category headings, as chips that apply at
+// once, and "Clear (n)" while any filter is on. The chips are the shared chip group.
 export function FilterSidebar({ search, onChange }: FilterSidebarProps) {
   const headingId = useId();
   const active = activeFilterCount(search);
