@@ -38,7 +38,6 @@ const newListing = (
   title: "Post slack message",
   description: "Posts a message to a Slack channel.",
   sdk: "Python",
-  integrations: ["Slack"],
   ...listing,
 });
 

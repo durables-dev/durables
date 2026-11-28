@@ -28,7 +28,6 @@ interface SeededVersion {
   description?: string;
   title?: string;
   sdk?: Sdk;
-  integrations?: string[];
   publishedAt?: Date;
 }
 
@@ -36,8 +35,8 @@ interface SeededVersion {
 const newHandle = async () => (await seedAccount(env.DB)).handle;
 
 /**
- * Writes a listing and its versions, each defaulting to 1.0.0, Python, Stripe and now. The
- * listing's chips default to Stripe; browse reads them, not the versions' integrations. Each
+ * Writes a listing and its versions, each defaulting to 1.0.0, Python and now. The listing's
+ * chips default to Stripe. Versions carry no integrations of their own. Each
  * version takes the listing's description unless it names its own. The published date is
  * stored in whole seconds, so dates here are whole seconds too.
  */
@@ -63,7 +62,6 @@ const seedActivity = async (
         "Charges a card through Stripe.",
       title: row.title ?? "Charge card",
       sdk: row.sdk ?? "Python",
-      integrations: row.integrations ?? ["Stripe"],
       ...(row.publishedAt === undefined
         ? {}
         : { publishedAt: row.publishedAt }),
@@ -178,7 +176,6 @@ describe("each card", () => {
         {
           title: "Upload file",
           sdk: "TypeScript",
-          integrations: ["Redis"],
           publishedAt: at("2026-10-20T09:30:00Z"),
         },
       ],
@@ -203,7 +200,7 @@ describe("each card", () => {
 
   test("answers an empty integrations list when the listing has no chips", async () => {
     const handle = await newHandle();
-    await seedActivity(handle, { chips: [] }, [{ integrations: ["Stripe"] }]);
+    await seedActivity(handle, { chips: [] });
 
     const body = await browse({ publisher: handle });
 
@@ -275,8 +272,8 @@ describe("a listing with several versions", () => {
   test("is filtered by the SDK of the version on the card, not by older versions", async () => {
     const handle = await newHandle();
     await seedActivity(handle, { chips: ["Slack"] }, [
-      { version: "1.0.0", sdk: "Python", integrations: ["Stripe"] },
-      { version: "2.0.0", sdk: "TypeScript", integrations: ["Slack"] },
+      { version: "1.0.0", sdk: "Python" },
+      { version: "2.0.0", sdk: "TypeScript" },
     ]);
 
     const stripe = await browse({ publisher: handle, chip: "Stripe" });
@@ -500,9 +497,7 @@ describe("the chip filter", () => {
 
   test("excludes a listing with no chips, which shows without the filter", async () => {
     const handle = await newHandle();
-    const none = await seedActivity(handle, { chips: [] }, [
-      { integrations: ["Stripe"] },
-    ]);
+    const none = await seedActivity(handle, { chips: [] });
 
     const filtered = await browse({ publisher: handle, chip: "Stripe" });
     const unfiltered = await browse({ publisher: handle });
@@ -734,8 +729,8 @@ describe("a listing's chips", () => {
   test("are what the integration filter matches, not any version's integrations", async () => {
     const handle = await newHandle();
     const { name } = await seedActivity(handle, { chips: ["Postgres"] }, [
-      { version: "1.0.0", integrations: ["Stripe"] },
-      { version: "1.1.0", integrations: ["Slack"] },
+      { version: "1.0.0" },
+      { version: "1.1.0" },
     ]);
 
     const postgres = await browse({
@@ -755,7 +750,7 @@ describe("a listing's chips", () => {
   test("stay the same when a later version with different integrations is added", async () => {
     const handle = await newHandle();
     const { name } = await seedActivity(handle, { chips: ["Stripe"] }, [
-      { version: "1.0.0", integrations: ["Stripe"] },
+      { version: "1.0.0" },
     ]);
     const before = await browse({ publisher: handle });
 
@@ -765,7 +760,6 @@ describe("a listing's chips", () => {
       version: "2.0.0",
       title: "Charge card",
       sdk: "Python",
-      integrations: ["Slack", "Redis"],
     });
 
     const after = await browse({ publisher: handle });
@@ -783,9 +777,7 @@ describe("a listing's chips", () => {
 
   test("change what browse shows when they are set, whatever the versions hold", async () => {
     const handle = await newHandle();
-    const { name } = await seedActivity(handle, { chips: [] }, [
-      { integrations: ["Stripe"] },
-    ]);
+    const { name } = await seedActivity(handle, { chips: [] });
 
     await seedChips(env.DB, { handle, name, chips: ["Slack", "Saga"] });
 
@@ -795,21 +787,17 @@ describe("a listing's chips", () => {
     ]);
   });
 
-  test("are matched by search words, and a version's integrations are not", async () => {
+  test("are matched by search words, and a word in no chip is not", async () => {
     const handle = await newHandle();
     const { name } = await seedActivity(handle, { chips: ["Redis"] }, [
-      {
-        title: "Cache value",
-        description: "Keeps a value.",
-        integrations: ["Amazon SQS"],
-      },
+      { title: "Cache value", description: "Keeps a value." },
     ]);
 
     const byChip = await browse({ q: "redis", publisher: handle });
-    const byVersion = await browse({ q: "sqs", publisher: handle });
+    const byOther = await browse({ q: "sqs", publisher: handle });
 
     expect(names(byChip)).toEqual([name]);
-    expect(byVersion.count).toBe(0);
+    expect(byOther.count).toBe(0);
   });
 
   test("are matched by search words naming a pattern chip", async () => {
@@ -878,7 +866,7 @@ describe("a listing's chips", () => {
     const word = newWord();
     const handle = await newHandle();
     const { name } = await seedActivity(handle, { chips: [] }, [
-      { title: `Charge ${word}`, integrations: [] },
+      { title: `Charge ${word}` },
     ]);
 
     const unfiltered = await browse({ publisher: handle });

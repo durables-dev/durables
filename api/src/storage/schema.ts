@@ -148,10 +148,6 @@ export const versions = sqliteTable(
     version: text("version").notNull(),
     title: text("title").notNull(),
     sdk: text("sdk", { enum: sdks }).notNull(),
-    /** The integrations implied by the code's imports, as a JSON array of names. */
-    integrations: text("integrations", { mode: "json" })
-      .$type<string[]>()
-      .notNull(),
     publishedAt: integer("published_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

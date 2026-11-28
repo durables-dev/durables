@@ -20,7 +20,6 @@ const newListing = async (handle?: string): Promise<ListingKey> => {
     title: "Charge card",
     description: "Charges a card through Stripe.",
     sdk: "Python",
-    integrations: ["Stripe"],
   });
   return listing;
 };

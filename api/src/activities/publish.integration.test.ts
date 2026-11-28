@@ -341,7 +341,6 @@ describe("POST /api/activities", () => {
       ]);
       expect(await storage().findListing(address)).toMatchObject({
         sdk: "Go",
-        integrations: ["Stripe"],
       });
     });
 
@@ -371,7 +370,6 @@ describe("POST /api/activities", () => {
         title: "Post slack message",
         description: "Posts a message to a Slack channel.",
         sdk: "Python",
-        integrations: ["Slack"],
       });
     });
 
@@ -411,7 +409,6 @@ describe("POST /api/activities", () => {
       ]);
       expect(await storage().findListing(address)).toMatchObject({
         sdk: "PHP",
-        integrations: ["Stripe"],
       });
     });
 
@@ -446,7 +443,6 @@ describe("POST /api/activities", () => {
       ]);
       expect(await storage().findListing(address)).toMatchObject({
         sdk: "Java",
-        integrations: ["Stripe"],
       });
     });
 
@@ -474,7 +470,6 @@ describe("POST /api/activities", () => {
       );
       expect(await storage().findListing(address)).toMatchObject({
         sdk: "Python",
-        integrations: ["Slack"],
       });
       expect(
         await storage().findVersion({ ...address, version: "2.0.0" }),
@@ -499,6 +494,32 @@ describe("POST /api/activities", () => {
         code: postSlackMessage,
         title: "Post slack message",
       });
+    });
+
+    test("gives the new listing no chips, and writes the detected integrations to the document only", async () => {
+      const { cookie, handle } = await newPublisher();
+      const body = publishBody();
+
+      const response = await publish(cookie, body);
+
+      expect(response.status).toBe(201);
+      const address = addressOf(handle, body.name);
+      const listingRow = await env.DB.prepare(
+        "select chips from listings where handle = ? and name = ?",
+      )
+        .bind(handle, body.name)
+        .first<{ chips: string }>();
+      expect(listingRow?.chips).toBe("[]");
+      const versionRow = await env.DB.prepare(
+        "select * from versions where handle = ? and name = ?",
+      )
+        .bind(handle, body.name)
+        .first();
+      expect(versionRow).not.toBeNull();
+      expect(versionRow).not.toHaveProperty("integrations");
+      expect(
+        (await storage().readVersionDocument(address))?.integrations,
+      ).toEqual(["Slack"]);
     });
   });
 
@@ -657,7 +678,6 @@ describe("POST /api/activities", () => {
         version: "1.0.0",
         title: "Owner's activity",
         sdk: "Python",
-        integrations: [],
       });
       const before = await snapshot();
 
