@@ -24,7 +24,7 @@ test("an integration on the shared list links to the results for it alone", asyn
 
   const link = screen.getByRole("link", { name: "Amazon S3", exact: true });
   expect(link.element().getAttribute("href")).toBe(
-    searchAddress({ integrations: ["Amazon S3"] }),
+    searchAddress({ chips: ["Amazon S3"] }),
   );
   await link.click();
 
@@ -35,7 +35,7 @@ test("an integration on the shared list links to the results for it alone", asyn
   expect(readSearch(new URLSearchParams(search), testCatalogSdks)).toEqual({
     words: "",
     sdks: [],
-    integrations: ["Amazon S3"],
+    chips: ["Amazon S3"],
   });
   expect(pathname).toBe("/search");
 });

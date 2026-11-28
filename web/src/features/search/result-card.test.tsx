@@ -149,14 +149,14 @@ test("each integration link's address holds that integration alone", async () =>
         .getByRole("link", { name: integration, exact: true })
         .element()
         .getAttribute("href"),
-    ).toBe(searchAddress({ integrations: [integration] }));
+    ).toBe(searchAddress({ chips: [integration] }));
   }
 });
 
 test("clicking an integration opens /search with that integration alone, replacing other choices", async () => {
   const rendered = await renderCard(
     {},
-    { at: searchAddress({ integrations: ["Slack", "Amazon S3"] }) },
+    { at: searchAddress({ chips: ["Slack", "Amazon S3"] }) },
   );
 
   await cardOf(rendered)
@@ -166,7 +166,7 @@ test("clicking an integration opens /search with that integration alone, replaci
   await expect
     .poll(() => rendered.router.state.location.pathname)
     .toBe("/search");
-  expect(currentSearch(rendered).integrations).toEqual(["Stripe"]);
+  expect(currentSearch(rendered).chips).toEqual(["Stripe"]);
 });
 
 test("the publisher link's address holds the handle alone", async () => {
@@ -187,7 +187,7 @@ test("clicking the publisher opens /search for that publisher's activities only"
       at: searchAddress({
         words: "charge",
         sdks: ["TypeScript"],
-        integrations: ["Slack"],
+        chips: ["Slack"],
       }),
     },
   );
@@ -202,7 +202,7 @@ test("clicking the publisher opens /search for that publisher's activities only"
   expect(currentSearch(rendered)).toEqual({
     words: "",
     sdks: [],
-    integrations: [],
+    chips: [],
     publisher: "ddieruf",
   });
 });

@@ -14,7 +14,8 @@ const problemHeaders = { "Content-Type": "application/problem+json" };
 export interface BrowseCall {
   q: string | null;
   sdks: string[];
-  integrations: string[];
+  chips: string[];
+  category: string | null;
   publisher: string | null;
   cursor: string | null;
 }
@@ -67,7 +68,8 @@ function callFrom(request: Request): BrowseCall {
   return {
     q: params.get("q"),
     sdks: params.getAll("sdk"),
-    integrations: params.getAll("chip"),
+    chips: params.getAll("chip"),
+    category: params.get("category"),
     publisher: params.get("publisher"),
     cursor: params.get("cursor"),
   };

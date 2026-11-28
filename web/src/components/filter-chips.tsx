@@ -1,7 +1,7 @@
 import type { Search } from "@/lib/search-address";
 import {
   withAnySdk,
-  withIntegrationToggled,
+  withChipToggled,
   withSdkToggled,
 } from "@/lib/search-filters";
 import { catalogSdks, sdkCatalogQuery } from "@/lib/sdk-catalog";
@@ -64,9 +64,9 @@ export function FilterChips({
           <Chip
             key={integration}
             label={integration}
-            pressed={search.integrations.includes(integration)}
+            pressed={search.chips.includes(integration)}
             onClick={() => {
-              onChange(withIntegrationToggled(search, integration));
+              onChange(withChipToggled(search, integration));
             }}
           />
         ))}

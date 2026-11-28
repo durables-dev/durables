@@ -271,9 +271,7 @@ test.describe("as an anonymous visitor", () => {
       await test.step("press Search and land on results with both filters on", async () => {
         await page.getByRole("button", { name: "Search", exact: true }).click();
 
-        await expect(page).toHaveURL(
-          "/search?sdk=TypeScript&integration=Amazon+S3",
-        );
+        await expect(page).toHaveURL("/search?sdk=TypeScript&chip=Amazon+S3");
         await expect(searchBox(page)).toHaveValue("");
         await expect(
           chip(sidebar(page), "Temporal SDK", "TypeScript"),
@@ -443,7 +441,7 @@ test.describe("as an anonymous visitor", () => {
       await chip(sidebar(page), "Integrates with", "Amazon S3").click();
 
       await expect(page).toHaveURL(
-        `/search?q=${word}&integration=Stripe&integration=Amazon+S3`,
+        `/search?q=${word}&chip=Stripe&chip=Amazon+S3`,
       );
       await expect(countLine(page)).toHaveText(
         "0 activities · sorted by relevance",
@@ -714,7 +712,7 @@ test.describe("as an anonymous visitor", () => {
           .getByRole("link", { name: "Stripe", exact: true })
           .click();
 
-        await expect(page).toHaveURL("/search?integration=Stripe");
+        await expect(page).toHaveURL("/search?chip=Stripe");
         await expect(searchBox(page)).toHaveValue("");
         await expect(
           chip(sidebar(page), "Integrates with", "Stripe"),
@@ -798,7 +796,7 @@ test.describe("as an anonymous visitor", () => {
       await expectAccessible();
 
       await page.goto(
-        `/search?q=${details.title.replaceAll(" ", "+")}&integration=Amazon+S3`,
+        `/search?q=${details.title.replaceAll(" ", "+")}&chip=Amazon+S3`,
       );
       await expect(countLine(page)).toHaveText(
         "1 activity · sorted by relevance",

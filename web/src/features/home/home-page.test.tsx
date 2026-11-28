@@ -33,7 +33,7 @@ type Opened = Awaited<ReturnType<typeof openHome>>;
 interface BrowseCall {
   q: string | null;
   sdks: string[];
-  integrations: string[];
+  chips: string[];
   publisher: string | null;
 }
 
@@ -47,7 +47,7 @@ function serveNoResults(): BrowseCall[] {
       calls.push({
         q,
         sdks: params.getAll("sdk"),
-        integrations: params.getAll("chip"),
+        chips: params.getAll("chip"),
         publisher: params.get("publisher"),
       });
       return HttpResponse.json({
@@ -182,9 +182,7 @@ test("pressing Enter opens /search with the words typed", async () => {
     .toBeInTheDocument();
   await expect
     .poll(() => calls)
-    .toEqual([
-      { q: "charge card", sdks: [], integrations: [], publisher: null },
-    ]);
+    .toEqual([{ q: "charge card", sdks: [], chips: [], publisher: null }]);
 });
 
 test("the Search button opens /search with the words typed", async () => {
@@ -217,7 +215,7 @@ test("words with SDK and integration chips open results with both filters applie
     searchAddress({
       words: "charge card",
       sdks: ["Python", ".NET"],
-      integrations: ["Stripe", "Amazon S3"],
+      chips: ["Stripe", "Amazon S3"],
     }),
   );
   expect(
@@ -225,7 +223,7 @@ test("words with SDK and integration chips open results with both filters applie
   ).toEqual({
     words: "charge card",
     sdks: ["Python", ".NET"],
-    integrations: ["Stripe", "Amazon S3"],
+    chips: ["Stripe", "Amazon S3"],
   });
   await expect
     .poll(() => calls)
@@ -233,7 +231,7 @@ test("words with SDK and integration chips open results with both filters applie
       {
         q: "charge card",
         sdks: ["Python", ".NET"],
-        integrations: ["Stripe", "Amazon S3"],
+        chips: ["Stripe", "Amazon S3"],
         publisher: null,
       },
     ]);
@@ -255,9 +253,7 @@ test("filters chosen with the panel closed again are still carried", async () =>
   await filtersButton(opened).click();
   await searchButton(opened).click();
 
-  expect(await landedAt(opened)).toBe(
-    searchAddress({ integrations: ["Slack"] }),
-  );
+  expect(await landedAt(opened)).toBe(searchAddress({ chips: ["Slack"] }));
   await resultsAsked(calls);
 });
 
@@ -286,7 +282,7 @@ test("Explore All opens every activity newest first, with no filters, even when 
   expect(await landedAt(opened)).toBe("/search");
   await expect
     .poll(() => calls)
-    .toEqual([{ q: null, sdks: [], integrations: [], publisher: null }]);
+    .toEqual([{ q: null, sdks: [], chips: [], publisher: null }]);
   await expect
     .element(opened.screen.getByText("0 activities · sorted by newest"))
     .toBeVisible();
@@ -559,7 +555,7 @@ test("searching with no words and no filters opens every activity", async () => 
   expect(await landedAt(opened)).toBe("/search");
   await expect
     .poll(() => calls)
-    .toEqual([{ q: null, sdks: [], integrations: [], publisher: null }]);
+    .toEqual([{ q: null, sdks: [], chips: [], publisher: null }]);
 });
 
 test("searching with filters and no words opens the filtered results", async () => {
@@ -572,13 +568,11 @@ test("searching with filters and no words opens the filtered results", async () 
   await searchButton(opened).click();
 
   const address = await landedAt(opened);
-  expect(address).toBe(
-    searchAddress({ sdks: [".NET"], integrations: ["Postgres"] }),
-  );
+  expect(address).toBe(searchAddress({ sdks: [".NET"], chips: ["Postgres"] }));
   expect(address).not.toContain("q=");
   await expect
     .poll(() => calls)
     .toEqual([
-      { q: null, sdks: [".NET"], integrations: ["Postgres"], publisher: null },
+      { q: null, sdks: [".NET"], chips: ["Postgres"], publisher: null },
     ]);
 });
