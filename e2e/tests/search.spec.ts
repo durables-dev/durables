@@ -780,14 +780,14 @@ test.describe("as an anonymous visitor", () => {
     await test.step("the card shows no integrations, though the code imports Stripe", async () => {
       await page.goto(`/search?q=${details.title.replaceAll(" ", "+")}`);
       await expect(found).toContainText(listing.address);
-      await expect(found.getByText("Integrates with")).toHaveCount(0);
+      await expect(found.getByText("Filters", { exact: true })).toHaveCount(0);
     });
 
     await test.step("after the chips are set, the card shows them and the filter finds it", async () => {
       await setChips(listing, ["Stripe", "Amazon S3"]);
       await page.reload();
 
-      await expect(found.getByText("Integrates with")).toBeVisible();
+      await expect(found.getByText("Filters", { exact: true })).toBeVisible();
       await expect(
         found.getByRole("link", { name: "Stripe", exact: true }),
       ).toBeVisible();
