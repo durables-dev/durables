@@ -111,12 +111,27 @@
   cursor: pointer;
 }
 
+/* Search stands alone, right-aligned under the box. */
 .actions {
   padding-top: 18px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
+}
+
+/* The category tiles, with Explore All centred below them. */
+.browse {
+  width: 100%;
+  max-width: 584px;
+  margin-top: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.exploreRow {
+  padding-top: 10px;
+  display: flex;
+  justify-content: center;
 }
 
 .explore {
