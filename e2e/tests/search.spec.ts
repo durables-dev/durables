@@ -878,3 +878,164 @@ test.describe("the Temporal SDK chips", () => {
     await expectAccessible();
   });
 });
+
+const categoryNames = [
+  "AI models",
+  "Data and storage",
+  "Messaging",
+  "Payments",
+  "Workflow patterns",
+];
+
+test.describe("category and chip results", () => {
+  test("a listing with no chips and a removed listing appear in no category or chip result, and only the first shows in unfiltered browse", async ({
+    page,
+    expectAccessible,
+    publishOwnListing,
+    publishThroughApi,
+    removeFromSearch,
+    setChips,
+    uniqueWord,
+  }) => {
+    const word = uniqueWord();
+    // One publisher owns all three, so they can remove one. Then they sign out, so the page
+    // visits as a consumer.
+    const kept: PublishDetails = {
+      code: dotnet,
+      title: `Refund payment ${word}`,
+      name: "payment-refund",
+      description: "Refunds a Stripe payment and returns the refund.",
+    };
+    const removed: PublishDetails = {
+      code: dotnet,
+      title: `Refund order ${word}`,
+      name: "order-refund",
+      description: "Refunds a Stripe order and polls until it settles.",
+    };
+    const plain: PublishDetails = {
+      code: python,
+      title: `Post slack message ${word}`,
+      name: "slack-message",
+      description:
+        "Posts a message to a Slack channel and returns its reference.",
+    };
+    const keptListing = await publishOwnListing(kept);
+    const removedResponse = await publishThroughApi(removed);
+    await publishThroughApi(plain);
+    await setChips(keptListing, ["Stripe"]);
+    // Between them, the removed listing's chips sit under every category.
+    await setChips(removedResponse, [
+      "OpenAI",
+      "Postgres",
+      "Slack",
+      "Stripe",
+      "Polling",
+    ]);
+    await removeFromSearch({
+      ...removedResponse,
+      address: `${removedResponse.handle}/${removedResponse.name}@${removedResponse.version}`,
+    });
+    await page.context().clearCookies();
+
+    await test.step("each category's results leave out the removed and the chipless listing", async () => {
+      for (const category of categoryNames) {
+        await page.goto(
+          `/search?q=${word}&category=${encodeURIComponent(category)}`,
+        );
+
+        await expect(
+          main(page).getByRole("button", { name: `Remove ${category}` }),
+        ).toBeVisible();
+        if (category === "Payments") {
+          await expect(countLine(page)).toHaveText(
+            "1 activity · sorted by relevance",
+          );
+          await expect(cardTitles(page)).toHaveText([kept.title]);
+        } else {
+          await expect(countLine(page)).toHaveText(
+            "0 activities · sorted by relevance",
+          );
+          await expect(cards(page)).toHaveCount(0);
+        }
+      }
+      await expectAccessible();
+    });
+
+    await test.step("each of the removed listing's chips finds it nowhere", async () => {
+      for (const name of ["OpenAI", "Postgres", "Slack", "Stripe", "Polling"]) {
+        await page.goto(`/search?q=${word}&chip=${name}`);
+
+        await expect(countLine(page)).toHaveText(
+          name === "Stripe"
+            ? "1 activity · sorted by relevance"
+            : "0 activities · sorted by relevance",
+        );
+        await expect(card(page, removed.title)).toHaveCount(0);
+        await expect(card(page, plain.title)).toHaveCount(0);
+      }
+    });
+
+    await test.step("unfiltered search shows the chipless listing and not the removed one", async () => {
+      await page.goto(`/search?q=${word}`);
+
+      await expect(countLine(page)).toHaveText(
+        "2 activities · sorted by relevance",
+      );
+      await expect(card(page, kept.title)).toBeVisible();
+      await expect(card(page, plain.title)).toBeVisible();
+      await expect(card(page, removed.title)).toHaveCount(0);
+    });
+
+    await test.step("unfiltered browse shows the chipless listing", async () => {
+      await page.goto("/search");
+
+      await expect(countLine(page)).toHaveText(anyCountSortedByNewest);
+      await scrollUntil(page, card(page, plain.title));
+      await expectAccessible();
+    });
+  });
+
+  test.describe("as an anonymous visitor", () => {
+    test.use({ storageState: { cookies: [], origins: [] } });
+
+    test("an address with a category the site does not know shows every activity and no pill", async ({
+      page,
+      expectAccessible,
+      publishListings,
+      setChips,
+      uniqueWord,
+    }) => {
+      const word = uniqueWord();
+      const listings = threeListings(word);
+      const [, typescriptListing, dotnetListing] = await publishListings([
+        listings.python,
+        listings.typescript,
+        listings.dotnet,
+      ]);
+      await setThreeListingsChips(setChips, typescriptListing, dotnetListing);
+      const pill = main(page).getByRole("button", { name: /^Remove / });
+
+      await page.goto(`/search?q=${word}&category=Robots`);
+
+      await expect(countLine(page)).toHaveText(
+        "3 activities · sorted by relevance",
+      );
+      await expect(cardTitles(page)).toHaveText([
+        listings.dotnet.title,
+        listings.typescript.title,
+        listings.python.title,
+      ]);
+      await expect(pill).toHaveCount(0);
+      await expect(
+        sidebar(page).getByRole("button", { name: /^Clear/ }),
+      ).toHaveCount(0);
+      await expectAccessible();
+
+      await page.goto("/search?category=Robots");
+
+      await expect(countLine(page)).toHaveText(anyCountSortedByNewest);
+      await scrollUntil(page, card(page, listings.python.title));
+      await expect(pill).toHaveCount(0);
+    });
+  });
+});
