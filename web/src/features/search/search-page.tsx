@@ -2,7 +2,7 @@ import { PageTitle } from "@/components/page-title";
 import type { Search } from "@/lib/search-address";
 import { FilterSidebar } from "./filter-sidebar";
 import { SearchBox } from "./search-box";
-import { everything, withoutCategory } from "@/lib/search-filters";
+import { withoutCategory, withoutFilters } from "@/lib/search-filters";
 import styles from "./search-page.module.css";
 import { SearchResults } from "./search-results";
 
@@ -37,7 +37,7 @@ export function SearchPage({ search, onSearch }: SearchPageProps) {
           <SearchResults
             search={search}
             onClearAll={() => {
-              onSearch(everything);
+              onSearch(withoutFilters(search));
             }}
             onRemoveCategory={() => {
               onSearch(withoutCategory(search));

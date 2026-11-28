@@ -10,7 +10,10 @@ import { useReachEnd } from "./use-reach-end";
 export interface SearchResultsProps {
   /** The search the address holds. */
   search: Search;
-  /** Called when the empty state's Clear filters is clicked. */
+  /**
+   * Called when the empty state's Clear filters is clicked. It clears as the sidebar's Clear
+   * does: every filter goes and the words stay.
+   */
   onClearAll: () => void;
   /** Called when the category pill is removed. */
   onRemoveCategory: () => void;
