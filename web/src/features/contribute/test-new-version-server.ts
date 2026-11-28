@@ -114,6 +114,7 @@ export function serveNewVersion({
     handle: "ddieruf",
     name: "charge-card",
     removedBy,
+    chips: [],
     versions: versions.map((version, index) => ({
       version,
       publishedAt: new Date().toISOString(),

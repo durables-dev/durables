@@ -255,17 +255,20 @@ export const newSdkSamples = [
 ] as const;
 
 /**
- * ddieruf/charge-card's listing as the API answers it: listed in search, and each version,
- * newest first, with the same description and no deprecation.
+ * ddieruf/charge-card's listing as the API answers it: listed in search, with the given chips
+ * (none by default), and each version, newest first, with the same description and no
+ * deprecation.
  */
 export function chargeCardListing(
   description: string,
   versions: string[] = ["1.0.0"],
+  chips: string[] = [],
 ) {
   return {
     handle: "ddieruf",
     name: "charge-card",
     removedBy: null,
+    chips,
     versions: versions.map((version) => ({
       version,
       publishedAt: new Date().toISOString(),

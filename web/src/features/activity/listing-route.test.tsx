@@ -452,27 +452,28 @@ test("the publisher line shows the initial in a circle and the handle as plain t
     .not.toBeInTheDocument();
 });
 
-test("the sidebar links the version's integrations and its publisher into search", async () => {
+test("the sidebar links the listing's chips and its publisher into search", async () => {
   worker.use(
-    http.get(versionPath, () =>
-      HttpResponse.json({
-        ...chargeCard,
-        integrations: ["Stripe", "Amazon S3"],
-      }),
-    ),
+    http.get(versionPath, () => HttpResponse.json(chargeCard)),
     http.get(listingPath, () =>
-      HttpResponse.json(chargeCardListing(chargeCardDescription)),
+      HttpResponse.json(
+        chargeCardListing(
+          chargeCardDescription,
+          ["1.0.0"],
+          ["Stripe", "Amazon S3", "Saga"],
+        ),
+      ),
     ),
   );
 
   const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
 
   const about = screen.getByRole("region", { name: "About" });
-  for (const integration of ["Stripe", "Amazon S3"] as const) {
-    const link = about.getByRole("link", { name: integration, exact: true });
+  for (const chip of ["Stripe", "Amazon S3", "Saga"] as const) {
+    const link = about.getByRole("link", { name: chip, exact: true });
     await expect.element(link).toBeVisible();
     expect(link.element().getAttribute("href")).toBe(
-      searchAddress({ chips: [integration] }),
+      searchAddress({ chips: [chip] }),
     );
   }
   const publisher = screen.getByRole("region", { name: "Publisher" });
@@ -484,6 +485,71 @@ test("the sidebar links the version's integrations and its publisher into search
         .getAttribute("href"),
     ).toBe(searchAddress({ publisher: "ddieruf" }));
   }
+});
+
+/** The About card's rows, as [term, value] pairs in the order they show. */
+function aboutRows(screen: Awaited<ReturnType<typeof openAt>>["screen"]) {
+  return [
+    ...screen
+      .getByRole("region", { name: "About" })
+      .element()
+      .querySelectorAll("dt"),
+  ].map((term) => [term.textContent, term.nextElementSibling?.textContent]);
+}
+
+test("the Filters row lists the listing's chips and ignores the version's integrations", async () => {
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({ ...chargeCard, integrations: ["Stripe", "Slack"] }),
+    ),
+    http.get(listingPath, () =>
+      HttpResponse.json(
+        chargeCardListing(
+          chargeCardDescription,
+          ["1.0.0"],
+          ["Amazon S3", "Polling"],
+        ),
+      ),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const about = screen.getByRole("region", { name: "About" });
+  await expect
+    .element(about.getByRole("link", { name: "Amazon S3", exact: true }))
+    .toBeVisible();
+  expect(aboutRows(screen)[1]).toEqual(["Filters", "Amazon S3, Polling"]);
+  for (const integration of ["Stripe", "Slack"]) {
+    await expect
+      .element(about.getByRole("link", { name: integration, exact: true }))
+      .not.toBeInTheDocument();
+  }
+});
+
+test("a listing with no chips has no Filters row, even when the version lists integrations", async () => {
+  worker.use(
+    http.get(versionPath, () =>
+      HttpResponse.json({ ...chargeCard, integrations: ["Stripe"] }),
+    ),
+    http.get(listingPath, () =>
+      HttpResponse.json(chargeCardListing(chargeCardDescription)),
+    ),
+  );
+
+  const { screen } = await openAt("/ddieruf/charge-card@1.0.0");
+
+  const about = screen.getByRole("region", { name: "About" });
+  await expect.element(about).toBeVisible();
+  expect(aboutRows(screen).map(([term]) => term)).toEqual([
+    "SDK",
+    "Dependencies",
+    "Published",
+    "License",
+  ]);
+  await expect
+    .element(about.getByRole("link", { name: "Stripe", exact: true }))
+    .not.toBeInTheDocument();
 });
 
 test("the published time is the version's own timestamp", async () => {
@@ -745,8 +811,10 @@ test("Source shows the published code, headed with the activity file name and li
 test("the sidebar shows the version's About and Publisher cards and the no-review note", async () => {
   publishChargeCard();
   worker.use(
-    http.get(versionPath, () =>
-      HttpResponse.json({ ...chargeCard, integrations: ["Stripe"] }),
+    http.get(listingPath, () =>
+      HttpResponse.json(
+        chargeCardListing(chargeCardDescription, ["1.0.0"], ["Stripe"]),
+      ),
     ),
   );
 
@@ -762,7 +830,7 @@ test("the sidebar shows the version's About and Publisher cards and the no-revie
     ]),
   ).toEqual([
     ["SDK", "Python, temporalio"],
-    ["Integrates with", "Stripe"],
+    ["Filters", "Stripe"],
     ["Dependencies", "stripe"],
     ["Published", "2 days ago"],
     ["License", "MIT-0"],

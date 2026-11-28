@@ -949,7 +949,7 @@ for (const journey of sdkJourneys) {
         const about = page.getByRole("region", { name: "About" });
         const terms = ["SDK", "Dependencies", "Published", "License"];
         if (journey.integration !== undefined) {
-          terms.splice(1, 0, "Integrates with");
+          terms.splice(1, 0, "Filters");
         }
         await expect(about.getByRole("term")).toHaveText(terms);
         await expect(about.getByRole("definition").first()).toHaveText(
