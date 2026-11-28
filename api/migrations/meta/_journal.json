@@ -50,6 +50,27 @@
       "when": 1794927024834,
       "tag": "0006_drop-listing-description",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1795731436981,
+      "tag": "0007_listing-chips",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1795731438072,
+      "tag": "0008_copy-version-integrations-to-listing-chips",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795785848580,
+      "tag": "0009_drop-version-integrations",
+      "breakpoints": true
     }
   ]
 }

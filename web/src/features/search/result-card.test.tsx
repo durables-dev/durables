@@ -1,7 +1,12 @@
 import "@/styles/global.css";
+import { categories } from "@durables/schemas";
 import { readSearch, searchAddress } from "@/lib/search-address";
 import { testCatalogSdks } from "../../../test/sdk-catalog";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import {
+  createMemoryRouter,
+  RouterProvider,
+  useSearchParams,
+} from "react-router";
 import { expect, test } from "vitest";
 import { render } from "vitest-browser-react";
 import type { ActivityCard } from "./activity-card";
@@ -25,6 +30,18 @@ const chargeCard: ActivityCard = {
 
 const longWord = "x".repeat(400);
 
+interface CardAtAddressProps {
+  card: ActivityCard;
+}
+
+// The card given the search its address holds, as the results page gives it.
+function CardAtAddress({ card }: CardAtAddressProps) {
+  const [params] = useSearchParams();
+  return (
+    <ResultCard card={card} search={readSearch(params, testCatalogSdks)} />
+  );
+}
+
 // The card in a router, as the results page will show it, in a column as narrow as the
 // one-per-row layout on a small screen. The page it starts on can carry a search already.
 async function renderCard(
@@ -37,7 +54,7 @@ async function renderCard(
         path: "/search",
         element: (
           <div style={{ width }}>
-            <ResultCard card={{ ...chargeCard, ...card }} />
+            <CardAtAddress card={{ ...chargeCard, ...card }} />
           </div>
         ),
       },
@@ -71,7 +88,7 @@ function tileOf(article: HTMLElement): HTMLElement {
   return tile;
 }
 
-test("a full card shows title, address, SDK, description, integrations, publisher and date", async () => {
+test("a full card shows title, address, SDK, description, filters, publisher and date", async () => {
   const rendered = await renderCard();
   const card = cardOf(rendered);
 
@@ -89,7 +106,12 @@ test("a full card shows title, address, SDK, description, integrations, publishe
       ),
     )
     .toBeVisible();
-  await expect.element(card.getByText("Integrates with")).toBeVisible();
+  await expect
+    .element(card.getByText("Filters", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(card.getByText("Integrates with"))
+    .not.toBeInTheDocument();
   for (const integration of ["Stripe", "Amazon S3", "Slack"]) {
     await expect
       .element(card.getByRole("link", { name: integration, exact: true }))
@@ -115,18 +137,18 @@ test("the published label reads from the version's date", async () => {
   expect(date.element().getAttribute("datetime")).toBe(fiveDaysAgo);
 });
 
-test("a card with no integrations has no Integrates with row", async () => {
+test("a card with no chips has no Filters line", async () => {
   const rendered = await renderCard({ integrations: [] });
   const card = cardOf(rendered);
 
   await expect.element(card.getByText("Published 2 days ago")).toBeVisible();
   await expect
-    .element(card.getByText("Integrates with"))
+    .element(card.getByText("Filters", { exact: true }))
     .not.toBeInTheDocument();
   expect(card.getByRole("listitem").elements()).toHaveLength(0);
 });
 
-test("the integrations sit in one row with no list markers", async () => {
+test("the filters sit in one row with no list markers", async () => {
   const rendered = await renderCard({}, { width: "600px" });
   const card = cardOf(rendered);
 
@@ -139,7 +161,7 @@ test("the integrations sit in one row with no list markers", async () => {
   expect(new Set(tops).size).toBe(1);
 });
 
-test("each integration link's address holds that integration alone", async () => {
+test("with no search on, each filter link's address holds that chip alone", async () => {
   const rendered = await renderCard();
   const card = cardOf(rendered);
 
@@ -149,14 +171,14 @@ test("each integration link's address holds that integration alone", async () =>
         .getByRole("link", { name: integration, exact: true })
         .element()
         .getAttribute("href"),
-    ).toBe(searchAddress({ integrations: [integration] }));
+    ).toBe(searchAddress({ chips: [integration] }));
   }
 });
 
-test("clicking an integration opens /search with that integration alone, replacing other choices", async () => {
+test("clicking a filter replaces the chosen chips with that one", async () => {
   const rendered = await renderCard(
     {},
-    { at: searchAddress({ integrations: ["Slack", "Amazon S3"] }) },
+    { at: searchAddress({ chips: ["Slack", "Amazon S3"] }) },
   );
 
   await cardOf(rendered)
@@ -166,7 +188,7 @@ test("clicking an integration opens /search with that integration alone, replaci
   await expect
     .poll(() => rendered.router.state.location.pathname)
     .toBe("/search");
-  expect(currentSearch(rendered).integrations).toEqual(["Stripe"]);
+  expect(currentSearch(rendered).chips).toEqual(["Stripe"]);
 });
 
 test("the publisher link's address holds the handle alone", async () => {
@@ -187,7 +209,7 @@ test("clicking the publisher opens /search for that publisher's activities only"
       at: searchAddress({
         words: "charge",
         sdks: ["TypeScript"],
-        integrations: ["Slack"],
+        chips: ["Slack"],
       }),
     },
   );
@@ -202,7 +224,7 @@ test("clicking the publisher opens /search for that publisher's activities only"
   expect(currentSearch(rendered)).toEqual({
     words: "",
     sdks: [],
-    integrations: [],
+    chips: [],
     publisher: "ddieruf",
   });
 });
@@ -296,4 +318,142 @@ test("no rating, download count or other popularity signal appears", async () =>
   expect(
     article.querySelectorAll("meter, progress, [role='meter']"),
   ).toHaveLength(0);
+});
+
+test("the Filters line lists every chip, patterns included, each as a link", async () => {
+  const rendered = await renderCard({
+    integrations: ["Stripe", "Slack", "Approval", "Saga"],
+  });
+  const card = cardOf(rendered);
+
+  await expect
+    .element(card.getByText("Filters", { exact: true }))
+    .toBeVisible();
+  expect(
+    card
+      .getByRole("listitem")
+      .elements()
+      .map((item) => item.textContent),
+  ).toEqual(["Stripe", "Slack", "Approval", "Saga"]);
+  for (const chip of ["Stripe", "Slack", "Approval", "Saga"] as const) {
+    expect(
+      card
+        .getByRole("link", { name: chip, exact: true })
+        .element()
+        .getAttribute("href"),
+    ).toBe(searchAddress({ chips: [chip] }));
+  }
+});
+
+test("clicking a filter keeps the search words and SDKs", async () => {
+  const rendered = await renderCard(
+    {},
+    {
+      at: searchAddress({
+        words: "charge",
+        sdks: ["Python", "TypeScript"],
+        chips: ["Slack"],
+      }),
+    },
+  );
+
+  await cardOf(rendered)
+    .getByRole("link", { name: "Stripe", exact: true })
+    .click();
+
+  await expect.poll(() => currentSearch(rendered).chips).toEqual(["Stripe"]);
+  expect(currentSearch(rendered)).toEqual({
+    words: "charge",
+    sdks: ["Python", "TypeScript"],
+    chips: ["Stripe"],
+  });
+});
+
+test("clicking a pattern filter replaces the chosen chips the same way", async () => {
+  const rendered = await renderCard(
+    { integrations: ["Stripe", "Saga"] },
+    { at: searchAddress({ words: "charge", chips: ["Stripe"] }) },
+  );
+
+  await cardOf(rendered)
+    .getByRole("link", { name: "Saga", exact: true })
+    .click();
+
+  await expect.poll(() => currentSearch(rendered).chips).toEqual(["Saga"]);
+  expect(currentSearch(rendered).words).toBe("charge");
+});
+
+test("clicking a filter leaves the category in the address", async () => {
+  const rendered = await renderCard(
+    {},
+    { at: searchAddress({ words: "charge", category: "Payments" }) },
+  );
+
+  await cardOf(rendered)
+    .getByRole("link", { name: "Slack", exact: true })
+    .click();
+
+  await expect.poll(() => currentSearch(rendered).chips).toEqual(["Slack"]);
+  expect(currentSearch(rendered)).toEqual({
+    words: "charge",
+    sdks: [],
+    chips: ["Slack"],
+    category: "Payments",
+  });
+});
+
+test("clicking a filter drops a publisher, which is neither words nor SDKs", async () => {
+  const rendered = await renderCard(
+    {},
+    { at: searchAddress({ sdks: ["Python"], publisher: "ddieruf" }) },
+  );
+
+  await cardOf(rendered)
+    .getByRole("link", { name: "Stripe", exact: true })
+    .click();
+
+  await expect.poll(() => currentSearch(rendered).chips).toEqual(["Stripe"]);
+  expect(currentSearch(rendered)).toEqual({
+    words: "",
+    sdks: ["Python"],
+    chips: ["Stripe"],
+  });
+});
+
+test("clicking the filter that is already the only one on keeps the search unchanged", async () => {
+  const at = searchAddress({
+    words: "charge",
+    sdks: ["Python"],
+    chips: ["Stripe"],
+    category: "Payments",
+  });
+  const rendered = await renderCard({}, { at });
+  const before = currentSearch(rendered);
+
+  const link = cardOf(rendered).getByRole("link", {
+    name: "Stripe",
+    exact: true,
+  });
+  expect(link.element().getAttribute("href")).toBe(at);
+  await link.click();
+
+  await expect
+    .poll(() => rendered.router.state.location.pathname)
+    .toBe("/search");
+  expect(currentSearch(rendered)).toEqual(before);
+});
+
+test("the card shows no category, even when one is in the address", async () => {
+  const rendered = await renderCard(
+    { integrations: ["Stripe", "Slack", "Saga"] },
+    { at: searchAddress({ category: "Payments" }) },
+  );
+  const card = cardOf(rendered);
+  await expect.element(card.getByText("Published 2 days ago")).toBeVisible();
+
+  const text = (card.element() as HTMLElement).textContent;
+  for (const { name } of categories) {
+    expect(text).not.toContain(name);
+  }
+  await expect.element(card.getByText("Category")).not.toBeInTheDocument();
 });

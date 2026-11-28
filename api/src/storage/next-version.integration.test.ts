@@ -1,6 +1,13 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
-import { readAllRows, seedAccount, seedDeprecation, seedRemoval } from "./seed";
+import { readChips } from "./migration-testing";
+import {
+  readAllRows,
+  seedAccount,
+  seedChips,
+  seedDeprecation,
+  seedRemoval,
+} from "./seed";
 import {
   Storage,
   type NewListing,
@@ -24,7 +31,6 @@ const firstVersion = async (): Promise<NewListing> => {
     title: "Charge card",
     description: "Charges a card through Stripe.",
     sdk: "Python",
-    integrations: ["Stripe"],
   };
   const result = await storage().createPublication({ listing });
   expect(result.outcome).toBe("created");
@@ -36,7 +42,6 @@ const laterVersion = (first: NewListing): NewListing => ({
   version: "1.1.0",
   title: "Charge card again",
   description: "Charges a card through Stripe, retrying once.",
-  integrations: ["Stripe", "Slack"],
 });
 
 const nextVersion = (overrides: Partial<NextVersion> = {}): NextVersion => ({
@@ -50,7 +55,7 @@ const versionsOf = async ({ handle, name }: NewListing) =>
   (await storage().findListingVersions({ handle, name }))?.versions;
 
 describe("recording a later version", () => {
-  test("writes the version with its base, note, title, SDK, integrations and description, as the latest", async () => {
+  test("writes the version with its base, note, title, SDK and description, as the latest", async () => {
     const first = await firstVersion();
     const later = laterVersion(first);
 
@@ -72,8 +77,31 @@ describe("recording a later version", () => {
     expect(await storage().findListing(later)).toMatchObject({
       title: "Charge card again",
       sdk: "Python",
-      integrations: ["Stripe", "Slack"],
     });
+  });
+
+  test("leaves the listing's chips as they were", async () => {
+    const first = await firstVersion();
+    await seedChips(env.DB, { ...first, chips: ["Stripe", "Saga"] });
+
+    const result = await storage().createPublication({
+      listing: laterVersion(first),
+      nextVersion: nextVersion(),
+    });
+
+    expect(result.outcome).toBe("created");
+    expect(await readChips(first)).toEqual(["Stripe", "Saga"]);
+  });
+
+  test("leaves a listing with no chips with none", async () => {
+    const first = await firstVersion();
+
+    await storage().createPublication({
+      listing: laterVersion(first),
+      nextVersion: nextVersion(),
+    });
+
+    expect(await readChips(first)).toEqual([]);
   });
 
   test("leaves every existing version's row as it was", async () => {

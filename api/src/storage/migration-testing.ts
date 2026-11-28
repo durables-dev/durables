@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { inject } from "vitest";
-import { seedAccount } from "./seed";
+import { seedAccount, seedChips } from "./seed";
 import type { Sdk } from "./schema";
 import { Storage, type NewListing } from "./storage";
 
@@ -169,13 +169,66 @@ export const insertEarlyListing = async ({
   return listing;
 };
 
-/** A listing and its first version, published the way publishing stores them, under a name no other test uses. */
+/**
+ * An account with a handle and a listing with the given versions, written with plain SQL in the
+ * columns migrations 0000 to 0006 created, so it can be written before migration 0007 adds the
+ * listing's chips. The listing has no description column, and each version's description is
+ * empty. The handle and name are unique per call.
+ */
+export const insertListingBeforeChips = async (
+  versionRows: readonly EarlyVersion[] = [{ version: "1.0.0" }],
+): Promise<{ handle: string; name: string }> => {
+  const unique = crypto.randomUUID();
+  const listing = {
+    handle: `early-${unique.slice(0, 8)}`,
+    name: `activity-${unique.slice(9, 13)}`,
+  };
+  await env.DB.batch([
+    env.DB.prepare("insert into accounts (id) values (?)").bind(unique),
+    env.DB.prepare(
+      "insert into provider_accounts (provider, provider_account_id, account_id) values ('github', ?, ?)",
+    ).bind(`early-${unique}`, unique),
+    env.DB.prepare(
+      "insert into handles (handle, account_id) values (?, ?)",
+    ).bind(listing.handle, unique),
+    env.DB.prepare("insert into listings (handle, name) values (?, ?)").bind(
+      listing.handle,
+      listing.name,
+    ),
+  ]);
+  for (const row of versionRows) {
+    await insertEarlyVersion(listing, row);
+  }
+  return listing;
+};
+
+/** A listing's chips exactly as stored, read with plain SQL, or undefined when it has no row. */
+export const readChips = async ({
+  handle,
+  name,
+}: {
+  handle: string;
+  name: string;
+}): Promise<unknown> => {
+  const row = await env.DB.prepare(
+    "select chips from listings where handle = ? and name = ?",
+  )
+    .bind(handle, name)
+    .first<{ chips: string }>();
+  return row === null ? undefined : JSON.parse(row.chips);
+};
+
+/**
+ * A listing and its first version, published the way publishing stores them, under a name no
+ * other test uses. Publishing gives a listing no chips, so any chips given are set afterwards,
+ * as an operator's migration would.
+ */
 export const storedListing = async ({
   sdk = "Python",
-  integrations = [],
+  chips,
 }: {
   sdk?: NewListing["sdk"];
-  integrations?: string[];
+  chips?: string[];
 } = {}): Promise<NewListing> => {
   const listing: NewListing = {
     handle: (await seedAccount(env.DB)).handle,
@@ -184,8 +237,10 @@ export const storedListing = async ({
     title: "Upload report",
     description: "Uploads a CSV report and returns where it is.",
     sdk,
-    integrations,
   };
   await new Storage(env.DB, env.DOCUMENTS).createListing(listing);
+  if (chips !== undefined) {
+    await seedChips(env.DB, { ...listing, chips });
+  }
   return listing;
 };

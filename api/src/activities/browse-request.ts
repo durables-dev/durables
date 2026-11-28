@@ -1,3 +1,9 @@
+import {
+  categoryOfChip,
+  findCategory,
+  findChip,
+  type Chip,
+} from "@durables/schemas";
 import { z } from "zod";
 import { sdkSchema, sdks } from "../sdks/sdk-list";
 import { decodeBrowseCursor } from "./browse-cursor";
@@ -42,9 +48,9 @@ const repeatable = <T extends z.ZodType<string>>(item: T, error?: string) =>
     .optional();
 
 /**
- * The browse query. The words in q must all match. Several SDKs match any one of them, as do
- * several integrations. The publisher matches the handle exactly. The cursor is the nextCursor
- * of the previous batch, and must belong to the sort the words call for.
+ * The browse query. The words in q must all match. Several SDKs match any one of them. Chips and
+ * the category narrow as `chipGroups` describes. The publisher matches the handle exactly. The
+ * cursor is the nextCursor of the previous batch, and must belong to the sort the words call for.
  */
 export const browseQuery = z
   .object({
@@ -54,7 +60,8 @@ export const browseQuery = z
       .transform(searchWords)
       .optional(),
     sdk: repeatable(sdkSchema, sdkFilterMessage),
-    integration: repeatable(z.string()),
+    chip: repeatable(z.string()),
+    category: z.string().optional(),
     publisher: z.string().min(1, { error: publisherMessage }).optional(),
     cursor: z
       .string()
@@ -79,3 +86,34 @@ export const browseQuery = z
   });
 
 export type BrowseQuery = z.output<typeof browseQuery>;
+
+/**
+ * The chip groups a listing must match, one group per category: a listing needs any one chip of
+ * each group. The chosen chips are grouped by the category each belongs to, in the order the
+ * categories are first chosen. With no chip chosen, a category gives one group of all its chips.
+ * Any chosen chip replaces the category. Names match ignoring case, and a chip or category the
+ * shared list does not know is ignored. No groups means no chip filter.
+ */
+export const chipGroups = (
+  chips: readonly string[] = [],
+  category?: string,
+): Chip[][] => {
+  const groups = new Map<string, Chip[]>();
+  for (const name of chips) {
+    const chip = findChip(name);
+    const chipCategory = categoryOfChip(name);
+    if (chip === undefined || chipCategory === undefined) {
+      continue;
+    }
+    const group = groups.get(chipCategory.name) ?? [];
+    if (!group.includes(chip)) {
+      group.push(chip);
+    }
+    groups.set(chipCategory.name, group);
+  }
+  if (groups.size > 0) {
+    return [...groups.values()];
+  }
+  const chosen = category === undefined ? undefined : findCategory(category);
+  return chosen === undefined ? [] : [[...chosen.chips]];
+};

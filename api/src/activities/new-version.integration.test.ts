@@ -8,7 +8,12 @@ import {
 } from "@durables/schemas";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
-import { readAllRows, seedAccount, seedRemoval } from "../storage/seed";
+import {
+  readAllRows,
+  seedAccount,
+  seedChips,
+  seedRemoval,
+} from "../storage/seed";
 import { Storage, type Address, type RemovalSource } from "../storage/storage";
 import { versionDocumentKey } from "../storage/version-document";
 import { publishProblemTypes } from "./publish-problems";
@@ -531,6 +536,37 @@ describe("POST /api/activities/:handle/:name/versions", () => {
         expect(await snapshot()).toEqual(before);
       },
     );
+  });
+
+  describe("a listing's chips", () => {
+    test("stay as they were when a new version publishes", async () => {
+      const owner = await newOwner();
+      await seedChips(env.DB, { ...owner.listing, chips: ["Stripe", "Saga"] });
+
+      const response = await publishNewVersion(owner, newVersionBody());
+
+      expect(response.status).toBe(201);
+      const browse = await get(
+        `/api/activities?publisher=${encodeURIComponent(owner.handle)}`,
+      );
+      expect((await browse.json<BrowseResponse>()).activities).toMatchObject([
+        { version: "1.1.0", integrations: ["Stripe", "Saga"] },
+      ]);
+    });
+
+    test("stay empty when a new version of a listing with none publishes", async () => {
+      const owner = await newOwner();
+
+      const response = await publishNewVersion(owner, newVersionBody());
+
+      expect(response.status).toBe(201);
+      const browse = await get(
+        `/api/activities?publisher=${encodeURIComponent(owner.handle)}`,
+      );
+      expect((await browse.json<BrowseResponse>()).activities).toMatchObject([
+        { version: "1.1.0", integrations: [] },
+      ]);
+    });
   });
 
   describe("a removed activity", () => {

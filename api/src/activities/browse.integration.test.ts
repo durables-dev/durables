@@ -1,7 +1,13 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
 import type { Sdk } from "../sdks/sdk-list";
-import { seedAccount, seedListing, seedVersion } from "../storage/seed";
+import {
+  seedAccount,
+  seedChips,
+  seedListing,
+  seedRemoval,
+  seedVersion,
+} from "../storage/seed";
 import { encodeBrowseCursor } from "./browse-cursor";
 import {
   BROWSE_BATCH_SIZE,
@@ -22,7 +28,6 @@ interface SeededVersion {
   description?: string;
   title?: string;
   sdk?: Sdk;
-  integrations?: string[];
   publishedAt?: Date;
 }
 
@@ -30,17 +35,22 @@ interface SeededVersion {
 const newHandle = async () => (await seedAccount(env.DB)).handle;
 
 /**
- * Writes a listing and its versions, each defaulting to 1.0.0, Python, Stripe and now. Each
+ * Writes a listing and its versions, each defaulting to 1.0.0, Python and now. The listing's
+ * chips default to Stripe. Versions carry no integrations of their own. Each
  * version takes the listing's description unless it names its own. The published date is
  * stored in whole seconds, so dates here are whole seconds too.
  */
 const seedActivity = async (
   handle: string,
-  listing: { name?: string; description?: string } = {},
+  listing: { name?: string; description?: string; chips?: string[] } = {},
   versionRows: SeededVersion[] = [{}],
 ): Promise<{ handle: string; name: string }> => {
   const name = listing.name ?? `activity-${crypto.randomUUID().slice(0, 8)}`;
-  await seedListing(env.DB, { handle, name });
+  await seedListing(env.DB, {
+    handle,
+    name,
+    chips: listing.chips ?? ["Stripe"],
+  });
   for (const row of versionRows) {
     await seedVersion(env.DB, {
       handle,
@@ -52,7 +62,6 @@ const seedActivity = async (
         "Charges a card through Stripe.",
       title: row.title ?? "Charge card",
       sdk: row.sdk ?? "Python",
-      integrations: row.integrations ?? ["Stripe"],
       ...(row.publishedAt === undefined
         ? {}
         : { publishedAt: row.publishedAt }),
@@ -84,6 +93,9 @@ const browse = async (query?: Query): Promise<BrowseResponse> => {
   expect(response.status).toBe(200);
   return response.json<BrowseResponse>();
 };
+
+/** A word no other listing holds, so a search for it finds only this test's listings. */
+const newWord = () => `zq${crypto.randomUUID().slice(0, 8)}`;
 
 const names = (body: BrowseResponse) =>
   body.activities.map((card) => card.name);
@@ -152,16 +164,18 @@ describe("browsing with no filters", () => {
 });
 
 describe("each card", () => {
-  test("holds the title, address, SDK, current description, integrations, publisher and published date", async () => {
+  test("holds the title, address, SDK, current description, the listing's chips, publisher and published date", async () => {
     const handle = await newHandle();
     const { name } = await seedActivity(
       handle,
-      { description: "Uploads a file to a bucket." },
+      {
+        description: "Uploads a file to a bucket.",
+        chips: ["Amazon S3", "Postgres"],
+      },
       [
         {
           title: "Upload file",
           sdk: "TypeScript",
-          integrations: ["Amazon S3", "Postgres"],
           publishedAt: at("2026-10-20T09:30:00Z"),
         },
       ],
@@ -184,9 +198,9 @@ describe("each card", () => {
     ]);
   });
 
-  test("answers an empty integrations list when the version has none", async () => {
+  test("answers an empty integrations list when the listing has no chips", async () => {
     const handle = await newHandle();
-    await seedActivity(handle, {}, [{ integrations: [] }]);
+    await seedActivity(handle, { chips: [] });
 
     const body = await browse({ publisher: handle });
 
@@ -255,16 +269,16 @@ describe("a listing with several versions", () => {
     expect(body.activities.map((card) => card.version)).toEqual(["1.10.0"]);
   });
 
-  test("is filtered by the version on the card, not by older versions", async () => {
+  test("is filtered by the SDK of the version on the card, not by older versions", async () => {
     const handle = await newHandle();
-    await seedActivity(handle, {}, [
-      { version: "1.0.0", sdk: "Python", integrations: ["Stripe"] },
-      { version: "2.0.0", sdk: "TypeScript", integrations: ["Slack"] },
+    await seedActivity(handle, { chips: ["Slack"] }, [
+      { version: "1.0.0", sdk: "Python" },
+      { version: "2.0.0", sdk: "TypeScript" },
     ]);
 
-    const stripe = await browse({ publisher: handle, integration: "Stripe" });
+    const stripe = await browse({ publisher: handle, chip: "Stripe" });
     const python = await browse({ publisher: handle, sdk: "Python" });
-    const slack = await browse({ publisher: handle, integration: "Slack" });
+    const slack = await browse({ publisher: handle, chip: "Slack" });
 
     expect(stripe.count).toBe(0);
     expect(python.count).toBe(0);
@@ -373,23 +387,19 @@ describe("the SDK filter", () => {
     expect(body.count).toBe(2);
   });
 
-  test("combines with the integration filter, so only listings matching both return", async () => {
+  test("combines with the chip filter, so only listings matching both return", async () => {
     const handle = await newHandle();
-    const both = await seedActivity(handle, {}, [
-      { sdk: "Python", integrations: ["Stripe", "Postgres"] },
+    const both = await seedActivity(handle, { chips: ["Stripe", "Postgres"] }, [
+      { sdk: "Python" },
     ]);
-    await seedActivity(handle, {}, [
-      { sdk: "Python", integrations: ["Slack"] },
-    ]);
-    await seedActivity(handle, {}, [
-      { sdk: "TypeScript", integrations: ["Stripe"] },
-    ]);
-    await seedActivity(handle, {}, [{ sdk: "Python", integrations: [] }]);
+    await seedActivity(handle, { chips: ["Slack"] }, [{ sdk: "Python" }]);
+    await seedActivity(handle, { chips: ["Stripe"] }, [{ sdk: "TypeScript" }]);
+    await seedActivity(handle, { chips: [] }, [{ sdk: "Python" }]);
 
     const body = await browse({
       publisher: handle,
       sdk: "Python",
-      integration: "Stripe",
+      chip: "Stripe",
     });
 
     expect(names(body)).toEqual([both.name]);
@@ -423,67 +433,472 @@ describe("the SDK filter", () => {
   });
 });
 
-describe("the integration filter", () => {
-  test("with several integrations, matches a listing with any one of them", async () => {
+describe("the chip filter", () => {
+  test("with two chips under one category, matches a listing with either", async () => {
     const handle = await newHandle();
-    const stripe = await seedActivity(handle, {}, [
-      { integrations: ["Stripe"], publishedAt: at("2026-01-03T00:00:00Z") },
+    const openai = await seedActivity(handle, { chips: ["OpenAI"] }, [
+      { publishedAt: at("2026-01-03T00:00:00Z") },
     ]);
-    const slack = await seedActivity(handle, {}, [
-      {
-        integrations: ["Postgres", "Slack"],
-        publishedAt: at("2026-01-02T00:00:00Z"),
-      },
-    ]);
-    await seedActivity(handle, {}, [{ integrations: ["Amazon S3"] }]);
+    const claude = await seedActivity(
+      handle,
+      { chips: ["Postgres", "Anthropic Claude"] },
+      [{ publishedAt: at("2026-01-02T00:00:00Z") }],
+    );
+    await seedActivity(handle, { chips: ["Google Gemini"] });
 
     const body = await browse({
       publisher: handle,
-      integration: ["Stripe", "Slack"],
+      chip: ["OpenAI", "Anthropic Claude"],
     });
 
-    expect(names(body)).toEqual([stripe.name, slack.name]);
+    expect(names(body)).toEqual([openai.name, claude.name]);
     expect(body.count).toBe(2);
   });
 
-  test("excludes a listing with no integrations, which shows without the filter", async () => {
+  test("with chips under two categories, matches only a listing with a chip under each", async () => {
     const handle = await newHandle();
-    const none = await seedActivity(handle, {}, [{ integrations: [] }]);
+    const both = await seedActivity(handle, { chips: ["Slack", "Polling"] });
+    await seedActivity(handle, { chips: ["Slack"] });
+    await seedActivity(handle, { chips: ["Polling"] });
+    await seedActivity(handle, { chips: ["Slack", "Saga"] });
 
-    const filtered = await browse({ publisher: handle, integration: "Stripe" });
+    const body = await browse({
+      publisher: handle,
+      chip: ["Slack", "Polling"],
+    });
+
+    expect(names(body)).toEqual([both.name]);
+    expect(body.count).toBe(1);
+  });
+
+  test("is any within a category and every across categories, both at once", async () => {
+    const handle = await newHandle();
+    const openaiSlack = await seedActivity(
+      handle,
+      { chips: ["OpenAI", "Slack"] },
+      [{ publishedAt: at("2026-01-03T00:00:00Z") }],
+    );
+    const claudeSlack = await seedActivity(
+      handle,
+      { chips: ["Slack", "Anthropic Claude"] },
+      [{ publishedAt: at("2026-01-02T00:00:00Z") }],
+    );
+    await seedActivity(handle, { chips: ["OpenAI", "Anthropic Claude"] });
+    await seedActivity(handle, { chips: ["Slack", "Google Gemini"] });
+
+    const body = await browse({
+      publisher: handle,
+      chip: ["OpenAI", "Slack", "Anthropic Claude"],
+    });
+
+    expect(names(body)).toEqual([openaiSlack.name, claudeSlack.name]);
+    expect(body.count).toBe(2);
+  });
+
+  test("excludes a listing with no chips, which shows without the filter", async () => {
+    const handle = await newHandle();
+    const none = await seedActivity(handle, { chips: [] });
+
+    const filtered = await browse({ publisher: handle, chip: "Stripe" });
     const unfiltered = await browse({ publisher: handle });
 
     expect(filtered.count).toBe(0);
     expect(names(unfiltered)).toEqual([none.name]);
   });
 
-  test("matches whole integration names inside the stored list, not part of one", async () => {
+  test("matches whole chip names, and part of one is an unknown name, ignored", async () => {
     const handle = await newHandle();
-    await seedActivity(handle, {}, [{ integrations: ["Amazon S3"] }]);
+    await seedActivity(handle, { chips: ["Amazon S3"] });
 
-    const body = await browse({ publisher: handle, integration: "S3" });
+    const part = await browse({ publisher: handle, chip: ["S3", "Postgres"] });
+    const whole = await browse({ publisher: handle, chip: "Amazon S3" });
+
+    expect(part.count).toBe(0);
+    expect(whole.count).toBe(1);
+  });
+
+  test("ignores letter case in the chosen names and in the stored chips", async () => {
+    const handle = await newHandle();
+    const stored = await seedActivity(handle, { chips: ["sTRIPE"] }, [
+      { publishedAt: at("2026-01-03T00:00:00Z") },
+    ]);
+    const listed = await seedActivity(handle, { chips: ["Stripe"] }, [
+      { publishedAt: at("2026-01-02T00:00:00Z") },
+    ]);
+    await seedActivity(handle, { chips: ["Slack"] });
+
+    const body = await browse({ publisher: handle, chip: "STRIPE" });
+
+    expect(names(body)).toEqual([stored.name, listed.name]);
+    expect(body.activities.map((card) => card.integrations)).toEqual([
+      ["Stripe"],
+      ["Stripe"],
+    ]);
+  });
+
+  test("ignores an unknown chip, so one alone leaves the filter off", async () => {
+    const handle = await newHandle();
+    const stripe = await seedActivity(handle, { chips: ["Stripe"] }, [
+      { publishedAt: at("2026-01-03T00:00:00Z") },
+    ]);
+    const none = await seedActivity(handle, { chips: [] }, [
+      { publishedAt: at("2026-01-02T00:00:00Z") },
+    ]);
+
+    const alone = await browse({ publisher: handle, chip: "Twilio" });
+    const withKnown = await browse({
+      publisher: handle,
+      chip: ["Twilio", "Stripe"],
+    });
+
+    expect(names(alone)).toEqual([stripe.name, none.name]);
+    expect(names(withKnown)).toEqual([stripe.name]);
+  });
+
+  test("never matches an unknown name stored on a listing", async () => {
+    const handle = await newHandle();
+    await seedActivity(handle, { chips: ["Twilio"] });
+
+    const body = await browse({
+      publisher: handle,
+      chip: ["Twilio", "Stripe"],
+    });
 
     expect(body.count).toBe(0);
   });
 
-  test("answers 200 for 150 integration values", async () => {
-    // D1 binds at most 100 parameters, so the integrations go to it as one JSON array.
+  test("no longer reads the integration parameter", async () => {
     const handle = await newHandle();
-    const stripe = await seedActivity(handle, {}, [
-      { integrations: ["Stripe"] },
+    const stripe = await seedActivity(handle, { chips: ["Stripe"] }, [
+      { publishedAt: at("2026-01-03T00:00:00Z") },
     ]);
-    await seedActivity(handle, {}, [{ integrations: ["Slack"] }]);
+    const slack = await seedActivity(handle, { chips: ["Slack"] }, [
+      { publishedAt: at("2026-01-02T00:00:00Z") },
+    ]);
+
+    const body = await browse({ publisher: handle, integration: "Stripe" });
+
+    expect(names(body)).toEqual([stripe.name, slack.name]);
+  });
+
+  test("answers 200 for 150 chip values", async () => {
+    // D1 binds at most 100 parameters, so each group goes to it as one JSON array.
+    const handle = await newHandle();
+    const stripe = await seedActivity(handle, { chips: ["Stripe"] });
+    await seedActivity(handle, { chips: ["Slack"] });
 
     const body = await browse({
       publisher: handle,
-      integration: [
-        ...Array.from({ length: 149 }, (_, i) => `Integration ${i}`),
-        "Stripe",
-      ],
+      chip: [...Array.from({ length: 149 }, (_, i) => `Chip ${i}`), "Stripe"],
     });
 
     expect(names(body)).toEqual([stripe.name]);
     expect(body.count).toBe(1);
+  });
+});
+
+describe("the category filter", () => {
+  test("alone, matches every listing with any chip under the category", async () => {
+    const handle = await newHandle();
+    const openai = await seedActivity(handle, { chips: ["OpenAI"] }, [
+      { publishedAt: at("2026-01-04T00:00:00Z") },
+    ]);
+    const grok = await seedActivity(handle, { chips: ["Slack", "xAI Grok"] }, [
+      { publishedAt: at("2026-01-03T00:00:00Z") },
+    ]);
+    await seedActivity(handle, { chips: ["Slack"] });
+    await seedActivity(handle, { chips: [] });
+
+    const body = await browse({ publisher: handle, category: "AI models" });
+
+    expect(names(body)).toEqual([openai.name, grok.name]);
+    expect(body.count).toBe(2);
+  });
+
+  test("matches the pattern chips under Workflow patterns", async () => {
+    const handle = await newHandle();
+    const saga = await seedActivity(handle, { chips: ["Saga"] });
+    await seedActivity(handle, { chips: ["Stripe"] });
+
+    const body = await browse({
+      publisher: handle,
+      category: "Workflow patterns",
+    });
+
+    expect(names(body)).toEqual([saga.name]);
+  });
+
+  test("has no effect when a chip is chosen", async () => {
+    const handle = await newHandle();
+    const slack = await seedActivity(handle, { chips: ["Slack"] });
+    await seedActivity(handle, { chips: ["Stripe"] });
+
+    const body = await browse({
+      publisher: handle,
+      category: "Payments",
+      chip: "Slack",
+    });
+
+    expect(names(body)).toEqual([slack.name]);
+    expect(body.count).toBe(1);
+  });
+
+  test("applies when the only chip chosen is unknown", async () => {
+    const handle = await newHandle();
+    const stripe = await seedActivity(handle, { chips: ["Stripe"] });
+    await seedActivity(handle, { chips: ["Slack"] });
+
+    const body = await browse({
+      publisher: handle,
+      category: "Payments",
+      chip: "Twilio",
+    });
+
+    expect(names(body)).toEqual([stripe.name]);
+  });
+
+  test("narrows with the SDK as the SDK does", async () => {
+    const handle = await newHandle();
+    const python = await seedActivity(handle, { chips: ["Stripe"] }, [
+      { sdk: "Python" },
+    ]);
+    await seedActivity(handle, { chips: ["Stripe"] }, [{ sdk: "TypeScript" }]);
+    await seedActivity(handle, { chips: ["Slack"] }, [{ sdk: "Python" }]);
+
+    const body = await browse({
+      publisher: handle,
+      category: "Payments",
+      sdk: "Python",
+    });
+
+    expect(names(body)).toEqual([python.name]);
+  });
+
+  test("ignores letter case in the category name", async () => {
+    const handle = await newHandle();
+    const stripe = await seedActivity(handle, { chips: ["Stripe"] });
+    await seedActivity(handle, { chips: ["Slack"] });
+
+    const body = await browse({ publisher: handle, category: "pAYMENTS" });
+
+    expect(names(body)).toEqual([stripe.name]);
+  });
+
+  test("answers everything when the category is unknown", async () => {
+    const handle = await newHandle();
+    const stripe = await seedActivity(handle, { chips: ["Stripe"] }, [
+      { publishedAt: at("2026-01-03T00:00:00Z") },
+    ]);
+    const none = await seedActivity(handle, { chips: [] }, [
+      { publishedAt: at("2026-01-02T00:00:00Z") },
+    ]);
+
+    const body = await browse({ publisher: handle, category: "Telephony" });
+
+    expect(names(body)).toEqual([stripe.name, none.name]);
+    expect(body.count).toBe(2);
+  });
+
+  test("never matches an unknown name stored on a listing", async () => {
+    const handle = await newHandle();
+    await seedActivity(handle, { chips: ["Twilio", "Payments"] });
+
+    const body = await browse({ publisher: handle, category: "Payments" });
+
+    expect(body.count).toBe(0);
+  });
+
+  test("leaves a removed listing out", async () => {
+    const handle = await newHandle();
+    const listed = await seedActivity(handle, { chips: ["Stripe"] });
+    const removed = await seedActivity(handle, { chips: ["Stripe"] });
+    await seedRemoval(env.DB, { ...removed, removedBy: "durables" });
+
+    const byCategory = await browse({
+      publisher: handle,
+      category: "Payments",
+    });
+    const byChip = await browse({ publisher: handle, chip: "Stripe" });
+
+    expect(names(byCategory)).toEqual([listed.name]);
+    expect(names(byChip)).toEqual([listed.name]);
+  });
+});
+
+describe("a listing's chips", () => {
+  test("are what the integration filter matches, not any version's integrations", async () => {
+    const handle = await newHandle();
+    const { name } = await seedActivity(handle, { chips: ["Postgres"] }, [
+      { version: "1.0.0" },
+      { version: "1.1.0" },
+    ]);
+
+    const postgres = await browse({
+      publisher: handle,
+      chip: "Postgres",
+    });
+    const stripe = await browse({ publisher: handle, chip: "Stripe" });
+    const slack = await browse({ publisher: handle, chip: "Slack" });
+
+    expect(postgres.activities).toMatchObject([
+      { name, version: "1.1.0", integrations: ["Postgres"] },
+    ]);
+    expect(stripe.count).toBe(0);
+    expect(slack.count).toBe(0);
+  });
+
+  test("stay the same when a later version with different integrations is added", async () => {
+    const handle = await newHandle();
+    const { name } = await seedActivity(handle, { chips: ["Stripe"] }, [
+      { version: "1.0.0" },
+    ]);
+    const before = await browse({ publisher: handle });
+
+    await seedVersion(env.DB, {
+      handle,
+      name,
+      version: "2.0.0",
+      title: "Charge card",
+      sdk: "Python",
+    });
+
+    const after = await browse({ publisher: handle });
+    const slack = await browse({ publisher: handle, chip: "Slack" });
+    const stripe = await browse({ publisher: handle, chip: "Stripe" });
+    expect(before.activities).toMatchObject([
+      { version: "1.0.0", integrations: ["Stripe"] },
+    ]);
+    expect(after.activities).toMatchObject([
+      { version: "2.0.0", integrations: ["Stripe"] },
+    ]);
+    expect(slack.count).toBe(0);
+    expect(names(stripe)).toEqual([name]);
+  });
+
+  test("change what browse shows when they are set, whatever the versions hold", async () => {
+    const handle = await newHandle();
+    const { name } = await seedActivity(handle, { chips: [] });
+
+    await seedChips(env.DB, { handle, name, chips: ["Slack", "Saga"] });
+
+    const body = await browse({ publisher: handle, chip: "Saga" });
+    expect(body.activities).toMatchObject([
+      { name, integrations: ["Slack", "Saga"] },
+    ]);
+  });
+
+  test("are matched by search words, and a word in no chip is not", async () => {
+    const handle = await newHandle();
+    const { name } = await seedActivity(handle, { chips: ["Redis"] }, [
+      { title: "Cache value", description: "Keeps a value." },
+    ]);
+
+    const byChip = await browse({ q: "redis", publisher: handle });
+    const byOther = await browse({ q: "sqs", publisher: handle });
+
+    expect(names(byChip)).toEqual([name]);
+    expect(byOther.count).toBe(0);
+  });
+
+  test("are matched by search words naming a pattern chip", async () => {
+    const handle = await newHandle();
+    const saga = await seedActivity(handle, { chips: ["Saga"] }, [
+      { title: "Book trip", description: "Books a trip." },
+    ]);
+    await seedActivity(handle, { chips: ["Stripe"] }, [
+      { title: "Book trip", description: "Books a trip." },
+    ]);
+
+    const body = await browse({ q: "SAGA", publisher: handle });
+
+    expect(names(body)).toEqual([saga.name]);
+  });
+
+  test("never let a word match a category name", async () => {
+    const handle = await newHandle();
+    await seedActivity(handle, { chips: ["Stripe"] }, [
+      { title: "Charge card", description: "Charges a card." },
+    ]);
+    const described = await seedActivity(handle, { chips: [] }, [
+      { title: "Refund", description: "Handles payments refunds." },
+    ]);
+
+    const body = await browse({ q: "payments", publisher: handle });
+
+    expect(names(body)).toEqual([described.name]);
+  });
+
+  test("still need every word to match, a chip word included", async () => {
+    const handle = await newHandle();
+    const both = await seedActivity(handle, { chips: ["Saga"] }, [
+      { title: "Book trip", description: "Books a trip." },
+    ]);
+    await seedActivity(handle, { chips: ["Saga"] }, [
+      { title: "Charge card", description: "Charges a card." },
+    ]);
+
+    const body = await browse({ q: "saga trip", publisher: handle });
+
+    expect(names(body)).toEqual([both.name]);
+  });
+
+  test("keep only names on the shared list, as the list writes them, before answering or matching words", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    const { name } = await seedActivity(
+      handle,
+      { chips: ["Twilio", " slack ", "Payments", `Chip ${word}`, "Slack"] },
+      [{ title: "Send text", description: "Sends a text." }],
+    );
+
+    const body = await browse({ publisher: handle });
+    const byUnknown = await browse({ q: "twilio", publisher: handle });
+    const byOwnWord = await browse({ q: word, publisher: handle });
+    const byListed = await browse({ q: "slack", publisher: handle });
+
+    expect(body.activities).toMatchObject([{ name, integrations: ["Slack"] }]);
+    expect(byUnknown.count).toBe(0);
+    expect(byOwnWord.count).toBe(0);
+    expect(names(byListed)).toEqual([name]);
+  });
+
+  test("when empty, leave the listing in browse and in search by its title", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    const { name } = await seedActivity(handle, { chips: [] }, [
+      { title: `Charge ${word}` },
+    ]);
+
+    const unfiltered = await browse({ publisher: handle });
+    const searched = await browse({ q: word });
+
+    expect(unfiltered.activities).toMatchObject([{ name, integrations: [] }]);
+    expect(names(searched)).toEqual([name]);
+  });
+
+  test("never bring a removed listing back, with or without a filter", async () => {
+    const word = newWord();
+    const handle = await newHandle();
+    const listed = await seedActivity(handle, { chips: ["Batching"] }, [
+      { title: `Batch ${word}` },
+    ]);
+    const removed = await seedActivity(handle, { chips: ["Batching"] }, [
+      { title: `Batch ${word}` },
+    ]);
+    await seedRemoval(env.DB, { ...removed, removedBy: "publisher" });
+
+    const unfiltered = await browse({ publisher: handle });
+    const filtered = await browse({ publisher: handle, chip: "Batching" });
+    const byCategory = await browse({
+      publisher: handle,
+      category: "Workflow patterns",
+    });
+    const searched = await browse({ q: `${word} batching` });
+
+    expect(names(unfiltered)).toEqual([listed.name]);
+    expect(names(filtered)).toEqual([listed.name]);
+    expect(names(byCategory)).toEqual([listed.name]);
+    expect(names(searched)).toEqual([listed.name]);
   });
 });
 
@@ -607,8 +1022,6 @@ describe("no matches", () => {
 });
 
 /** A word no other test uses, so a search for it finds only this test's listings. */
-const newWord = () => `zq${crypto.randomUUID().slice(0, 8)}`;
-
 describe("searching with words", () => {
   test.each<
     [
@@ -663,13 +1076,13 @@ describe("searching with words", () => {
     expect(body.sort).toBe("relevance");
   });
 
-  test("returns a listing with the word in one of its integrations", async () => {
+  test("returns a listing with the word in one of its chips", async () => {
     const handle = await newHandle();
-    const postgres = await seedActivity(handle, {}, [
-      { integrations: ["Stripe", "Postgres"] },
-    ]);
-    await seedActivity(handle, {}, [{ integrations: ["Stripe"] }]);
-    await seedActivity(handle, {}, [{ integrations: [] }]);
+    const postgres = await seedActivity(handle, {
+      chips: ["Stripe", "Postgres"],
+    });
+    await seedActivity(handle, { chips: ["Stripe"] });
+    await seedActivity(handle, { chips: [] });
 
     const body = await browse({ q: "postgres", publisher: handle });
 
@@ -791,31 +1204,29 @@ describe("searching with words", () => {
     expect(names(upperSearch).sort()).toEqual([upper.name, lower.name].sort());
   });
 
-  test("combines with the SDK, integration and publisher filters, so results match all of them", async () => {
+  test("combines with the SDK, chip and publisher filters, so results match all of them", async () => {
     const word = newWord();
     const handle = await newHandle();
     const other = await newHandle();
     const title = `Charge ${word}`;
-    const matching = await seedActivity(handle, {}, [
-      { title, sdk: "Python", integrations: ["Stripe"] },
+    const matching = await seedActivity(handle, { chips: ["Stripe"] }, [
+      { title, sdk: "Python" },
     ]);
-    await seedActivity(handle, {}, [
-      { title, sdk: "TypeScript", integrations: ["Stripe"] },
+    await seedActivity(handle, { chips: ["Stripe"] }, [
+      { title, sdk: "TypeScript" },
     ]);
-    await seedActivity(handle, {}, [
-      { title, sdk: "Python", integrations: ["Slack"] },
+    await seedActivity(handle, { chips: ["Slack"] }, [
+      { title, sdk: "Python" },
     ]);
-    await seedActivity(other, {}, [
-      { title, sdk: "Python", integrations: ["Stripe"] },
+    await seedActivity(other, { chips: ["Stripe"] }, [
+      { title, sdk: "Python" },
     ]);
-    await seedActivity(handle, {}, [
-      { sdk: "Python", integrations: ["Stripe"] },
-    ]);
+    await seedActivity(handle, { chips: ["Stripe"] }, [{ sdk: "Python" }]);
 
     const body = await browse({
       q: word,
       sdk: "Python",
-      integration: "Stripe",
+      chip: "Stripe",
       publisher: handle,
     });
 
@@ -1015,36 +1426,37 @@ const newSignedInPublisher = async () => {
   return { cookie: cookieFrom(chosen), handle };
 };
 
+/** Publishes postSlackMessage as a first version under the signed-in publisher's handle. */
+const publish = (cookie: string, name: string, title: string) =>
+  exports.default.fetch("http://localhost/api/activities", {
+    method: "POST",
+    headers: {
+      "Sec-Fetch-Site": "same-origin",
+      "Content-Type": "application/json",
+      Cookie: cookie,
+    },
+    body: JSON.stringify({
+      code: postSlackMessage,
+      title,
+      name,
+      description: "Posts a message to a Slack channel.",
+      confirmations: {
+        rights: true,
+        mitZero: true,
+        noSecrets: true,
+        notMalicious: true,
+        noResponsibility: true,
+        terms: true,
+      },
+    }),
+  });
+
 describe("an activity just published", () => {
   test("is found by searching its title, with nothing else written", async () => {
     const word = newWord();
     const { cookie, handle } = await newSignedInPublisher();
     const name = `post-slack-message-${crypto.randomUUID().slice(0, 8)}`;
-    const published = await exports.default.fetch(
-      "http://localhost/api/activities",
-      {
-        method: "POST",
-        headers: {
-          "Sec-Fetch-Site": "same-origin",
-          "Content-Type": "application/json",
-          Cookie: cookie,
-        },
-        body: JSON.stringify({
-          code: postSlackMessage,
-          title: `Post slack message ${word}`,
-          name,
-          description: "Posts a message to a Slack channel.",
-          confirmations: {
-            rights: true,
-            mitZero: true,
-            noSecrets: true,
-            notMalicious: true,
-            noResponsibility: true,
-            terms: true,
-          },
-        }),
-      },
-    );
+    const published = await publish(cookie, name, `Post slack message ${word}`);
     expect(published.status).toBe(201);
 
     const body = await browse({ q: `post ${word.toUpperCase()}` });
@@ -1053,5 +1465,23 @@ describe("an activity just published", () => {
       `${handle}/${name}@1.0.0`,
     ]);
     expect(body.sort).toBe("relevance");
+  });
+  test("has no chips until they are set, though its code implies Slack", async () => {
+    const word = newWord();
+    const { cookie, handle } = await newSignedInPublisher();
+    const name = `post-slack-message-${crypto.randomUUID().slice(0, 8)}`;
+    const published = await publish(cookie, name, `Post slack message ${word}`);
+    expect(published.status).toBe(201);
+
+    const fresh = await browse({ publisher: handle });
+    const bySlack = await browse({ publisher: handle, chip: "Slack" });
+    await seedChips(env.DB, { handle, name, chips: ["Slack"] });
+    const withChips = await browse({ publisher: handle, chip: "Slack" });
+
+    expect(fresh.activities).toMatchObject([{ name, integrations: [] }]);
+    expect(bySlack.count).toBe(0);
+    expect(withChips.activities).toMatchObject([
+      { name, integrations: ["Slack"] },
+    ]);
   });
 });

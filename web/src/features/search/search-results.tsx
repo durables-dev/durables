@@ -1,4 +1,5 @@
 import type { Search } from "@/lib/search-address";
+import { appliedCategory } from "@/lib/search-filters";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { browseQuery } from "./browse-query";
 import { countLine } from "./count-line";
@@ -9,14 +10,24 @@ import { useReachEnd } from "./use-reach-end";
 export interface SearchResultsProps {
   /** The search the address holds. */
   search: Search;
-  /** Called when the empty state's Clear filters is clicked. */
+  /**
+   * Called when the empty state's Clear filters is clicked. It clears as the sidebar's Clear
+   * does: every filter goes and the words stay.
+   */
   onClearAll: () => void;
+  /** Called when the category pill is removed. */
+  onRemoveCategory: () => void;
 }
 
-// The results area: the count and sort, then the cards in batches of 50. The next batch loads
+// The results area: the count and sort, with the category pill beside it while a category
+// applies, then the cards in batches of 50. The next batch loads
 // when the end of the list scrolls into view. A failure on a later batch keeps the cards
 // already shown. While the first batch loads, or if it fails, the area says so instead.
-export function SearchResults({ search, onClearAll }: SearchResultsProps) {
+export function SearchResults({
+  search,
+  onClearAll,
+  onRemoveCategory,
+}: SearchResultsProps) {
   const results = useInfiniteQuery(browseQuery(search));
   const canLoadMore =
     results.hasNextPage &&
@@ -57,12 +68,26 @@ export function SearchResults({ search, onClearAll }: SearchResultsProps) {
   const [first] = results.data.pages;
   const count = first?.count ?? 0;
   const cards = results.data.pages.flatMap((batch) => batch.activities);
+  const category = appliedCategory(search);
 
   return (
     <div className={styles["results"]}>
-      <p className={styles["count"]} aria-live="polite">
-        {countLine(count, first?.sort ?? "newest")}
-      </p>
+      <div className={styles["summary"]}>
+        <p className={styles["count"]} aria-live="polite">
+          {countLine(count, first?.sort ?? "newest")}
+        </p>
+        {category === undefined ? null : (
+          <button
+            type="button"
+            className={styles["pill"]}
+            aria-label={`Remove ${category}`}
+            onClick={onRemoveCategory}
+          >
+            {category}
+            <span aria-hidden="true"> ×</span>
+          </button>
+        )}
+      </div>
       {cards.length === 0 ? (
         <div className={styles["empty"]}>
           <h2 className={styles["messageHeading"]}>No activities match</h2>
@@ -81,7 +106,7 @@ export function SearchResults({ search, onClearAll }: SearchResultsProps) {
         <>
           <div className={styles["grid"]}>
             {cards.map((card) => (
-              <ResultCard key={card.address} card={card} />
+              <ResultCard key={card.address} card={card} search={search} />
             ))}
           </div>
           <div ref={endRef} className={styles["end"]}>

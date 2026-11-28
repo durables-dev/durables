@@ -56,7 +56,6 @@ const deletedAccount = async (
     version: "1.0.0",
     title: "Charge card",
     sdk: "Python",
-    integrations: [],
     description: "Charges a card.",
   });
   await storage().requestAccountDeletion(account.accountId);

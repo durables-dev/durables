@@ -26,7 +26,12 @@ import { registeredSdks } from "../sdks/registry";
 import { generateSnippets } from "../snippets/snippets";
 import type { RemovalSource } from "../storage/storage";
 import { encodeBrowseCursor } from "./browse-cursor";
-import { BROWSE_BATCH_SIZE, browseQuery, browseSort } from "./browse-request";
+import {
+  BROWSE_BATCH_SIZE,
+  browseQuery,
+  browseSort,
+  chipGroups,
+} from "./browse-request";
 import { deprecationBody } from "./deprecation-request";
 import { descriptionBody } from "./description-request";
 import { acceptNewVersion, newVersionBody } from "./new-version-request";
@@ -159,7 +164,8 @@ export const activities = new Hono<AppEnv>()
     const {
       q: words = [],
       sdk: sdks,
-      integration: integrations,
+      chip: chips,
+      category,
       publisher,
       cursor: after,
     } = c.req.valid("query");
@@ -168,7 +174,7 @@ export const activities = new Hono<AppEnv>()
     const { listings, count } = await c.var.storage.browseListings({
       words,
       sdks,
-      integrations,
+      chipGroups: chipGroups(chips, category),
       publisher,
       after,
       limit: BROWSE_BATCH_SIZE + 1,
@@ -219,7 +225,6 @@ export const activities = new Hono<AppEnv>()
             title,
             description,
             sdk: facts.sdk,
-            integrations,
           },
           document: {
             code: body.code,
@@ -304,7 +309,6 @@ export const activities = new Hono<AppEnv>()
             title,
             description,
             sdk: facts.sdk,
-            integrations,
           },
           document: {
             code: body.code,

@@ -215,7 +215,6 @@ describe("migration 0004, storage for managing published activities", () => {
         version: "1.0.0",
         title: listing.title,
         sdk: "TypeScript",
-        integrations: ["Slack", "Stripe"],
         publishedAt: listing.publishedAt,
       });
     });
@@ -269,10 +268,11 @@ describe("migration 0004, storage for managing published activities", () => {
 
       await migrate();
 
-      const { accounts } = await readAllRows(env.DB);
+      // Read with plain SQL: later migrations change tables the storage schema reads.
+      const { accounts } = await readTables("accounts");
       expect(accounts).toHaveLength(2);
       for (const account of accounts ?? []) {
-        expect(account).toMatchObject({ deletionRequestedAt: null });
+        expect(account).toMatchObject({ deletion_requested_at: null });
       }
     });
 

@@ -8,6 +8,11 @@ import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
+import {
+  categoryGroups,
+  categoryGroupsWith,
+  groupsIn,
+} from "../../../test/filter-groups";
 import { http, HttpResponse } from "msw";
 import {
   eightSdkCatalog,
@@ -70,8 +75,20 @@ function sdkChip(opened: Opened, label: string) {
   return chip(opened, "Temporal SDK", label);
 }
 
-function integrationChip(opened: Opened, label: string) {
-  return chip(opened, "Integrates with", label);
+/** A filter under its category's heading, such as Stripe under Payments. */
+function filterChip(opened: Opened, label: string) {
+  const group = categoryGroups.find(({ filters }) =>
+    (filters as readonly string[]).includes(label),
+  );
+  if (group === undefined) {
+    throw new Error(`${label} is under no category`);
+  }
+  return chip(opened, group.name, label);
+}
+
+/** The category groups in the sidebar, after Temporal SDK. */
+function categoryGroupsShown(opened: Opened) {
+  return groupsIn(sidebar(opened)).slice(1);
 }
 
 function cards({ screen }: Opened) {
@@ -103,7 +120,8 @@ function pressedIn(opened: Opened, group: string) {
 const firstCall: BrowseCall = {
   q: null,
   sdks: [],
-  integrations: [],
+  chips: [],
+  category: null,
   publisher: null,
   cursor: null,
 };
@@ -111,13 +129,13 @@ const firstCall: BrowseCall = {
 const chargeSearch = searchAddress({
   words: "charge & refund café",
   sdks: ["Python", ".NET"],
-  integrations: ["Stripe", "Amazon S3"],
+  chips: ["Stripe", "Amazon S3"],
 });
 
 const slackSearch = searchAddress({
   words: "post message",
   sdks: ["TypeScript"],
-  integrations: ["Slack"],
+  chips: ["Slack"],
 });
 
 /** Lets any request the page was about to send go out. */
@@ -161,7 +179,8 @@ test("opening /search with words and filters asks for them and shows them", asyn
     {
       q: "charge & refund café",
       sdks: ["Python", ".NET"],
-      integrations: ["Stripe", "Amazon S3"],
+      chips: ["Stripe", "Amazon S3"],
+      category: null,
       publisher: null,
       cursor: null,
     },
@@ -188,22 +207,9 @@ test("filters carried in from the address show as selected chips", async () => {
     ["TypeScript", false],
     [".NET", true],
   ]);
-  expect(pressedIn(opened, "Integrates with")).toEqual([
-    ["Stripe", true],
-    ["Amazon S3", true],
-    ["Postgres", false],
-    ["Slack", false],
-    ["OpenAI", false],
-    ["Anthropic Claude", false],
-    ["Google Gemini", false],
-    ["Amazon Bedrock", false],
-    ["Redis", false],
-    ["Amazon SQS", false],
-    ["Ollama", false],
-    ["Cohere", false],
-    ["Groq", false],
-    ["xAI Grok", false],
-  ]);
+  expect(categoryGroupsShown(opened)).toEqual(
+    categoryGroupsWith("Stripe", "Amazon S3"),
+  );
 });
 
 test("an address with no parameters asks for every activity, with Any on", async () => {
@@ -219,9 +225,7 @@ test("an address with no parameters asks for every activity, with Any on", async
     ["TypeScript", false],
     [".NET", false],
   ]);
-  expect(
-    pressedIn(opened, "Integrates with").every(([, pressed]) => !pressed),
-  ).toBe(true);
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
 });
 
 test("a publisher in the address is asked for", async () => {
@@ -232,20 +236,155 @@ test("a publisher in the address is asked for", async () => {
   expect(calls).toEqual([{ ...firstCall, publisher: "ddieruf" }]);
 });
 
-test("unknown SDK and integration values in the address are ignored", async () => {
+test("unknown SDK and chip values in the address are ignored", async () => {
   const calls = serveBrowse(testCards(1));
-  const opened = await openAt(
-    "/search?sdk=Java&integration=Twilio&integration=Slack",
-  );
+  const opened = await openAt("/search?sdk=Java&chip=Twilio&chip=Slack");
 
   await expect.poll(() => cardCount(opened)).toBe(1);
-  expect(calls).toEqual([{ ...firstCall, integrations: ["Slack"] }]);
+  expect(calls).toEqual([{ ...firstCall, chips: ["Slack"] }]);
   await expect
     .element(sdkChip(opened, "Any"))
     .toHaveAttribute("aria-pressed", "true");
   await expect
-    .element(integrationChip(opened, "Slack"))
+    .element(filterChip(opened, "Slack"))
     .toHaveAttribute("aria-pressed", "true");
+  // An unknown filter shows nowhere: no heading lists it and nothing is on in its place.
+  await expect
+    .element(opened.screen.getByText("Twilio"))
+    .not.toBeInTheDocument();
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith("Slack"));
+});
+
+test("the chosen filters go to the api as chip, never as integration", async () => {
+  const sent: URLSearchParams[] = [];
+  worker.use(
+    http.get("/api/activities", ({ request }) => {
+      sent.push(new URL(request.url).searchParams);
+      return HttpResponse.json({
+        activities: [testCard(1)],
+        count: 1,
+        sort: "newest",
+        nextCursor: null,
+      });
+    }),
+  );
+  const opened = await openAt("/search?chip=Stripe&chip=Slack");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(sent.map((params) => params.getAll("chip"))).toEqual([
+    ["Stripe", "Slack"],
+  ]);
+  expect(sent.map((params) => params.has("integration"))).toEqual([false]);
+});
+
+// Chips and the category in the address
+
+test("a chip in the address is read ignoring case and shows as on", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?chip=stripe&chip=SLACK");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([{ ...firstCall, chips: ["Stripe", "Slack"] }]);
+  await expect
+    .element(filterChip(opened, "Stripe"))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect
+    .element(filterChip(opened, "Slack"))
+    .toHaveAttribute("aria-pressed", "true");
+});
+
+test("an SDK in the address is read ignoring case", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?sdk=python");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([{ ...firstCall, sdks: ["Python"] }]);
+  await expect
+    .element(sdkChip(opened, "Python"))
+    .toHaveAttribute("aria-pressed", "true");
+});
+
+test("a category in the address is asked for and turns no chip on", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=payments");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([{ ...firstCall, category: "Payments" }]);
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
+  expect(currentSearch(opened)).toEqual({
+    words: "",
+    sdks: [],
+    chips: [],
+    category: "Payments",
+  });
+});
+
+test("of several categories in the address, the api is sent the first alone", async () => {
+  const sent: URLSearchParams[] = [];
+  worker.use(
+    http.get("/api/activities", ({ request }) => {
+      sent.push(new URL(request.url).searchParams);
+      return HttpResponse.json({
+        activities: [testCard(1)],
+        count: 1,
+        sort: "newest",
+        nextCursor: null,
+      });
+    }),
+  );
+  const opened = await openAt(
+    "/search?category=Payments&category=Messaging&chip=Stripe",
+  );
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(sent.map((params) => params.getAll("category"))).toEqual([
+    ["Payments"],
+  ]);
+  expect(sent.map((params) => params.getAll("chip"))).toEqual([["Stripe"]]);
+});
+
+test("an unknown chip and an unknown category in the address are dropped", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?chip=Nonsense&category=Shipping");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([firstCall]);
+  expect(currentSearch(opened)).toEqual({ words: "", sdks: [], chips: [] });
+});
+
+test("the old integration parameter turns nothing on", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?integration=Stripe");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(calls).toEqual([firstCall]);
+  await expect
+    .element(filterChip(opened, "Stripe"))
+    .toHaveAttribute("aria-pressed", "false");
+});
+
+test("turning a chip on keeps the category in the address, and turning it off leaves the category", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
+  await filterChip(opened, "Stripe").click();
+
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?chip=Stripe&category=Payments");
+  await expect
+    .poll(() => calls.at(-1))
+    .toEqual({ ...firstCall, chips: ["Stripe"], category: "Payments" });
+
+  await filterChip(opened, "Stripe").click();
+
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?category=Payments");
+  await expect
+    .poll(() => calls.at(-1))
+    .toEqual({ ...firstCall, category: "Payments" });
 });
 
 test("opening the same address again, as a refresh does, shows the same search", async () => {
@@ -267,7 +406,7 @@ test("opening the same address again, as a refresh does, shows the same search",
     .toMatchObject({
       q: "charge & refund café",
       sdks: ["Python", ".NET"],
-      integrations: ["Stripe", "Amazon S3"],
+      chips: ["Stripe", "Amazon S3"],
     });
 });
 
@@ -283,7 +422,7 @@ test("Back returns to the previous search's words and filters", async () => {
     .element(sdkChip(opened, "Python"))
     .toHaveAttribute("aria-pressed", "true");
   await expect
-    .element(integrationChip(opened, "Slack"))
+    .element(filterChip(opened, "Slack"))
     .toHaveAttribute("aria-pressed", "false");
 });
 
@@ -305,7 +444,7 @@ test("pressing Enter submits the words, puts them in the address and sorts by re
   expect(currentSearch(opened)).toEqual({
     words: "charge card",
     sdks: ["Python"],
-    integrations: [],
+    chips: [],
   });
   expect(calls.at(-1)).toEqual({
     ...firstCall,
@@ -365,18 +504,18 @@ test("a chip click carries the words in the address, not words typed but not sub
   await expect.poll(() => cardCount(opened)).toBe(1);
 
   await searchBox(opened).fill("refund");
-  await integrationChip(opened, "Stripe").click();
+  await filterChip(opened, "Stripe").click();
 
   await expect.poll(() => calls.length).toBe(2);
   expect(calls[1]).toEqual({
     ...firstCall,
     q: "charge",
-    integrations: ["Stripe"],
+    chips: ["Stripe"],
   });
   expect(currentSearch(opened)).toEqual({
     words: "charge",
     sdks: [],
-    integrations: ["Stripe"],
+    chips: ["Stripe"],
   });
 });
 
@@ -428,19 +567,137 @@ test("several integrations can be picked together", async () => {
   const opened = await openAt("/search");
   await expect.poll(() => cardCount(opened)).toBe(1);
 
-  await integrationChip(opened, "Stripe").click();
-  await integrationChip(opened, "Slack").click();
+  await filterChip(opened, "Stripe").click();
+  await filterChip(opened, "Slack").click();
 
   await expect
-    .element(integrationChip(opened, "Slack"))
+    .element(filterChip(opened, "Slack"))
     .toHaveAttribute("aria-pressed", "true");
   await expect
-    .element(integrationChip(opened, "Stripe"))
+    .element(filterChip(opened, "Stripe"))
     .toHaveAttribute("aria-pressed", "true");
-  expect(currentSearch(opened).integrations).toEqual(["Stripe", "Slack"]);
+  expect(currentSearch(opened).chips).toEqual(["Stripe", "Slack"]);
+  await expect.poll(() => calls.at(-1)?.chips).toEqual(["Stripe", "Slack"]);
+});
+
+// Category headings (DUR-131)
+
+test("the sidebar shows Temporal SDK first, then the five category headings with their help lines and filters", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
   await expect
-    .poll(() => calls.at(-1)?.integrations)
-    .toEqual(["Stripe", "Slack"]);
+    .poll(() => groupsIn(sidebar(opened)).map(({ name }) => name))
+    .toEqual([
+      "Temporal SDK",
+      "AI models",
+      "Data and storage",
+      "Messaging",
+      "Payments",
+      "Workflow patterns",
+    ]);
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
+  for (const { name, help } of categoryGroups) {
+    await expect
+      .element(sidebar(opened).getByRole("group", { name, exact: true }))
+      .toHaveAccessibleDescription(help);
+    await expect.element(sidebar(opened).getByText(help)).toBeVisible();
+  }
+});
+
+test("Workflow patterns lists Approval, Polling, Batching and Saga", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search");
+
+  await expect
+    .element(filterChip(opened, "Saga"))
+    .toHaveAttribute("aria-pressed", "false");
+  expect(
+    sidebar(opened)
+      .getByRole("group", { name: "Workflow patterns" })
+      .getByRole("button")
+      .elements()
+      .map((button) => button.textContent),
+  ).toEqual(["Approval", "Polling", "Batching", "Saga"]);
+});
+
+test("there is no All filter, and no heading can be picked", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
+  await expect
+    .element(sidebar(opened).getByRole("button", { name: "All" }))
+    .not.toBeInTheDocument();
+  for (const { name } of categoryGroups) {
+    await expect
+      .element(sidebar(opened).getByRole("button", { name, exact: true }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(sidebar(opened).getByRole("checkbox", { name, exact: true }))
+      .not.toBeInTheDocument();
+  }
+  expect(sidebar(opened).element().querySelectorAll("[title]")).toHaveLength(0);
+});
+
+test("clicking a filter turns on that filter alone, and clicking it again turns it off", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
+  await filterChip(opened, "Polling").click();
+
+  await expect
+    .element(filterChip(opened, "Polling"))
+    .toHaveAttribute("aria-pressed", "true");
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith("Polling"));
+  expect(pressedIn(opened, "Temporal SDK")[0]).toEqual(["Any", true]);
+  expect(currentSearch(opened)).toEqual({
+    words: "",
+    sdks: [],
+    chips: ["Polling"],
+  });
+  await expect.poll(() => calls.at(-1)?.chips).toEqual(["Polling"]);
+
+  await filterChip(opened, "Polling").click();
+
+  await expect
+    .element(filterChip(opened, "Polling"))
+    .toHaveAttribute("aria-pressed", "false");
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
+  expect(currentSearch(opened)).toEqual({ words: "", sdks: [], chips: [] });
+});
+
+test("filters on under two headings both show as on", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?chip=Slack&chip=Polling");
+
+  await expect
+    .element(filterChip(opened, "Slack"))
+    .toHaveAttribute("aria-pressed", "true");
+  expect(categoryGroupsShown(opened)).toEqual(
+    categoryGroupsWith("Slack", "Polling"),
+  );
+});
+
+test("no Integrates with list, and no word chip, appears on the page", async () => {
+  serveBrowse(testCards(3));
+  const opened = await openAt("/search?chip=Stripe&category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(3);
+
+  await expect
+    .element(opened.screen.getByText(/integrates with/i))
+    .not.toBeInTheDocument();
+  await expect
+    .element(opened.screen.getByRole("group", { name: /integrates with/i }))
+    .not.toBeInTheDocument();
+  const text = opened.screen.container.textContent;
+  expect(text).not.toMatch(/\bchips?\b/i);
+  const labels = [
+    ...opened.screen.container.querySelectorAll("[aria-label]"),
+  ].map((element) => element.getAttribute("aria-label"));
+  expect(labels.join(" ")).not.toMatch(/\bchips?\b/i);
 });
 
 // Clear (n)
@@ -461,7 +718,7 @@ test("Clear (n) counts the filters that are on and clears them all, keeping the 
     searchAddress({
       words: "charge",
       sdks: ["Python", "TypeScript"],
-      integrations: ["Stripe"],
+      chips: ["Stripe"],
     }),
   );
   const clear = sidebar(opened).getByRole("button", { name: "Clear (3)" });
@@ -475,10 +732,66 @@ test("Clear (n) counts the filters that are on and clears them all, keeping the 
   expect(currentSearch(opened)).toEqual({
     words: "charge",
     sdks: [],
-    integrations: [],
+    chips: [],
   });
   await expect.poll(() => calls.at(-1)).toEqual({ ...firstCall, q: "charge" });
   await expect.element(searchBox(opened)).toHaveValue("charge");
+});
+
+test("a category in the address counts as a filter on its own, and Clear (1) removes it", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments");
+
+  await sidebar(opened).getByRole("button", { name: "Clear (1)" }).click();
+
+  await expect
+    .poll(() => currentSearch(opened))
+    .toEqual({ words: "", sdks: [], chips: [] });
+  expect(opened.router.state.location.search).toBe("");
+});
+
+test("with the category Workflow patterns and Saga on, Clear reads Clear (2) and removes both, keeping the words", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt(
+    "/search?q=refund&chip=Saga&category=Workflow+patterns",
+  );
+  const clear = sidebar(opened).getByRole("button", { name: "Clear (2)" });
+  await expect.element(clear).toBeVisible();
+
+  await clear.click();
+
+  await expect
+    .element(sidebar(opened).getByRole("button", { name: /^Clear/ }))
+    .not.toBeInTheDocument();
+  expect(opened.router.state.location.search).toBe("?q=refund");
+  await expect.poll(() => calls.at(-1)).toEqual({ ...firstCall, q: "refund" });
+  await expect.element(searchBox(opened)).toHaveValue("refund");
+});
+
+test("Clear (n) counts each SDK, each filter, the category and the publisher, not the words, and clears them all", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt(
+    searchAddress({
+      words: "charge card",
+      sdks: ["Python", ".NET"],
+      chips: ["Stripe", "Approval"],
+      category: "Payments",
+      publisher: "ddieruf",
+    }),
+  );
+  const clear = sidebar(opened).getByRole("button", { name: "Clear (6)" });
+  await expect.element(clear).toBeVisible();
+
+  await clear.click();
+
+  await expect
+    .poll(() => currentSearch(opened))
+    .toEqual({ words: "charge card", sdks: [], chips: [] });
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
+  expect(pressedIn(opened, "Temporal SDK")[0]).toEqual(["Any", true]);
+  await expect
+    .poll(() => calls.at(-1))
+    .toEqual({ ...firstCall, q: "charge card" });
 });
 
 test("a publisher counts as a filter and Clear (n) clears it", async () => {
@@ -489,7 +802,7 @@ test("a publisher counts as a filter and Clear (n) clears it", async () => {
 
   await expect
     .poll(() => currentSearch(opened))
-    .toEqual({ words: "", sdks: [], integrations: [] });
+    .toEqual({ words: "", sdks: [], chips: [] });
 });
 
 // Count line (criteria 2 and 9) and the grid
@@ -652,13 +965,13 @@ test("changing a filter starts again from the first batch", async () => {
   scrollToEnd(opened);
   await expect.poll(() => cardCount(opened)).toBe(100);
 
-  await integrationChip(opened, "Postgres").click();
+  await filterChip(opened, "Postgres").click();
 
   await expect
     .poll(() => calls.at(-1))
-    .toEqual({ ...firstCall, integrations: ["Postgres"] });
+    .toEqual({ ...firstCall, chips: ["Postgres"] });
   await expect
-    .element(integrationChip(opened, "Postgres"))
+    .element(filterChip(opened, "Postgres"))
     .toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => cardCount(opened)).toBe(50);
 });
@@ -712,34 +1025,223 @@ test("an answer that arrives after a newer change is ignored", async () => {
     .toBeVisible();
 });
 
-// Criterion 6: the empty state
+// The category pill (DUR-133)
 
-test("no matches shows the empty state, and Clear filters clears the words and the filters", async () => {
-  const card = testCard(1);
-  const calls = serveBrowse([card], {
-    matching: (call) =>
-      call.q === null && call.sdks.length === 0 ? [card] : [],
-  });
+/** The pill naming the category that applies, by its accessible name. */
+function categoryPill({ screen }: Opened, category: string) {
+  return screen.getByRole("button", { name: `Remove ${category}` });
+}
+
+/** Any category pill, whatever its category. */
+function anyCategoryPill({ screen }: Opened) {
+  return screen.getByRole("button", { name: /^Remove / });
+}
+
+function countLineOf({ screen }: Opened) {
+  return screen.getByText(/activit(y|ies) · sorted by/);
+}
+
+test("with a category and no chip, the pill reads the category and sits beside the count line", async () => {
+  await page.viewport(1280, 900);
+  serveBrowse(testCards(3));
+  const opened = await openAt("/search?category=payments");
+
+  const pill = categoryPill(opened, "Payments");
+  await expect.element(pill).toBeVisible();
+  await expect.element(pill).toHaveTextContent("Payments ×");
+  await expect
+    .element(countLineOf(opened))
+    .toHaveTextContent("3 activities · sorted by newest");
+
+  const pillBox = pill.element().getBoundingClientRect();
+  const countBox = countLineOf(opened).element().getBoundingClientRect();
+  const firstCard = cards(opened).first().element().getBoundingClientRect();
+  // Same row: the pill starts after the count line ends, and their middles line up.
+  expect(pillBox.left).toBeGreaterThanOrEqual(countBox.right);
+  expect(
+    Math.abs(
+      pillBox.top + pillBox.height / 2 - (countBox.top + countBox.height / 2),
+    ),
+  ).toBeLessThan(4);
+  // Above the results.
+  expect(pillBox.bottom).toBeLessThanOrEqual(firstCard.top);
+});
+
+test("the pill's accessible name says it removes the category", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Messaging");
+
+  await expect
+    .element(categoryPill(opened, "Messaging"))
+    .toHaveAccessibleName("Remove Messaging");
+});
+
+test("the pill sits outside the count line's live region", async () => {
+  serveBrowse(testCards(2));
+  const opened = await openAt("/search?category=Payments");
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+
+  await expect
+    .element(countLineOf(opened))
+    .toHaveAttribute("aria-live", "polite");
+  expect(
+    categoryPill(opened, "Payments").element().closest("[aria-live]"),
+  ).toBeNull();
+});
+
+test("the pill is hidden while a chip is on", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments&chip=Stripe");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+});
+
+test("the pill shows while only an SDK is on", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments&sdk=Python");
+
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+});
+
+test("the pill hides when a chip goes on and returns when the last chip goes off", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments");
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+
+  await filterChip(opened, "Stripe").click();
+  await filterChip(opened, "Slack").click();
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?chip=Stripe&chip=Slack&category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+
+  await filterChip(opened, "Stripe").click();
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?chip=Slack&category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+
+  await filterChip(opened, "Slack").click();
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?category=Payments");
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+});
+
+test("removing the pill takes the category out of the address and keeps the words, SDKs and publisher", async () => {
+  const calls = serveBrowse(testCards(1));
   const opened = await openAt(
     searchAddress({
-      words: "nothing like this",
-      sdks: [".NET"],
-      integrations: ["Slack"],
+      words: "charge",
+      sdks: ["Python"],
+      chips: [],
+      category: "Payments",
+      publisher: "ddieruf",
     }),
   );
+  await expect.element(categoryPill(opened, "Payments")).toBeVisible();
+
+  await categoryPill(opened, "Payments").click();
+
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?q=charge&sdk=Python&publisher=ddieruf");
+  expect(currentSearch(opened)).toEqual({
+    words: "charge",
+    sdks: ["Python"],
+    chips: [],
+    publisher: "ddieruf",
+  });
+  await expect
+    .poll(() => calls.at(-1))
+    .toEqual({
+      ...firstCall,
+      q: "charge",
+      sdks: ["Python"],
+      publisher: "ddieruf",
+    });
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+  await expect.element(searchBox(opened)).toHaveValue("charge");
+});
+
+test("removing the pill on a tile's address shows every activity", async () => {
+  const all = testCards(4);
+  const calls = serveBrowse(all, {
+    matching: (call) => (call.category === null ? all : all.slice(0, 1)),
+  });
+  const opened = await openAt("/search?category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
+  await categoryPill(opened, "Payments").click();
+
+  await expect.poll(() => opened.router.state.location.search).toBe("");
+  await expect.poll(() => cardCount(opened)).toBe(4);
+  expect(calls.at(-1)).toEqual(firstCall);
+});
+
+test("an unknown category in the address shows no pill", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Shipping");
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+});
+
+test("the pill shows beside the count line in the empty state too", async () => {
+  serveBrowse([testCard(1)], { matching: () => [] });
+  const opened = await openAt("/search?category=Workflow+patterns");
 
   await expect
     .element(
       opened.screen.getByRole("heading", { name: "No activities match" }),
     )
     .toBeVisible();
+  await expect.element(categoryPill(opened, "Workflow patterns")).toBeVisible();
+});
+
+// Criterion 6: the empty state, and its Clear filters (DUR-135)
+
+/** The empty state's Clear filters button, in the results column. */
+function emptyStateClear({ screen }: Opened) {
+  return screen.getByRole("button", { name: "Clear filters" });
+}
+
+/** The empty state's heading, text and button, each by what a visitor reads. */
+async function expectEmptyState({ screen }: Opened) {
+  await expect
+    .element(screen.getByRole("heading", { name: "No activities match" }))
+    .toBeVisible();
   await expect
     .element(
-      opened.screen.getByText(
+      screen.getByText(
         "Try removing a filter or describing what you need differently.",
+        { exact: true },
       ),
     )
     .toBeVisible();
+  await expect
+    .element(screen.getByRole("button", { name: "Clear filters" }))
+    .toBeVisible();
+}
+
+test("no matches shows the empty state, and Clear filters clears the filters and keeps the words", async () => {
+  const card = testCard(1);
+  const calls = serveBrowse([card], {
+    matching: (call) =>
+      call.sdks.length === 0 && call.chips.length === 0 ? [card] : [],
+  });
+  const opened = await openAt(
+    searchAddress({
+      words: "nothing like this",
+      sdks: [".NET"],
+      chips: ["Slack"],
+    }),
+  );
+
+  await expectEmptyState(opened);
   await expect
     .element(opened.screen.getByText("0 activities · sorted by relevance"))
     .toBeVisible();
@@ -747,19 +1249,150 @@ test("no matches shows the empty state, and Clear filters clears the words and t
     .element(opened.screen.getByText("That’s every match."))
     .not.toBeInTheDocument();
 
-  await opened.screen.getByRole("button", { name: "Clear filters" }).click();
+  await emptyStateClear(opened).click();
 
   await expect.poll(() => cardCount(opened)).toBe(1);
   expect(currentSearch(opened)).toEqual({
-    words: "",
+    words: "nothing like this",
     sdks: [],
-    integrations: [],
+    chips: [],
   });
-  expect(calls.at(-1)).toEqual(firstCall);
-  await expect.element(searchBox(opened)).toHaveValue("");
+  expect(calls.at(-1)).toEqual({ ...firstCall, q: "nothing like this" });
+  await expect.element(searchBox(opened)).toHaveValue("nothing like this");
   await expect
     .element(sdkChip(opened, "Any"))
     .toHaveAttribute("aria-pressed", "true");
+  await expect
+    .element(filterChip(opened, "Slack"))
+    .toHaveAttribute("aria-pressed", "false");
+});
+
+test("Clear filters removes every SDK, chip, the category and the publisher, and keeps the words", async () => {
+  const calls = serveBrowse([testCard(1)], { matching: () => [] });
+  const opened = await openAt(
+    searchAddress({
+      words: "charge card",
+      sdks: ["Python", ".NET"],
+      chips: ["Stripe", "Approval"],
+      category: "Payments",
+      publisher: "ddieruf",
+    }),
+  );
+  await expectEmptyState(opened);
+
+  await emptyStateClear(opened).click();
+
+  await expect
+    .poll(() => currentSearch(opened))
+    .toEqual({ words: "charge card", sdks: [], chips: [] });
+  expect(opened.router.state.location.search).toBe("?q=charge+card");
+  await expect
+    .poll(() => calls.at(-1))
+    .toEqual({ ...firstCall, q: "charge card" });
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
+  expect(pressedIn(opened, "Temporal SDK")[0]).toEqual(["Any", true]);
+  await expect.element(searchBox(opened)).toHaveValue("charge card");
+});
+
+test("in an empty category, Clear filters removes the category and the pill", async () => {
+  const card = testCard(1);
+  const calls = serveBrowse([card], {
+    matching: (call) => (call.category === null ? [card] : []),
+  });
+  const opened = await openAt("/search?category=Workflow+patterns");
+  await expectEmptyState(opened);
+  await expect.element(categoryPill(opened, "Workflow patterns")).toBeVisible();
+
+  await emptyStateClear(opened).click();
+
+  await expect.poll(() => cardCount(opened)).toBe(1);
+  expect(opened.router.state.location.search).toBe("");
+  expect(calls.at(-1)).toEqual(firstCall);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+});
+
+test("with the pill hidden by a chip, Clear filters still removes the category and the chip", async () => {
+  const calls = serveBrowse([testCard(1)], { matching: () => [] });
+  const opened = await openAt(
+    "/search?q=refund&chip=Saga&category=Workflow+patterns",
+  );
+  await expectEmptyState(opened);
+  await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
+
+  await emptyStateClear(opened).click();
+
+  await expect
+    .poll(() => opened.router.state.location.search)
+    .toBe("?q=refund");
+  await expect.poll(() => calls.at(-1)).toEqual({ ...firstCall, q: "refund" });
+  await expect.element(searchBox(opened)).toHaveValue("refund");
+});
+
+test("when the words alone empty the results, Clear filters keeps them and the page stays empty", async () => {
+  const card = testCard(1);
+  const calls = serveBrowse([card], {
+    matching: (call) => (call.q === null ? [card] : []),
+  });
+  const opened = await openAt(searchAddress({ words: "nothing like this" }));
+  await expectEmptyState(opened);
+  const callsBefore = calls.length;
+
+  await emptyStateClear(opened).click();
+
+  expect(currentSearch(opened)).toEqual({
+    words: "nothing like this",
+    sdks: [],
+    chips: [],
+  });
+  await expect.element(searchBox(opened)).toHaveValue("nothing like this");
+  await expectEmptyState(opened);
+  expect(cardCount(opened)).toBe(0);
+  expect(calls.slice(callsBefore).every((call) => call.q !== null)).toBe(true);
+});
+
+test.each([
+  ["the words", searchAddress({ words: "nothing like this" })],
+  ["an SDK and a chip", searchAddress({ sdks: [".NET"], chips: ["Slack"] })],
+  ["a category", "/search?category=Workflow+patterns"],
+  ["a category and a chip", "/search?chip=Saga&category=Workflow+patterns"],
+  ["a publisher", searchAddress({ publisher: "ddieruf" })],
+])(
+  "the empty state reads the same when %s empty the results",
+  async (_cause, address) => {
+    serveBrowse([testCard(1)], { matching: () => [] });
+    const opened = await openAt(address);
+
+    await expectEmptyState(opened);
+  },
+);
+
+test("the sidebar's Clear and the empty state's Clear filters give the same address", async () => {
+  const address = searchAddress({
+    words: "charge card",
+    sdks: ["Python"],
+    chips: ["Stripe", "Saga"],
+    category: "Payments",
+    publisher: "ddieruf",
+  });
+
+  serveBrowse([testCard(1)], { matching: () => [] });
+  const bySidebar = await openAt(address);
+  await expectEmptyState(bySidebar);
+  await sidebar(bySidebar).getByRole("button", { name: "Clear (5)" }).click();
+  await expect
+    .poll(() => currentSearch(bySidebar))
+    .toEqual({ words: "charge card", sdks: [], chips: [] });
+  const sidebarResult = bySidebar.router.state.location.search;
+  await bySidebar.screen.unmount();
+
+  const byEmptyState = await openAt(address);
+  await expectEmptyState(byEmptyState);
+  await emptyStateClear(byEmptyState).click();
+  await expect
+    .poll(() => byEmptyState.router.state.location.search)
+    .toBe(sidebarResult);
+  expect(sidebarResult).toBe("?q=charge+card");
+  expect(currentSearch(byEmptyState)).toEqual(currentSearch(bySidebar));
 });
 
 test("the empty state's heading, text and Clear filters button take their styles", async () => {
@@ -954,12 +1587,12 @@ test("while the catalog loads, the page says so and asks for no results yet", as
 test("when the catalog cannot be read, the page still renders with Any as the only SDK chip, and no SDK filter", async () => {
   const failed = failCatalog();
   const calls = serveBrowse(testCards(2));
-  const opened = await openAt("/search?sdk=Python&integration=Stripe");
+  const opened = await openAt("/search?sdk=Python&chip=Stripe");
   await failed;
 
   await expect.poll(() => cardCount(opened)).toBe(2);
   expect(pressedIn(opened, "Temporal SDK")).toEqual([["Any", true]]);
-  expect(calls).toEqual([{ ...firstCall, integrations: ["Stripe"] }]);
+  expect(calls).toEqual([{ ...firstCall, chips: ["Stripe"] }]);
 });
 
 test("every result card's SDK tag looks the same, whatever the SDK", async () => {

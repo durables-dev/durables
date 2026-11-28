@@ -3,10 +3,12 @@ import { describe, expect, inject, test } from "vitest";
 import {
   readAllRows,
   seedAccount,
+  seedChips,
   seedDeprecation,
   seedDescription,
   seedVersion,
 } from "./seed";
+import { readChips } from "./migration-testing";
 import { Storage, type NewListing } from "./storage";
 
 const storage = () => new Storage(env.DB, env.DOCUMENTS);
@@ -21,7 +23,6 @@ const newListing = async (
   title: "Post slack message",
   description: "Posts a message to a Slack channel.",
   sdk: "Python",
-  integrations: ["Slack"],
   ...listing,
 });
 
@@ -29,7 +30,6 @@ describe("creating a listing", () => {
   test("reads back by address with every search field", async () => {
     const listing = await newListing({
       sdk: "TypeScript",
-      integrations: ["Stripe", "Postgres"],
     });
     const before = Date.now();
 
@@ -44,7 +44,6 @@ describe("creating a listing", () => {
       title: "Post slack message",
       description: "Posts a message to a Slack channel.",
       sdk: "TypeScript",
-      integrations: ["Stripe", "Postgres"],
       publishedAt: expect.any(Date) as Date,
     });
     // published_at is stored in whole seconds.
@@ -54,7 +53,7 @@ describe("creating a listing", () => {
     expect(found?.publishedAt.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
-  test("stores the description on the first version, not the listing", async () => {
+  test("stores the description on the first version, not the listing, and gives the listing no chips", async () => {
     const listing = await newListing();
 
     await storage().createListing(listing);
@@ -65,7 +64,12 @@ describe("creating a listing", () => {
       return handle === listing.handle && name === listing.name;
     };
     expect(listings?.filter(isListing)).toEqual([
-      { handle: listing.handle, name: listing.name, removedBy: null },
+      {
+        handle: listing.handle,
+        name: listing.name,
+        removedBy: null,
+        chips: [],
+      },
     ]);
     expect(versions?.filter(isListing)).toEqual([
       expect.objectContaining({
@@ -86,12 +90,12 @@ describe("creating a listing", () => {
     });
   });
 
-  test("reads back an empty integrations list as empty", async () => {
-    const listing = await newListing({ integrations: [] });
+  test("gives the listing no chips", async () => {
+    const listing = await newListing();
 
     await storage().createListing(listing);
 
-    expect((await storage().findListing(listing))?.integrations).toEqual([]);
+    expect(await readChips(listing)).toEqual([]);
   });
 
   test("allows the same name under another publisher's handle", async () => {
@@ -131,7 +135,6 @@ describe("creating a listing at an address that exists", () => {
       title: "Another title",
       description: "Another description.",
       sdk: "TypeScript",
-      integrations: [],
     });
 
     expect(result).toEqual({ outcome: "address-taken" });
@@ -192,7 +195,7 @@ describe("finding a listing", () => {
 
 describe("finding a version", () => {
   test("returns the version's own fields, without the description", async () => {
-    const listing = await newListing({ integrations: ["Slack"] });
+    const listing = await newListing();
     await storage().createListing(listing);
 
     expect(await storage().findVersion(listing)).toEqual({
@@ -201,7 +204,6 @@ describe("finding a version", () => {
       version: "1.0.0",
       title: "Post slack message",
       sdk: "Python",
-      integrations: ["Slack"],
       publishedAt: expect.any(Date) as Date,
     });
   });
@@ -261,7 +263,6 @@ const addVersion = (
     version,
     title: listing.title,
     sdk: listing.sdk,
-    integrations: [],
     ...fields,
   });
 
@@ -299,6 +300,7 @@ describe("finding a listing's versions", () => {
       handle: listing.handle,
       name: listing.name,
       removedBy: null,
+      chips: [],
       versions: [
         {
           version: "1.10.0",
@@ -342,6 +344,7 @@ describe("finding a listing's versions", () => {
       handle: listing.handle,
       name: listing.name,
       removedBy: null,
+      chips: [],
       versions: [
         {
           version: "1.0.0",
@@ -353,6 +356,21 @@ describe("finding a listing's versions", () => {
         },
       ],
     });
+  });
+
+  test("returns the listing's chips in stored order, leaving out names the shared list does not know", async () => {
+    const listing = await newListing();
+    await storage().createListing(listing);
+    await seedChips(env.DB, {
+      ...listing,
+      chips: ["Slack", "Blockchain", "polling", "Amazon S3", "Slack"],
+    });
+
+    expect((await storage().findListingVersions(listing))?.chips).toEqual([
+      "Slack",
+      "Polling",
+      "Amazon S3",
+    ]);
   });
 
   test("returns a version's new description once it changes", async () => {
@@ -491,7 +509,6 @@ describe("the listing and version tables", () => {
       version: "1.1.0",
       title: "Post slack message v1.1",
       sdk: "Python",
-      integrations: [],
       description: "Posts a message and returns its timestamp.",
     });
 
@@ -506,7 +523,6 @@ describe("the listing and version tables", () => {
       version: "1.1.0",
       title: "Post slack message v1.1",
       description: "Posts a message and returns its timestamp.",
-      integrations: [],
     });
   });
 
@@ -516,9 +532,9 @@ describe("the listing and version tables", () => {
 
     await expect(
       env.DB.prepare(
-        "insert into versions (handle, name, version, title, sdk, integrations) values (?, ?, ?, ?, ?, ?)",
+        "insert into versions (handle, name, version, title, sdk) values (?, ?, ?, ?, ?)",
       )
-        .bind(listing.handle, listing.name, "9.0.0", "Title", "Kotlin", "[]")
+        .bind(listing.handle, listing.name, "9.0.0", "Title", "Kotlin")
         .run(),
     ).rejects.toThrow(/CHECK constraint failed/);
   });
@@ -533,7 +549,6 @@ describe("the listing and version tables", () => {
         version: "1.0.0",
         title: "Title",
         sdk: "Python",
-        integrations: [],
       }),
     ).rejects.toThrow();
   });
@@ -563,14 +578,18 @@ describe("the migrations", () => {
         ).all<{ name: string }>()
       ).results.map(({ name }) => name);
 
-    expect(await columns("listings")).toEqual(["handle", "name", "removed_by"]);
+    expect(await columns("listings")).toEqual([
+      "handle",
+      "name",
+      "removed_by",
+      "chips",
+    ]);
     expect(await columns("versions")).toEqual([
       "handle",
       "name",
       "version",
       "title",
       "sdk",
-      "integrations",
       "published_at",
       "description",
       "what_changed",

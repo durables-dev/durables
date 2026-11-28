@@ -1,3 +1,4 @@
+import { chipNames, findChip } from "@durables/schemas";
 import {
   and,
   count,
@@ -93,21 +94,20 @@ export interface NewListing extends Address {
   /** The version's one-line description. It belongs to the version and can change later. */
   description: string;
   sdk: Sdk;
-  /** The integrations implied by the code's imports. Empty when there are none. */
-  integrations: readonly string[];
 }
 
-/** A listing at one version's address, with every field search reads. */
+/** A listing at one version's address, with that version's fields and current description. */
 export interface Listing extends NewListing {
-  integrations: string[];
   publishedAt: Date;
 }
 
-/** A published version's own fields. None of them can change after publishing. */
+/**
+ * A published version's own fields. None of them can change after publishing. Its detected
+ * integrations are in its version document.
+ */
 export interface Version extends Address {
   title: string;
   sdk: Sdk;
-  integrations: string[];
   publishedAt: Date;
 }
 
@@ -145,11 +145,16 @@ export type ListingKey = Omit<Address, "version">;
 
 /**
  * A listing and every one of its versions, from the highest version number down, with who took
- * it out of search.
+ * it out of search and its chips.
  */
 export interface ListingVersions extends ListingKey {
   /** Who took the listing out of search. Null while it is listed. */
   removedBy: RemovalSource | null;
+  /**
+   * The listing's chips in stored order, keeping only the names on the shared list, as that
+   * list writes them. Empty when it has none.
+   */
+  chips: string[];
   versions: ListingVersion[];
 }
 
@@ -202,14 +207,19 @@ export interface BrowsePosition {
 /**
  * What browse narrows by and where it starts. A listing removed from search never matches,
  * whoever removed it (ADR 0015). An empty or absent list does not filter. Several SDKs match
- * any one of them, as do several integrations. The publisher matches the handle. Every word
- * must appear in the title, description, address, SDK or one of the integrations.
+ * any one of them, as do several integrations, which match the listing's chips. The publisher
+ * matches the handle. Every word must appear in the title, description, address, SDK or one of
+ * the listing's chips.
  */
 export interface BrowseFilter {
   /** The search words. Empty or absent means no words. */
   words?: readonly string[] | undefined;
   sdks?: readonly Sdk[] | undefined;
-  integrations?: readonly string[] | undefined;
+  /**
+   * The chip groups a listing must match: any one chip of each group. Each name is a chip on
+   * the shared list. Empty or absent means no chip filter.
+   */
+  chipGroups?: readonly (readonly string[])[] | undefined;
   publisher?: string | undefined;
   /** Start after this card. Absent for the first batch. */
   after?: BrowsePosition | undefined;
@@ -218,11 +228,14 @@ export interface BrowseFilter {
 }
 
 /**
- * A browse result: a listing and its relevance score, at its highest version. Each word in that
- * version's title scores 3 and each word in that version's description scores 1. The score is 0
- * when there are no words.
+ * A browse result: a listing and its relevance score, at its highest version. Its integrations
+ * are the listing's chips, not the version's detected integrations, keeping only the names on
+ * the shared list, as that list writes them. Each word in that version's title scores 3 and
+ * each word in that version's description scores 1. The score is 0 when there are no words.
  */
 export interface BrowseListing extends Listing {
+  /** The listing's chips. */
+  integrations: string[];
   score: number;
 }
 
@@ -307,7 +320,7 @@ const createdListing = (
   if (created === undefined) {
     throw new Error("The version insert returned no row.");
   }
-  return { ...listing, integrations: [...listing.integrations], ...created };
+  return { ...listing, ...created };
 };
 
 /**
@@ -320,6 +333,27 @@ const highestVersionFirst = () => {
   const afterMinor = sql`substr(${afterMajor}, instr(${afterMajor}, '.') + 1)`;
   return sql`cast(${versions.version} as integer) desc, cast(${afterMajor} as integer) desc, cast(${afterMinor} as integer) desc, ${versions.version} desc`;
 };
+
+/**
+ * Whether the chip read as `chip.value` from json_each is one of `names`, ignoring case and
+ * surrounding whitespace, as the shared list's lookups do. The names go to D1 as one JSON
+ * parameter. SQLite's lower() folds ASCII letters only, which every chip name is written in.
+ */
+const isListedChip = (names: readonly string[]): SQL =>
+  sql`lower(trim(chip.value)) in (select value from json_each(${JSON.stringify(names.map((name) => name.toLowerCase()))}))`;
+
+/**
+ * A listing's stored chips, keeping only those on the shared list, each written as the list
+ * writes it and once.
+ */
+const listedChips = (stored: readonly string[]): string[] => [
+  ...new Set(
+    stored.flatMap((name) => {
+      const chip = findChip(name);
+      return chip === undefined ? [] : [chip];
+    }),
+  ),
+];
 
 /**
  * The storage interface (ADR 0005). It is the only code that sees D1, R2 and Drizzle.
@@ -681,7 +715,6 @@ export class Storage {
     { basedOn, whatChanged, deprecateBase }: NextVersion,
   ): Promise<CreatePublicationResult> {
     const { handle, name, version, title, description, sdk } = listing;
-    const integrations = [...listing.integrations];
     const insertVersion = this.#db
       .insert(versions)
       .values({
@@ -690,7 +723,6 @@ export class Storage {
         version,
         title,
         sdk,
-        integrations,
         description,
         whatChanged,
         basedOn,
@@ -770,7 +802,6 @@ export class Storage {
   /** The inserts that create a listing and its first version, which holds the description. */
   #listingInserts(listing: NewListing) {
     const { handle, name, version, title, description, sdk } = listing;
-    const integrations = [...listing.integrations];
     return [
       this.#db.insert(listings).values({ handle, name }),
       this.#db
@@ -781,7 +812,6 @@ export class Storage {
           version,
           title,
           sdk,
-          integrations,
           description,
         })
         .returning({ publishedAt: versions.publishedAt }),
@@ -805,7 +835,6 @@ export class Storage {
         title: versions.title,
         description: versions.description,
         sdk: versions.sdk,
-        integrations: versions.integrations,
         publishedAt: versions.publishedAt,
       })
       .from(versions)
@@ -828,15 +857,15 @@ export class Storage {
 
   /**
    * One batch of browse results and the count of every match. Each listing appears once, as its
-   * highest version number, and the filters and words apply to that version. Cards are highest
-   * score first, then newest first by that version's published date, then by handle and name, so
-   * every card has one place in the order and a batch can start after any of them. With no
-   * words every score is 0, so cards are newest first.
+   * highest version number, and the filters and words apply to that version and to the listing's
+   * chips. Cards are highest score first, then newest first by that version's published date,
+   * then by handle and name, so every card has one place in the order and a batch can start
+   * after any of them. With no words every score is 0, so cards are newest first.
    */
   async browseListings({
     words = [],
     sdks = [],
-    integrations = [],
+    chipGroups = [],
     publisher,
     after,
     limit,
@@ -863,7 +892,8 @@ export class Storage {
           title: versions.title,
           description: versions.description,
           sdk: versions.sdk,
-          integrations: versions.integrations,
+          // A listing's chips belong to the listing and apply to every version (DUR-120).
+          integrations: listings.chips,
           publishedAt: versions.publishedAt,
           score: score.as("score"),
           rank: sql<number>`row_number() over (partition by ${versions.handle}, ${versions.name} order by ${highestVersionFirst()})`.as(
@@ -886,9 +916,10 @@ export class Storage {
     if (words.length > 0) {
       // Every word appears in at least one field. The address is matched as the site shows it.
       const address = sql`${ranked.handle} || '/' || ${ranked.name} || '@' || ${ranked.version}`;
-      const inIntegrations = sql`exists (select 1 from json_each(${ranked.integrations}) as integration where ${like(sql.raw("integration.value"), word)})`;
+      // Only a chip on the shared list is matched; category names never are.
+      const inChips = sql`exists (select 1 from json_each(${ranked.integrations}) as chip where ${isListedChip(chipNames)} and ${like(sql.raw("chip.value"), word)})`;
       filters.push(
-        sql`not exists (select 1 from ${eachWord} where not (${like(ranked.title, word)} or ${like(ranked.description, word)} or ${like(address, word)} or ${like(ranked.sdk, word)} or ${inIntegrations}))`,
+        sql`not exists (select 1 from ${eachWord} where not (${like(ranked.title, word)} or ${like(ranked.description, word)} or ${like(address, word)} or ${like(ranked.sdk, word)} or ${inChips}))`,
       );
     }
     if (sdks.length > 0) {
@@ -897,10 +928,11 @@ export class Storage {
         sql`${ranked.sdk} in (select value from json_each(${JSON.stringify(sdks)}))`,
       );
     }
-    if (integrations.length > 0) {
-      // Integrations are stored as a JSON array in text, so each listing's are read with json_each.
+    for (const group of chipGroups) {
+      // A listing's chips are stored as a JSON array in text, so they are read with json_each.
+      // Any chip of a group matches; every group must match.
       filters.push(
-        sql`exists (select 1 from json_each(${ranked.integrations}) as integration where integration.value in (select value from json_each(${JSON.stringify(integrations)})))`,
+        sql`exists (select 1 from json_each(${ranked.integrations}) as chip where ${isListedChip(group)})`,
       );
     }
     if (publisher !== undefined) {
@@ -961,7 +993,13 @@ export class Storage {
         .from(ranked)
         .where(matches),
     ]);
-    return { listings: rows, count: total?.count ?? 0 };
+    return {
+      listings: rows.map((row) => ({
+        ...row,
+        integrations: listedChips(row.integrations),
+      })),
+      count: total?.count ?? 0,
+    };
   }
 
   /**
@@ -1106,7 +1144,6 @@ export class Storage {
         version: versions.version,
         title: versions.title,
         sdk: versions.sdk,
-        integrations: versions.integrations,
         publishedAt: versions.publishedAt,
       })
       .from(versions)
@@ -1123,7 +1160,8 @@ export class Storage {
   /**
    * The listing at a handle and name with every one of its versions, from the highest version
    * number down, or undefined when there is no listing. The listing carries who removed it from
-   * search, and each version carries its current description and its deprecation. A removed
+   * search and its chips, and each version carries its current description and its deprecation.
+   * A chip name the shared list does not know is left out. A removed
    * listing is found like any other. Handles and names match exactly, so a wrong-case one
    * finds nothing.
    */
@@ -1137,6 +1175,7 @@ export class Storage {
           handle: listings.handle,
           name: listings.name,
           removedBy: listings.removedBy,
+          chips: listings.chips,
         })
         .from(listings)
         .where(and(eq(listings.handle, handle), eq(listings.name, name))),
@@ -1167,6 +1206,7 @@ export class Storage {
     }
     return {
       ...listing,
+      chips: listedChips(listing.chips),
       versions: rows.map(
         ({ deprecationReason, replacement, ...version }): ListingVersion => ({
           ...version,

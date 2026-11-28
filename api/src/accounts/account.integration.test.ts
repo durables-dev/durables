@@ -51,7 +51,6 @@ const publish = async (handle: string, name: string): Promise<Address> => {
     title: document.title,
     description: document.description,
     sdk: document.facts.sdk,
-    integrations: document.integrations,
   });
   return address;
 };

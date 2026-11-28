@@ -206,7 +206,13 @@ test.describe("as an anonymous visitor", () => {
   test(
     "an activity consumer opens a result's activity page and follows its integration and publisher links back into results",
     { tag: "@journey" },
-    async ({ page, expectAccessible, publishListing, uniqueWord }) => {
+    async ({
+      page,
+      expectAccessible,
+      publishListing,
+      setChips,
+      uniqueWord,
+    }) => {
       const title = `Upload report ${uniqueWord()}`;
       const listing = await publishListing({
         code: sample("typescript"),
@@ -214,6 +220,8 @@ test.describe("as an anonymous visitor", () => {
         name: "report-upload",
         description: "Uploads a CSV report to S3 and returns where it is.",
       });
+      // Publishing gives a listing no chips; an operator's migration gives it Amazon S3.
+      await setChips(listing, ["Amazon S3"]);
       const main = page.getByRole("main");
       const result = main.getByRole("article", { name: title, exact: true });
       const about = page.getByRole("region", { name: "About" });
@@ -258,12 +266,12 @@ test.describe("as an anonymous visitor", () => {
           .getByRole("link", { name: "Amazon S3", exact: true })
           .click();
 
-        await expect(page).toHaveURL("/search?integration=Amazon+S3");
+        await expect(page).toHaveURL("/search?chip=Amazon+S3");
         await expect(
           page
             .getByRole("complementary", { name: "Filters" })
-            .getByRole("group", { name: "Integrates with" })
-            .getByRole("button", { name: "Amazon S3" }),
+            .getByRole("group", { name: "Data and storage", exact: true })
+            .getByRole("button", { name: "Amazon S3", exact: true }),
         ).toHaveAttribute("aria-pressed", "true");
         await expect(main.getByText(/ · sorted by /)).toHaveText(
           /^[\d,]+ activit(y|ies) · sorted by newest$/,
@@ -773,6 +781,7 @@ for (const journey of sdkJourneys) {
       page,
       expectAccessible,
       signIn,
+      setChips,
       uniqueHandle,
       uniqueWord,
       paste,
@@ -877,6 +886,14 @@ for (const journey of sdkJourneys) {
         ).toContainText(`${address} is live.`);
       });
 
+      if (journey.integration !== undefined) {
+        const { integration } = journey;
+        await test.step(`a release gives the listing its ${integration} chip`, async () => {
+          // Publishing gives a listing no chips; an operator's migration gives them.
+          await setChips({ handle, name: journey.name }, [integration]);
+        });
+      }
+
       await test.step(`choose the ${journey.sdk} chip in search and see the activity listed`, async () => {
         await page.goto(`/search?q=${word}`);
         await expect(resultCard).toBeVisible();
@@ -900,7 +917,14 @@ for (const journey of sdkJourneys) {
             hasNot: page.getByText(journey.sdk, { exact: true }),
           }),
         ).toHaveCount(0);
-        if (journey.integration !== undefined) {
+        if (journey.integration === undefined) {
+          await expect(
+            resultCard.getByText("Filters", { exact: true }),
+          ).toHaveCount(0);
+        } else {
+          await expect(
+            resultCard.getByText("Filters", { exact: true }),
+          ).toBeVisible();
           await expect(
             resultCard.getByRole("link", {
               name: journey.integration,
@@ -925,7 +949,7 @@ for (const journey of sdkJourneys) {
         const about = page.getByRole("region", { name: "About" });
         const terms = ["SDK", "Dependencies", "Published", "License"];
         if (journey.integration !== undefined) {
-          terms.splice(1, 0, "Integrates with");
+          terms.splice(1, 0, "Filters");
         }
         await expect(about.getByRole("term")).toHaveText(terms);
         await expect(about.getByRole("definition").first()).toHaveText(
@@ -2652,6 +2676,319 @@ test.describe("a consumer viewing a deprecated and removed activity", () => {
         await expect(removedNotice(page)).toHaveText(removedNoticeText);
         await expect(deprecatedNotice(page)).toHaveCount(0);
         await expectNoPublisherControls();
+        await expectAccessible();
+      });
+    },
+  );
+});
+
+test.describe("browsing by category", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test(
+    "an activity consumer chooses a home tile, narrows its results with filters, and follows an activity's filter back into results",
+    { tag: "@journey" },
+    async ({
+      page,
+      expectAccessible,
+      publishListings,
+      setChips,
+      uniqueWord,
+    }) => {
+      const word = uniqueWord();
+      const python = sample("python");
+      // Six activities by one publisher, each titled with the test's word so a search for it
+      // finds these and nothing else. Two are under Payments, and one has no chips at all.
+      const refund = {
+        code: sample("dotnet"),
+        title: `Refund payment ${word}`,
+        name: "payment-refund",
+        description: "Refunds a Stripe payment and returns the refund.",
+      };
+      const charge = {
+        code: python,
+        title: `Charge and notify ${word}`,
+        name: "charge-notify",
+        description: "Takes a Stripe payment and posts the receipt to Slack.",
+      };
+      const notify = {
+        code: python,
+        title: `Poll and notify ${word}`,
+        name: "poll-notify",
+        description: "Polls a job until it ends and posts the result to Slack.",
+      };
+      const approval = {
+        code: sample("python-no-configuration"),
+        title: `Wait for approval ${word}`,
+        name: "wait-approval",
+        description: "Waits until a person approves the request.",
+      };
+      const upload = {
+        code: sample("typescript"),
+        title: `Upload report ${word}`,
+        name: "report-upload",
+        description: "Uploads a CSV report to S3 and returns where it is.",
+      };
+      const plain = {
+        code: python,
+        title: `Format date ${word}`,
+        name: "format-date",
+        description: "Formats a date for a person to read.",
+      };
+      const published = await publishListings([
+        refund,
+        charge,
+        notify,
+        approval,
+        upload,
+        plain,
+      ]);
+      const [refundListing, chargeListing, notifyListing, approvalListing] =
+        published;
+      const uploadListing = published[4];
+      if (
+        refundListing === undefined ||
+        chargeListing === undefined ||
+        notifyListing === undefined ||
+        approvalListing === undefined ||
+        uploadListing === undefined
+      ) {
+        throw new Error("Six activities were not published.");
+      }
+      // Publishing gives a listing no chips; an operator's migration gives them. The last
+      // listing keeps none.
+      await setChips(refundListing, ["Stripe"]);
+      await setChips(chargeListing, ["Slack", "Stripe"]);
+      await setChips(notifyListing, ["Slack", "Polling"]);
+      await setChips(approvalListing, ["Approval"]);
+      await setChips(uploadListing, ["Amazon S3"]);
+
+      const main = page.getByRole("main");
+      const searchBox = page.getByRole("searchbox", {
+        name: "Search activities",
+      });
+      const sidebar = page.getByRole("complementary", { name: "Filters" });
+      const cards = main.getByRole("article");
+      const countLine = main.getByText(/ · sorted by /);
+      const pill = main.getByRole("button", { name: "Remove Payments" });
+      const card = (title: string) =>
+        main.getByRole("article", { name: title, exact: true });
+      const chip = (group: string, name: string) =>
+        sidebar
+          .getByRole("group", { name: group, exact: true })
+          .getByRole("button", { name, exact: true });
+      const clear = (count: number) =>
+        sidebar.getByRole("button", { name: `Clear (${count})` });
+
+      /** The cards show exactly these activities, in any order. */
+      async function expectResults(...titles: string[]) {
+        await expect(countLine).toHaveText(
+          `${titles.length} ${titles.length === 1 ? "activity" : "activities"} · sorted by relevance`,
+        );
+        await expect(cards).toHaveCount(titles.length);
+        for (const title of titles) {
+          await expect(card(title)).toBeVisible();
+        }
+      }
+
+      /** Scrolls to the last card, as a consumer does to load the next batch, until the target shows. */
+      async function scrollUntil(target: Locator) {
+        await expect(async () => {
+          await cards.last().scrollIntoViewIfNeeded();
+          await expect(target).toBeVisible({ timeout: 1_000 });
+        }).toPass();
+      }
+
+      const categoryNames = [
+        "AI models",
+        "Data and storage",
+        "Messaging",
+        "Payments",
+        "Workflow patterns",
+      ];
+
+      await test.step("the home page shows five category tiles, and Payments opens its results", async () => {
+        await page.goto("/");
+        const tiles = page.getByRole("region", { name: "Browse by category" });
+        await expect(tiles.getByRole("link")).toHaveText(categoryNames);
+        await expectAccessible();
+
+        await tiles
+          .getByRole("link", { name: "Payments", exact: true })
+          .click();
+
+        await expect(page).toHaveURL("/search?category=Payments");
+      });
+
+      await test.step("the results show listings with a Payments chip, no chip is on, and the pill shows", async () => {
+        await expect(
+          main.getByRole("heading", { level: 1, name: "Search" }),
+        ).toBeVisible();
+        await expect(countLine).toHaveText(
+          /^[\d,]+ activit(y|ies) · sorted by newest$/,
+        );
+        // Newest first, and published moments ago.
+        await scrollUntil(card(charge.title));
+        await scrollUntil(card(refund.title));
+        // Stripe is the only chip under Payments, so every card shown carries it.
+        await expect(
+          cards.filter({
+            hasNot: page.getByRole("link", { name: "Stripe", exact: true }),
+          }),
+        ).toHaveCount(0);
+        // The headings with their chips, and only Any pressed among them.
+        for (const name of categoryNames) {
+          await expect(
+            sidebar
+              .getByRole("group", { name, exact: true })
+              .getByRole("button")
+              .first(),
+          ).toBeVisible();
+        }
+        await expect(
+          sidebar.getByRole("group", { name: "Integrates with" }),
+        ).toHaveCount(0);
+        await expect(sidebar.getByRole("button", { pressed: true })).toHaveText(
+          ["Any"],
+        );
+        await expect(pill).toHaveText("Payments ×");
+        await expect(clear(1)).toBeVisible();
+        await expectAccessible();
+      });
+
+      await test.step("search words narrow the category to this test's two Payments listings", async () => {
+        await searchBox.fill(word);
+        await searchBox.press("Enter");
+
+        await expect(page).toHaveURL(`/search?q=${word}&category=Payments`);
+        await expectResults(refund.title, charge.title);
+        await expect(pill).toBeVisible();
+      });
+
+      await test.step("turning a chip on hides the pill and replaces the category, and turning it off brings the pill back", async () => {
+        await chip("Workflow patterns", "Polling").click();
+
+        await expect(page).toHaveURL(
+          `/search?q=${word}&chip=Polling&category=Payments`,
+        );
+        await expectResults(notify.title);
+        await expect(pill).toHaveCount(0);
+        await expect(clear(2)).toBeVisible();
+        await expectAccessible();
+
+        await chip("Workflow patterns", "Polling").click();
+
+        await expect(page).toHaveURL(`/search?q=${word}&category=Payments`);
+        await expectResults(refund.title, charge.title);
+        await expect(pill).toHaveText("Payments ×");
+        await expect(clear(1)).toBeVisible();
+      });
+
+      await test.step("chips under one heading widen the results, and a chip under a second heading narrows them", async () => {
+        await chip("Workflow patterns", "Polling").click();
+        await expectResults(notify.title);
+
+        await chip("Workflow patterns", "Approval").click();
+
+        await expectResults(notify.title, approval.title);
+
+        await chip("Messaging", "Slack").click();
+
+        await expect(page).toHaveURL(
+          `/search?q=${word}&chip=Polling&chip=Approval&chip=Slack&category=Payments`,
+        );
+        await expectResults(notify.title);
+        await expect(pill).toHaveCount(0);
+        await expect(clear(4)).toBeVisible();
+      });
+
+      await test.step("Clear removes the chips and the category and keeps the search words", async () => {
+        await clear(4).click();
+
+        await expect(page).toHaveURL(`/search?q=${word}`);
+        await expect(searchBox).toHaveValue(word);
+        await expect(sidebar.getByRole("button", { pressed: true })).toHaveText(
+          ["Any"],
+        );
+        await expect(pill).toHaveCount(0);
+        await expect(
+          sidebar.getByRole("button", { name: /^Clear/ }),
+        ).toHaveCount(0);
+        // Every listing shows again, the one with no chips included.
+        await expectResults(
+          refund.title,
+          charge.title,
+          notify.title,
+          approval.title,
+          upload.title,
+          plain.title,
+        );
+        await expectAccessible();
+      });
+
+      await test.step("a card's Filters line opens results for that chip and keeps the words and the SDK", async () => {
+        await chip("Temporal SDK", "Python").click();
+        await expectResults(
+          charge.title,
+          notify.title,
+          approval.title,
+          plain.title,
+        );
+
+        await card(charge.title)
+          .getByRole("link", { name: "Slack", exact: true })
+          .click();
+
+        await expect(page).toHaveURL(`/search?q=${word}&sdk=Python&chip=Slack`);
+        await expect(searchBox).toHaveValue(word);
+        await expect(chip("Temporal SDK", "Python")).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expect(chip("Messaging", "Slack")).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expectResults(charge.title, notify.title);
+        await expectAccessible();
+      });
+
+      await test.step("an activity page shows its Filters row", async () => {
+        await card(notify.title).getByRole("link", { name: "View" }).click();
+
+        await expect(page).toHaveURL(`/${notifyListing.address}`);
+        await expect(
+          main.getByRole("heading", { level: 1, name: notify.title }),
+        ).toBeVisible();
+        const about = page.getByRole("region", { name: "About" });
+        await expect(about.getByRole("term")).toContainText(["Filters"]);
+        await expect(
+          about.getByRole("link", { name: "Slack", exact: true }),
+        ).toBeVisible();
+        await expect(
+          about.getByRole("link", { name: "Polling", exact: true }),
+        ).toBeVisible();
+        await expectAccessible();
+
+        await about.getByRole("link", { name: "Polling", exact: true }).click();
+      });
+
+      await test.step("a chip in the Filters row opens results for that chip alone", async () => {
+        await expect(page).toHaveURL("/search?chip=Polling");
+        await expect(searchBox).toHaveValue("");
+        await expect(sidebar.getByRole("button", { pressed: true })).toHaveText(
+          ["Any", "Polling"],
+        );
+        await expect(pill).toHaveCount(0);
+        await expect(countLine).toHaveText(
+          /^[\d,]+ activit(y|ies) · sorted by newest$/,
+        );
+        await scrollUntil(card(notify.title));
+        await expect(
+          cards.filter({
+            hasNot: page.getByRole("link", { name: "Polling", exact: true }),
+          }),
+        ).toHaveCount(0);
         await expectAccessible();
       });
     },

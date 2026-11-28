@@ -11,9 +11,15 @@ const firstBatch: string | null = null;
  * its own query, so changing the words or filters starts again at the first batch, and an
  * answer for an older search never lands in the newer one.
  */
-export function browseQuery({ words, sdks, integrations, publisher }: Search) {
+export function browseQuery({
+  words,
+  sdks,
+  chips,
+  category,
+  publisher,
+}: Search) {
   return infiniteQueryOptions({
-    queryKey: ["activities", { words, sdks, integrations, publisher }],
+    queryKey: ["activities", { words, sdks, chips, category, publisher }],
     queryFn: ({ pageParam, signal }) =>
       parseResponse(
         api.api.activities.$get(
@@ -21,7 +27,8 @@ export function browseQuery({ words, sdks, integrations, publisher }: Search) {
             query: {
               q: words === "" ? undefined : words,
               sdk: [...sdks],
-              integration: [...integrations],
+              chip: [...chips],
+              category,
               publisher,
               cursor: pageParam ?? undefined,
             },

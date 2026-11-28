@@ -424,6 +424,7 @@ describe("the Published screen", () => {
         HttpResponse.json({
           handle: "ddieruf",
           name: "post-slack-message",
+          chips: [],
           versions: [
             {
               version: "1.0.0",

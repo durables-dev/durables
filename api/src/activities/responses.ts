@@ -3,8 +3,8 @@ import { sdkRegistry } from "../sdks/registry";
 import type {
   Snippet,
   Address,
+  BrowseListing,
   Deprecation,
-  Listing,
   ListingVersion,
   ListingVersions,
   RemovalSource,
@@ -71,6 +71,12 @@ export interface ListingResponse {
   name: string;
   /** Who took the listing out of search. Null while it is listed. */
   removedBy: ShownRemoval | null;
+  /**
+   * The listing's chips, patterns included, in stored order. Only names on the shared list are
+   * answered. Empty when it has none. They can change at a release, so the version response
+   * never carries them (ADR 0006).
+   */
+  chips: string[];
   /** Every version, newest first, so the first is the latest. */
   versions: ListingVersionResponse[];
 }
@@ -188,15 +194,17 @@ export const listingResponse = ({
   handle,
   name,
   removedBy,
+  chips,
   versions,
 }: ListingVersions): ListingResponse => ({
   handle,
   name,
   removedBy: shownRemoval(removedBy),
+  chips,
   versions: versions.map(listingVersionResponse),
 });
 
-/** A browse card, from the listing at its highest version. */
+/** A browse card, from the listing at its highest version, with the listing's chips. */
 export const activityCard = ({
   handle,
   name,
@@ -206,7 +214,7 @@ export const activityCard = ({
   description,
   integrations,
   publishedAt,
-}: Listing): ActivityCard => ({
+}: Omit<BrowseListing, "score">): ActivityCard => ({
   address: formatAddress({ handle, name, version }),
   handle,
   name,

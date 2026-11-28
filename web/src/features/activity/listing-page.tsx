@@ -163,7 +163,7 @@ export function ListingPage({ address }: ListingPageProps) {
         sidebar={
           <ListingSidebar
             sdk={version.data.sdk}
-            integrations={version.data.integrations}
+            chips={listing.data.chips}
             dependencies={version.data.facts.dependencies.map(
               ({ name }) => name,
             )}

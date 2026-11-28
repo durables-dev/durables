@@ -2,6 +2,18 @@
 // One file per resource, re-exported here. Nothing in this package may import
 // from api, web, the Workers runtime or the DOM.
 export {
+  categories,
+  categoryOfChip,
+  chipNames,
+  findCategory,
+  findChip,
+  patterns,
+  type Category,
+  type CategoryName,
+  type Chip,
+  type Pattern,
+} from "./category";
+export {
   checkHandleRule,
   handleAvailableMessage,
   handleEmptyMessage,

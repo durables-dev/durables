@@ -76,7 +76,6 @@ const seedActivity = async (
       version,
       title: options.title ?? "Charge card",
       sdk: "Python",
-      integrations: ["Stripe"],
       publishedAt,
     });
   }

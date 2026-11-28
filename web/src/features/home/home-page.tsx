@@ -6,11 +6,12 @@ import { activeFilterCount, everything } from "@/lib/search-filters";
 import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { BasicsLinks } from "./basics-links";
+import { CategoryTiles } from "./category-tiles";
 import styles from "./home-page.module.css";
 
 // The home page (screens 1 and 2): the headline, the two short explanations, the search box with its Filters panel, the
-// Search button, and Explore All. Search opens the results with the words typed and the chips
-// picked. Explore All opens every activity.
+// Search button, the category tiles, and Explore All. Search opens the results with the words
+// typed and the chips picked. A tile opens its category. Explore All opens every activity.
 export function HomePage() {
   const navigate = useNavigate();
   const panelId = useId();
@@ -83,14 +84,19 @@ export function HomePage() {
           </div>
         ) : null}
         <div className={styles["actions"]}>
-          <Link to={searchAddress()} className={styles["explore"]}>
-            Explore All
-          </Link>
           <button type="submit" className={styles["submit"]}>
             Search
           </button>
         </div>
       </form>
+      <div className={styles["browse"]}>
+        <CategoryTiles />
+        <div className={styles["exploreRow"]}>
+          <Link to={searchAddress()} className={styles["explore"]}>
+            Explore All
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

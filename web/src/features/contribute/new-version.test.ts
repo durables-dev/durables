@@ -152,6 +152,7 @@ describe("baseVersion", () => {
     handle: "ddieruf",
     name: "charge-card",
     removedBy: null,
+    chips: [],
     versions: [
       {
         version: "2.0.0",
