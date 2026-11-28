@@ -143,9 +143,47 @@ describe("activeFilterCount", () => {
   test("a publisher counts as one filter", () => {
     expect(activeFilterCount({ ...everything, publisher: "ddieruf" })).toBe(1);
   });
+
+  test("a category counts as one filter", () => {
+    expect(activeFilterCount({ ...everything, category: "Payments" })).toBe(1);
+  });
+
+  test("the category still counts while a chip stops it applying: Workflow patterns and Saga count 2", () => {
+    expect(
+      activeFilterCount({
+        ...everything,
+        chips: ["Saga"],
+        category: "Workflow patterns",
+      }),
+    ).toBe(2);
+  });
+
+  test("each SDK, each chip, the category and the publisher all count, and words do not", () => {
+    expect(
+      activeFilterCount({
+        words: "charge card",
+        sdks: ["Python", ".NET"],
+        chips: ["Stripe", "Approval"],
+        category: "Payments",
+        publisher: "ddieruf",
+      }),
+    ).toBe(6);
+  });
 });
 
 describe("withoutFilters", () => {
+  test("with Workflow patterns and Saga on, clears both and keeps the words", () => {
+    const cleared = withoutFilters({
+      words: "refund",
+      sdks: [],
+      chips: ["Saga"],
+      category: "Workflow patterns",
+    });
+    expect(cleared).toEqual({ words: "refund", sdks: [], chips: [] });
+    expect(activeFilterCount(cleared)).toBe(0);
+    expect(searchAddress(cleared)).toBe("/search?q=refund");
+  });
+
   test("clears the SDKs, the chips, the category and the publisher, and keeps the words", () => {
     expect(
       withoutFilters({ ...search, category: "Payments", publisher: "ddieruf" }),

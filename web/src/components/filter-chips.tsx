@@ -5,7 +5,7 @@ import {
   withSdkToggled,
 } from "@/lib/search-filters";
 import { catalogSdks, sdkCatalogQuery } from "@/lib/sdk-catalog";
-import { integrations } from "@durables/schemas";
+import { categories } from "@durables/schemas";
 import { useQuery } from "@tanstack/react-query";
 import { useId, type ReactNode } from "react";
 import styles from "./filter-chips.module.css";
@@ -15,15 +15,20 @@ export interface FilterChipsProps {
   search: Search;
   /** Called with the new search as soon as a chip is clicked. */
   onChange: (search: Search) => void;
-  /** Extra class for each group, for the page's own spacing between them. */
+  /**
+   * Extra class for the Temporal SDK group and for the block of category headings, for the
+   * page's own spacing between them.
+   */
   groupClassName?: string | undefined;
 }
 
-// The Temporal SDK and Integrates with chips, shared by the home page's Filters panel and the
-// results page's sidebar. The SDK chips come from the SDK catalog, in its order, and the
-// integration chips from the shared list. Any is on when no SDK is picked; picking Any clears
-// the SDKs. Several SDKs and several integrations can be on. While the catalog loads, or when
-// it cannot be read, Any is the only SDK chip.
+// The Temporal SDK chips, then one heading per category with its chips, shared by the home
+// page's Filters panel and the results page's sidebar. The SDK chips come from the SDK
+// catalog, in its order. The categories, their help lines and their chips come from the shared
+// list, in its order. Any is on when no SDK is picked; picking Any clears the SDKs. Each chip
+// turns on and off alone, and several can be on, under one heading or several. A heading is
+// not a chip, and there is no All chip. While the catalog loads, or when it cannot be read,
+// Any is the only SDK chip.
 export function FilterChips({
   search,
   onChange,
@@ -55,22 +60,27 @@ export function FilterChips({
           />
         ))}
       </ChipGroup>
-      <ChipGroup
-        title="Integrates with"
-        help="Here is the activity, make it work"
-        className={groupClassName}
-      >
-        {integrations.map((integration) => (
-          <Chip
-            key={integration}
-            label={integration}
-            pressed={search.chips.includes(integration)}
-            onClick={() => {
-              onChange(withChipToggled(search, integration));
-            }}
-          />
+      <div className={withClass(styles["categories"], groupClassName)}>
+        {categories.map((category) => (
+          <ChipGroup
+            key={category.name}
+            title={category.name}
+            help={category.help}
+            className={undefined}
+          >
+            {category.chips.map((chip) => (
+              <Chip
+                key={chip}
+                label={chip}
+                pressed={search.chips.includes(chip)}
+                onClick={() => {
+                  onChange(withChipToggled(search, chip));
+                }}
+              />
+            ))}
+          </ChipGroup>
         ))}
-      </ChipGroup>
+      </div>
     </>
   );
 }
@@ -84,23 +94,32 @@ interface ChipGroupProps {
 
 function ChipGroup({ title, help, className, children }: ChipGroupProps) {
   const titleId = useId();
-  const groupClass =
-    className === undefined
-      ? styles["group"]
-      : `${styles["group"]} ${className}`;
+  const helpId = useId();
   return (
-    <section className={groupClass}>
+    <section className={withClass(styles["group"], className)}>
       <p className={styles["caption"]}>
         <span id={titleId} className={styles["title"]}>
           {title}
         </span>{" "}
-        <span className={styles["help"]}>{help}</span>
+        <span id={helpId} className={styles["help"]}>
+          {help}
+        </span>
       </p>
-      <div role="group" aria-labelledby={titleId} className={styles["chips"]}>
+      <div
+        role="group"
+        aria-labelledby={titleId}
+        aria-describedby={helpId}
+        className={styles["chips"]}
+      >
         {children}
       </div>
     </section>
   );
+}
+
+/** `base`, with `extra` after it when there is one. */
+function withClass(base: string | undefined, extra: string | undefined) {
+  return extra === undefined ? base : `${base ?? ""} ${extra}`;
 }
 
 interface ChipProps {

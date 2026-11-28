@@ -270,8 +270,8 @@ test.describe("as an anonymous visitor", () => {
         await expect(
           page
             .getByRole("complementary", { name: "Filters" })
-            .getByRole("group", { name: "Integrates with" })
-            .getByRole("button", { name: "Amazon S3" }),
+            .getByRole("group", { name: "Data and storage", exact: true })
+            .getByRole("button", { name: "Amazon S3", exact: true }),
         ).toHaveAttribute("aria-pressed", "true");
         await expect(main.getByText(/ · sorted by /)).toHaveText(
           /^[\d,]+ activit(y|ies) · sorted by newest$/,

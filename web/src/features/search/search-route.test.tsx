@@ -8,6 +8,11 @@ import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
+import {
+  categoryGroups,
+  categoryGroupsWith,
+  groupsIn,
+} from "../../../test/filter-groups";
 import { http, HttpResponse } from "msw";
 import {
   eightSdkCatalog,
@@ -70,8 +75,20 @@ function sdkChip(opened: Opened, label: string) {
   return chip(opened, "Temporal SDK", label);
 }
 
-function integrationChip(opened: Opened, label: string) {
-  return chip(opened, "Integrates with", label);
+/** A filter under its category's heading, such as Stripe under Payments. */
+function filterChip(opened: Opened, label: string) {
+  const group = categoryGroups.find(({ filters }) =>
+    (filters as readonly string[]).includes(label),
+  );
+  if (group === undefined) {
+    throw new Error(`${label} is under no category`);
+  }
+  return chip(opened, group.name, label);
+}
+
+/** The category groups in the sidebar, after Temporal SDK. */
+function categoryGroupsShown(opened: Opened) {
+  return groupsIn(sidebar(opened)).slice(1);
 }
 
 function cards({ screen }: Opened) {
@@ -190,22 +207,9 @@ test("filters carried in from the address show as selected chips", async () => {
     ["TypeScript", false],
     [".NET", true],
   ]);
-  expect(pressedIn(opened, "Integrates with")).toEqual([
-    ["Stripe", true],
-    ["Amazon S3", true],
-    ["Postgres", false],
-    ["Slack", false],
-    ["OpenAI", false],
-    ["Anthropic Claude", false],
-    ["Google Gemini", false],
-    ["Amazon Bedrock", false],
-    ["Redis", false],
-    ["Amazon SQS", false],
-    ["Ollama", false],
-    ["Cohere", false],
-    ["Groq", false],
-    ["xAI Grok", false],
-  ]);
+  expect(categoryGroupsShown(opened)).toEqual(
+    categoryGroupsWith("Stripe", "Amazon S3"),
+  );
 });
 
 test("an address with no parameters asks for every activity, with Any on", async () => {
@@ -221,9 +225,7 @@ test("an address with no parameters asks for every activity, with Any on", async
     ["TypeScript", false],
     [".NET", false],
   ]);
-  expect(
-    pressedIn(opened, "Integrates with").every(([, pressed]) => !pressed),
-  ).toBe(true);
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
 });
 
 test("a publisher in the address is asked for", async () => {
@@ -244,8 +246,13 @@ test("unknown SDK and chip values in the address are ignored", async () => {
     .element(sdkChip(opened, "Any"))
     .toHaveAttribute("aria-pressed", "true");
   await expect
-    .element(integrationChip(opened, "Slack"))
+    .element(filterChip(opened, "Slack"))
     .toHaveAttribute("aria-pressed", "true");
+  // An unknown filter shows nowhere: no heading lists it and nothing is on in its place.
+  await expect
+    .element(opened.screen.getByText("Twilio"))
+    .not.toBeInTheDocument();
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith("Slack"));
 });
 
 test("the chosen filters go to the api as chip, never as integration", async () => {
@@ -279,10 +286,10 @@ test("a chip in the address is read ignoring case and shows as on", async () => 
   await expect.poll(() => cardCount(opened)).toBe(1);
   expect(calls).toEqual([{ ...firstCall, chips: ["Stripe", "Slack"] }]);
   await expect
-    .element(integrationChip(opened, "Stripe"))
+    .element(filterChip(opened, "Stripe"))
     .toHaveAttribute("aria-pressed", "true");
   await expect
-    .element(integrationChip(opened, "Slack"))
+    .element(filterChip(opened, "Slack"))
     .toHaveAttribute("aria-pressed", "true");
 });
 
@@ -303,9 +310,7 @@ test("a category in the address is asked for and turns no chip on", async () => 
 
   await expect.poll(() => cardCount(opened)).toBe(1);
   expect(calls).toEqual([{ ...firstCall, category: "Payments" }]);
-  expect(
-    pressedIn(opened, "Integrates with").filter(([, pressed]) => pressed),
-  ).toEqual([]);
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
   expect(currentSearch(opened)).toEqual({
     words: "",
     sdks: [],
@@ -354,7 +359,7 @@ test("the old integration parameter turns nothing on", async () => {
   await expect.poll(() => cardCount(opened)).toBe(1);
   expect(calls).toEqual([firstCall]);
   await expect
-    .element(integrationChip(opened, "Stripe"))
+    .element(filterChip(opened, "Stripe"))
     .toHaveAttribute("aria-pressed", "false");
 });
 
@@ -363,7 +368,7 @@ test("turning a chip on keeps the category in the address, and turning it off le
   const opened = await openAt("/search?category=Payments");
   await expect.poll(() => cardCount(opened)).toBe(1);
 
-  await integrationChip(opened, "Stripe").click();
+  await filterChip(opened, "Stripe").click();
 
   await expect
     .poll(() => opened.router.state.location.search)
@@ -372,7 +377,7 @@ test("turning a chip on keeps the category in the address, and turning it off le
     .poll(() => calls.at(-1))
     .toEqual({ ...firstCall, chips: ["Stripe"], category: "Payments" });
 
-  await integrationChip(opened, "Stripe").click();
+  await filterChip(opened, "Stripe").click();
 
   await expect
     .poll(() => opened.router.state.location.search)
@@ -417,7 +422,7 @@ test("Back returns to the previous search's words and filters", async () => {
     .element(sdkChip(opened, "Python"))
     .toHaveAttribute("aria-pressed", "true");
   await expect
-    .element(integrationChip(opened, "Slack"))
+    .element(filterChip(opened, "Slack"))
     .toHaveAttribute("aria-pressed", "false");
 });
 
@@ -499,7 +504,7 @@ test("a chip click carries the words in the address, not words typed but not sub
   await expect.poll(() => cardCount(opened)).toBe(1);
 
   await searchBox(opened).fill("refund");
-  await integrationChip(opened, "Stripe").click();
+  await filterChip(opened, "Stripe").click();
 
   await expect.poll(() => calls.length).toBe(2);
   expect(calls[1]).toEqual({
@@ -562,17 +567,137 @@ test("several integrations can be picked together", async () => {
   const opened = await openAt("/search");
   await expect.poll(() => cardCount(opened)).toBe(1);
 
-  await integrationChip(opened, "Stripe").click();
-  await integrationChip(opened, "Slack").click();
+  await filterChip(opened, "Stripe").click();
+  await filterChip(opened, "Slack").click();
 
   await expect
-    .element(integrationChip(opened, "Slack"))
+    .element(filterChip(opened, "Slack"))
     .toHaveAttribute("aria-pressed", "true");
   await expect
-    .element(integrationChip(opened, "Stripe"))
+    .element(filterChip(opened, "Stripe"))
     .toHaveAttribute("aria-pressed", "true");
   expect(currentSearch(opened).chips).toEqual(["Stripe", "Slack"]);
   await expect.poll(() => calls.at(-1)?.chips).toEqual(["Stripe", "Slack"]);
+});
+
+// Category headings (DUR-131)
+
+test("the sidebar shows Temporal SDK first, then the five category headings with their help lines and filters", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
+  await expect
+    .poll(() => groupsIn(sidebar(opened)).map(({ name }) => name))
+    .toEqual([
+      "Temporal SDK",
+      "AI models",
+      "Data and storage",
+      "Messaging",
+      "Payments",
+      "Workflow patterns",
+    ]);
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
+  for (const { name, help } of categoryGroups) {
+    await expect
+      .element(sidebar(opened).getByRole("group", { name, exact: true }))
+      .toHaveAccessibleDescription(help);
+    await expect.element(sidebar(opened).getByText(help)).toBeVisible();
+  }
+});
+
+test("Workflow patterns lists Approval, Polling, Batching and Saga", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search");
+
+  await expect
+    .element(filterChip(opened, "Saga"))
+    .toHaveAttribute("aria-pressed", "false");
+  expect(
+    sidebar(opened)
+      .getByRole("group", { name: "Workflow patterns" })
+      .getByRole("button")
+      .elements()
+      .map((button) => button.textContent),
+  ).toEqual(["Approval", "Polling", "Batching", "Saga"]);
+});
+
+test("there is no All filter, and no heading can be picked", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
+  await expect
+    .element(sidebar(opened).getByRole("button", { name: "All" }))
+    .not.toBeInTheDocument();
+  for (const { name } of categoryGroups) {
+    await expect
+      .element(sidebar(opened).getByRole("button", { name, exact: true }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(sidebar(opened).getByRole("checkbox", { name, exact: true }))
+      .not.toBeInTheDocument();
+  }
+  expect(sidebar(opened).element().querySelectorAll("[title]")).toHaveLength(0);
+});
+
+test("clicking a filter turns on that filter alone, and clicking it again turns it off", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt("/search");
+  await expect.poll(() => cardCount(opened)).toBe(1);
+
+  await filterChip(opened, "Polling").click();
+
+  await expect
+    .element(filterChip(opened, "Polling"))
+    .toHaveAttribute("aria-pressed", "true");
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith("Polling"));
+  expect(pressedIn(opened, "Temporal SDK")[0]).toEqual(["Any", true]);
+  expect(currentSearch(opened)).toEqual({
+    words: "",
+    sdks: [],
+    chips: ["Polling"],
+  });
+  await expect.poll(() => calls.at(-1)?.chips).toEqual(["Polling"]);
+
+  await filterChip(opened, "Polling").click();
+
+  await expect
+    .element(filterChip(opened, "Polling"))
+    .toHaveAttribute("aria-pressed", "false");
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
+  expect(currentSearch(opened)).toEqual({ words: "", sdks: [], chips: [] });
+});
+
+test("filters on under two headings both show as on", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?chip=Slack&chip=Polling");
+
+  await expect
+    .element(filterChip(opened, "Slack"))
+    .toHaveAttribute("aria-pressed", "true");
+  expect(categoryGroupsShown(opened)).toEqual(
+    categoryGroupsWith("Slack", "Polling"),
+  );
+});
+
+test("no Integrates with list, and no word chip, appears on the page", async () => {
+  serveBrowse(testCards(3));
+  const opened = await openAt("/search?chip=Stripe&category=Payments");
+  await expect.poll(() => cardCount(opened)).toBe(3);
+
+  await expect
+    .element(opened.screen.getByText(/integrates with/i))
+    .not.toBeInTheDocument();
+  await expect
+    .element(opened.screen.getByRole("group", { name: /integrates with/i }))
+    .not.toBeInTheDocument();
+  const text = opened.screen.container.textContent;
+  expect(text).not.toMatch(/\bchips?\b/i);
+  const labels = [
+    ...opened.screen.container.querySelectorAll("[aria-label]"),
+  ].map((element) => element.getAttribute("aria-label"));
+  expect(labels.join(" ")).not.toMatch(/\bchips?\b/i);
 });
 
 // Clear (n)
@@ -611,6 +736,62 @@ test("Clear (n) counts the filters that are on and clears them all, keeping the 
   });
   await expect.poll(() => calls.at(-1)).toEqual({ ...firstCall, q: "charge" });
   await expect.element(searchBox(opened)).toHaveValue("charge");
+});
+
+test("a category in the address counts as a filter on its own, and Clear (1) removes it", async () => {
+  serveBrowse(testCards(1));
+  const opened = await openAt("/search?category=Payments");
+
+  await sidebar(opened).getByRole("button", { name: "Clear (1)" }).click();
+
+  await expect
+    .poll(() => currentSearch(opened))
+    .toEqual({ words: "", sdks: [], chips: [] });
+  expect(opened.router.state.location.search).toBe("");
+});
+
+test("with the category Workflow patterns and Saga on, Clear reads Clear (2) and removes both, keeping the words", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt(
+    "/search?q=refund&chip=Saga&category=Workflow+patterns",
+  );
+  const clear = sidebar(opened).getByRole("button", { name: "Clear (2)" });
+  await expect.element(clear).toBeVisible();
+
+  await clear.click();
+
+  await expect
+    .element(sidebar(opened).getByRole("button", { name: /^Clear/ }))
+    .not.toBeInTheDocument();
+  expect(opened.router.state.location.search).toBe("?q=refund");
+  await expect.poll(() => calls.at(-1)).toEqual({ ...firstCall, q: "refund" });
+  await expect.element(searchBox(opened)).toHaveValue("refund");
+});
+
+test("Clear (n) counts each SDK, each filter, the category and the publisher, not the words, and clears them all", async () => {
+  const calls = serveBrowse(testCards(1));
+  const opened = await openAt(
+    searchAddress({
+      words: "charge card",
+      sdks: ["Python", ".NET"],
+      chips: ["Stripe", "Approval"],
+      category: "Payments",
+      publisher: "ddieruf",
+    }),
+  );
+  const clear = sidebar(opened).getByRole("button", { name: "Clear (6)" });
+  await expect.element(clear).toBeVisible();
+
+  await clear.click();
+
+  await expect
+    .poll(() => currentSearch(opened))
+    .toEqual({ words: "charge card", sdks: [], chips: [] });
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
+  expect(pressedIn(opened, "Temporal SDK")[0]).toEqual(["Any", true]);
+  await expect
+    .poll(() => calls.at(-1))
+    .toEqual({ ...firstCall, q: "charge card" });
 });
 
 test("a publisher counts as a filter and Clear (n) clears it", async () => {
@@ -784,13 +965,13 @@ test("changing a filter starts again from the first batch", async () => {
   scrollToEnd(opened);
   await expect.poll(() => cardCount(opened)).toBe(100);
 
-  await integrationChip(opened, "Postgres").click();
+  await filterChip(opened, "Postgres").click();
 
   await expect
     .poll(() => calls.at(-1))
     .toEqual({ ...firstCall, chips: ["Postgres"] });
   await expect
-    .element(integrationChip(opened, "Postgres"))
+    .element(filterChip(opened, "Postgres"))
     .toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => cardCount(opened)).toBe(50);
 });
@@ -928,22 +1109,22 @@ test("the pill hides when a chip goes on and returns when the last chip goes off
   const opened = await openAt("/search?category=Payments");
   await expect.element(categoryPill(opened, "Payments")).toBeVisible();
 
-  await integrationChip(opened, "Stripe").click();
-  await integrationChip(opened, "Slack").click();
+  await filterChip(opened, "Stripe").click();
+  await filterChip(opened, "Slack").click();
   await expect
     .poll(() => opened.router.state.location.search)
     .toBe("?chip=Stripe&chip=Slack&category=Payments");
   await expect.poll(() => cardCount(opened)).toBe(1);
   await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
 
-  await integrationChip(opened, "Stripe").click();
+  await filterChip(opened, "Stripe").click();
   await expect
     .poll(() => opened.router.state.location.search)
     .toBe("?chip=Slack&category=Payments");
   await expect.poll(() => cardCount(opened)).toBe(1);
   await expect.element(anyCategoryPill(opened)).not.toBeInTheDocument();
 
-  await integrationChip(opened, "Slack").click();
+  await filterChip(opened, "Slack").click();
   await expect
     .poll(() => opened.router.state.location.search)
     .toBe("?category=Payments");

@@ -16,6 +16,11 @@ import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TestProviders } from "../../../test/test-providers";
 import { worker } from "../../../test/worker";
+import {
+  categoryGroups,
+  categoryGroupsWith,
+  groupsIn,
+} from "../../../test/filter-groups";
 
 // The real route tree, opened at the home page. Only the API is faked: the header reads the
 // session, and the results page the home page opens asks the browse read for its search.
@@ -90,8 +95,20 @@ function sdkChip(opened: Opened, label: string) {
   return chip(opened, "Temporal SDK", label);
 }
 
-function integrationChip(opened: Opened, label: string) {
-  return chip(opened, "Integrates with", label);
+/** A filter under its category's heading, such as Stripe under Payments. */
+function filterChip(opened: Opened, label: string) {
+  const group = categoryGroups.find(({ filters }) =>
+    (filters as readonly string[]).includes(label),
+  );
+  if (group === undefined) {
+    throw new Error(`${label} is under no category`);
+  }
+  return chip(opened, group.name, label);
+}
+
+/** The category groups in the Filters panel, after Temporal SDK. */
+function categoryGroupsShown({ screen }: Opened) {
+  return groupsIn(screen.getByRole("search")).slice(1);
 }
 
 /** The pressed state of every chip in a group, in order. */
@@ -217,8 +234,8 @@ test("words with SDK and integration chips open results with both filters applie
   await openFilters(opened);
   await sdkChip(opened, "Python").click();
   await sdkChip(opened, ".NET").click();
-  await integrationChip(opened, "Stripe").click();
-  await integrationChip(opened, "Amazon S3").click();
+  await filterChip(opened, "Stripe").click();
+  await filterChip(opened, "Amazon S3").click();
   await searchButton(opened).click();
 
   const address = await landedAt(opened);
@@ -261,7 +278,7 @@ test("filters chosen with the panel closed again are still carried", async () =>
   const opened = await openHome();
 
   await openFilters(opened);
-  await integrationChip(opened, "Slack").click();
+  await filterChip(opened, "Slack").click();
   await filtersButton(opened).click();
   await searchButton(opened).click();
 
@@ -320,7 +337,7 @@ test("Filters opens and closes the panel and looks pressed while it is open", as
     .element(opened.screen.getByRole("group", { name: "Temporal SDK" }))
     .toBeVisible();
   await expect
-    .element(opened.screen.getByRole("group", { name: "Integrates with" }))
+    .element(opened.screen.getByRole("group", { name: "AI models" }))
     .toBeVisible();
   expect(getComputedStyle(button.element()).backgroundColor).not.toBe(
     closedBackground,
@@ -347,8 +364,8 @@ test("the Filters button shows how many filters are on, and no count when none a
     .element(filtersButton(opened))
     .toHaveAccessibleName("Filters (1 on)");
 
-  await integrationChip(opened, "Postgres").click();
-  await integrationChip(opened, "Slack").click();
+  await filterChip(opened, "Postgres").click();
+  await filterChip(opened, "Slack").click();
   await expect
     .element(filtersButton(opened))
     .toHaveAccessibleName("Filters (3 on)");
@@ -362,15 +379,12 @@ test("the Filters button shows how many filters are on, and no count when none a
 
 // The chips
 
-test("the panel shows the SDK chips with Any on, and the fourteen integration chips", async () => {
+test("the panel shows the SDK chips with Any on, then the five category headings with their help lines and filters", async () => {
   const opened = await openHome();
   await openFilters(opened);
 
   await expect
     .element(opened.screen.getByText("What runtime are you using?"))
-    .toBeVisible();
-  await expect
-    .element(opened.screen.getByText("Here is the activity, make it work"))
     .toBeVisible();
   // The SDK chips come with the SDK catalog.
   await expect
@@ -381,25 +395,35 @@ test("the panel shows the SDK chips with Any on, and the fourteen integration ch
       ["TypeScript", false],
       [".NET", false],
     ]);
-  expect(pressedIn(opened, "Integrates with")).toEqual([
-    ["Stripe", false],
-    ["Amazon S3", false],
-    ["Postgres", false],
-    ["Slack", false],
-    ["OpenAI", false],
-    ["Anthropic Claude", false],
-    ["Google Gemini", false],
-    ["Amazon Bedrock", false],
-    ["Redis", false],
-    ["Amazon SQS", false],
-    ["Ollama", false],
-    ["Cohere", false],
-    ["Groq", false],
-    ["xAI Grok", false],
+  expect(
+    groupsIn(opened.screen.getByRole("search")).map(({ name }) => name),
+  ).toEqual([
+    "Temporal SDK",
+    "AI models",
+    "Data and storage",
+    "Messaging",
+    "Payments",
+    "Workflow patterns",
   ]);
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
+  for (const { name, help } of categoryGroups) {
+    await expect
+      .element(opened.screen.getByRole("group", { name, exact: true }))
+      .toHaveAccessibleDescription(help);
+  }
+  await expect
+    .element(opened.screen.getByText(/integrates with/i))
+    .not.toBeInTheDocument();
+  await expect
+    .element(opened.screen.getByText("Here is the activity, make it work"))
+    .not.toBeInTheDocument();
+  await expect
+    .element(opened.screen.getByRole("button", { name: "All" }))
+    .not.toBeInTheDocument();
   await expect
     .element(opened.screen.getByRole("button", { name: /More/ }))
     .not.toBeInTheDocument();
+  expect(opened.screen.container.textContent).not.toMatch(/\bchips?\b/i);
 });
 
 test("with eight SDKs in the catalog, the chips are Any then the eight in catalog order, with Any on", async () => {
@@ -438,7 +462,7 @@ test("when the catalog cannot be read, Home still renders and the only SDK chip 
     .element(opened.screen.getByText("What runtime are you using?"))
     .toBeVisible();
   expect(pressedIn(opened, "Temporal SDK")).toEqual([["Any", true]]);
-  expect(pressedIn(opened, "Integrates with")).toHaveLength(14);
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
   await expect.element(searchBox(opened)).toBeVisible();
 });
 
@@ -483,28 +507,21 @@ test("several SDKs can be on, and taking them all off returns to Any", async () 
     .toHaveAttribute("aria-pressed", "true");
 });
 
-test("several integrations can be on together", async () => {
+test("several filters can be on together, under one heading and under two", async () => {
   const opened = await openHome();
   await openFilters(opened);
 
-  await integrationChip(opened, "Stripe").click();
-  await integrationChip(opened, "Slack").click();
-  expect(pressedIn(opened, "Integrates with")).toEqual([
-    ["Stripe", true],
-    ["Amazon S3", false],
-    ["Postgres", false],
-    ["Slack", true],
-    ["OpenAI", false],
-    ["Anthropic Claude", false],
-    ["Google Gemini", false],
-    ["Amazon Bedrock", false],
-    ["Redis", false],
-    ["Amazon SQS", false],
-    ["Ollama", false],
-    ["Cohere", false],
-    ["Groq", false],
-    ["xAI Grok", false],
-  ]);
+  await filterChip(opened, "OpenAI").click();
+  await filterChip(opened, "Groq").click();
+  await filterChip(opened, "Saga").click();
+  expect(categoryGroupsShown(opened)).toEqual(
+    categoryGroupsWith("OpenAI", "Groq", "Saga"),
+  );
+
+  await filterChip(opened, "Groq").click();
+  expect(categoryGroupsShown(opened)).toEqual(
+    categoryGroupsWith("OpenAI", "Saga"),
+  );
 });
 
 // Criteria 5 and 7: Clear filters shows only while a filter is on, and resets both
@@ -515,8 +532,8 @@ test("Clear filters is hidden while no filter is on", async () => {
 
   await expect.element(clearFilters(opened)).not.toBeInTheDocument();
 
-  await integrationChip(opened, "Stripe").click();
-  await integrationChip(opened, "Stripe").click();
+  await filterChip(opened, "Stripe").click();
+  await filterChip(opened, "Stripe").click();
   await expect.element(clearFilters(opened)).not.toBeInTheDocument();
 });
 
@@ -526,8 +543,8 @@ test("Clear filters shows while a filter is on and resets both filters", async (
 
   await sdkChip(opened, "Python").click();
   await expect.element(clearFilters(opened)).toBeVisible();
-  await integrationChip(opened, "Amazon S3").click();
-  await integrationChip(opened, "Postgres").click();
+  await filterChip(opened, "Amazon S3").click();
+  await filterChip(opened, "Postgres").click();
 
   await clearFilters(opened).click();
   expect(pressedIn(opened, "Temporal SDK")).toEqual([
@@ -536,9 +553,7 @@ test("Clear filters shows while a filter is on and resets both filters", async (
     ["TypeScript", false],
     [".NET", false],
   ]);
-  expect(
-    pressedIn(opened, "Integrates with").every(([, pressed]) => !pressed),
-  ).toBe(true);
+  expect(categoryGroupsShown(opened)).toEqual(categoryGroupsWith());
   await expect.element(clearFilters(opened)).not.toBeInTheDocument();
   await expect.element(filtersButton(opened)).toHaveAccessibleName("Filters");
 });
@@ -580,7 +595,7 @@ test("searching with filters and no words opens the filtered results", async () 
 
   await openFilters(opened);
   await sdkChip(opened, ".NET").click();
-  await integrationChip(opened, "Postgres").click();
+  await filterChip(opened, "Postgres").click();
   await searchButton(opened).click();
 
   const address = await landedAt(opened);
@@ -767,7 +782,7 @@ test("with the Filters panel open and a filter on, a tile still opens its catego
   await searchBox(opened).fill("refund");
   await openFilters(opened);
   await sdkChip(opened, "Python").click();
-  await integrationChip(opened, "Stripe").click();
+  await filterChip(opened, "Stripe").click();
   await expect.element(tile(opened, "Messaging")).toBeVisible();
   await tile(opened, "Messaging").click();
 
