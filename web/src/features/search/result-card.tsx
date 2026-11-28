@@ -3,7 +3,7 @@ import { IntegrationLink } from "@/components/integration-link";
 import { PublisherInitial } from "@/components/publisher-initial";
 import { listingPath } from "@/lib/listing-path";
 import { publishedAgo } from "@/lib/published-ago";
-import { searchAddress } from "@/lib/search-address";
+import { searchAddress, type Search } from "@/lib/search-address";
 import { useId } from "react";
 import { Link } from "react-router";
 import type { ActivityCard } from "./activity-card";
@@ -12,13 +12,16 @@ import styles from "./result-card.module.css";
 export interface ResultCardProps {
   /** One result from the browse read. */
   card: ActivityCard;
+  /** The search the results page is showing, which the card's filter links keep. */
+  search: Search;
 }
 
 // One search result: the icon tile, the title, the address and the SDK; the description;
-// the integrations, each a link to results for that integration alone; the publisher, a link
-// to that publisher's activities; when the version on the card was published; and View.
-// The card never shows a rating, a count or any other popularity signal (DUR-2).
-export function ResultCard({ card }: ResultCardProps) {
+// the listing's chips under "Filters", each a link that makes it the only chip chosen and
+// keeps the search's words, SDKs and category; the publisher, a link to that publisher's
+// activities; when the version on the card was published; and View. The card shows no
+// category. It never shows a rating, a count or any other popularity signal (DUR-2).
+export function ResultCard({ card, search }: ResultCardProps) {
   const titleId = useId();
   const activityPath = listingPath(card);
 
@@ -40,12 +43,12 @@ export function ResultCard({ card }: ResultCardProps) {
         <p className={styles["description"]}>{card.description}</p>
       )}
       {card.integrations.length === 0 ? null : (
-        <div className={styles["integrations"]}>
-          <span className={styles["label"]}>Integrates with</span>
-          <ul className={styles["integrationList"]}>
-            {card.integrations.map((integration) => (
-              <li key={integration}>
-                <IntegrationLink integration={integration} />
+        <div className={styles["filters"]}>
+          <span className={styles["label"]}>Filters</span>
+          <ul className={styles["filterList"]}>
+            {card.integrations.map((chip) => (
+              <li key={chip}>
+                <IntegrationLink integration={chip} search={search} />
               </li>
             ))}
           </ul>

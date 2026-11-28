@@ -917,7 +917,14 @@ for (const journey of sdkJourneys) {
             hasNot: page.getByText(journey.sdk, { exact: true }),
           }),
         ).toHaveCount(0);
-        if (journey.integration !== undefined) {
+        if (journey.integration === undefined) {
+          await expect(
+            resultCard.getByText("Filters", { exact: true }),
+          ).toHaveCount(0);
+        } else {
+          await expect(
+            resultCard.getByText("Filters", { exact: true }),
+          ).toBeVisible();
           await expect(
             resultCard.getByRole("link", {
               name: journey.integration,

@@ -81,7 +81,7 @@ export function SearchResults({ search, onClearAll }: SearchResultsProps) {
         <>
           <div className={styles["grid"]}>
             {cards.map((card) => (
-              <ResultCard key={card.address} card={card} />
+              <ResultCard key={card.address} card={card} search={search} />
             ))}
           </div>
           <div ref={endRef} className={styles["end"]}>

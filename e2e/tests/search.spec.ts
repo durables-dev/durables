@@ -637,7 +637,7 @@ test.describe("as an anonymous visitor", () => {
   });
 
   test(
-    "an activity consumer opens a publisher's activities and an integration's results from the cards",
+    "an activity consumer opens a publisher's activities and a filter's results from the cards",
     { tag: "@journey" },
     async ({
       page,
@@ -670,10 +670,14 @@ test.describe("as an anonymous visitor", () => {
         ).toBeVisible();
         await expect(pythonCard).toContainText(listings.python.description);
         await expect(pythonCard).toContainText("Published just now");
-        await expect(pythonCard.getByText("Integrates with")).toHaveCount(0);
+        await expect(
+          pythonCard.getByText("Filters", { exact: true }),
+        ).toHaveCount(0);
 
         const typescriptCard = card(page, listings.typescript.title);
-        await expect(typescriptCard.getByText("Integrates with")).toBeVisible();
+        await expect(
+          typescriptCard.getByText("Filters", { exact: true }),
+        ).toBeVisible();
         await expect(
           typescriptCard.getByRole("link", { name: "Amazon S3", exact: true }),
         ).toBeVisible();
@@ -702,7 +706,7 @@ test.describe("as an anonymous visitor", () => {
         await expectAccessible();
       });
 
-      await test.step("a card's integration opens results for that integration alone", async () => {
+      await test.step("a card's filter becomes the only filter on and keeps the search words", async () => {
         await page.goBack();
         await expect(countLine(page)).toHaveText(
           "3 activities · sorted by relevance",
@@ -712,18 +716,15 @@ test.describe("as an anonymous visitor", () => {
           .getByRole("link", { name: "Stripe", exact: true })
           .click();
 
-        await expect(page).toHaveURL("/search?chip=Stripe");
-        await expect(searchBox(page)).toHaveValue("");
+        await expect(page).toHaveURL(`/search?q=${word}&chip=Stripe`);
+        await expect(searchBox(page)).toHaveValue(word);
         await expect(
           chip(sidebar(page), "Integrates with", "Stripe"),
         ).toHaveAttribute("aria-pressed", "true");
-        await expect(countLine(page)).toHaveText(anyCountSortedByNewest);
-        await scrollUntil(page, card(page, listings.dotnet.title));
-        await expect(
-          cards(page).filter({
-            hasNot: page.getByRole("link", { name: "Stripe", exact: true }),
-          }),
-        ).toHaveCount(0);
+        await expect(countLine(page)).toHaveText(
+          "1 activity · sorted by relevance",
+        );
+        await expect(cardTitles(page)).toHaveText([listings.dotnet.title]);
         await expectAccessible();
       });
     },
